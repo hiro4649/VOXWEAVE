@@ -36,7 +36,10 @@ const baseTtsPacket = {
 
 test("orchestrates IRIS TTS adapter packet with mock TTS and pronunciation repair", async () => {
   const service = createVoxWeaveService({ now: () => 1_777_000_000_000, debugResponse: true });
-  const result = await service.orchestrate(baseTtsPacket, { routeKind: "tts" });
+  const result = await service.orchestrate(baseTtsPacket, {
+    routeKind: "tts",
+    includeDebug: true,
+  });
 
   assert.equal(result.schema, "voxweave_orchestration_result_v1");
   assert.equal(result.ok, true);
@@ -57,7 +60,10 @@ test("orchestrates IRIS TTS adapter packet with mock TTS and pronunciation repai
 
 test("generates subtitle timing and bounded mouth cues", async () => {
   const service = createVoxWeaveService({ now: () => 1_777_000_000_000 });
-  const result = await service.orchestrate(baseTtsPacket, { routeKind: "tts" });
+  const result = await service.orchestrate(baseTtsPacket, {
+    routeKind: "tts",
+    includeDebug: true,
+  });
 
   assert.equal(result.subtitle_timing.schema, "voxweave_subtitle_timing_v1");
   assert.equal(result.subtitle_segment_count > 0, true);
@@ -131,7 +137,7 @@ test("cache hit regenerates event specific identifiers", async () => {
       event_id: "event-cache-first",
       utterance_id: "utt-cache-first",
     },
-    { routeKind: "tts" }
+    { routeKind: "tts", includeDebug: true }
   );
   const second = await service.orchestrate(
     {
@@ -142,7 +148,7 @@ test("cache hit regenerates event specific identifiers", async () => {
       event_id: "event-cache-second",
       utterance_id: "utt-cache-second",
     },
-    { routeKind: "tts" }
+    { routeKind: "tts", includeDebug: true }
   );
 
   assert.equal(first.cache.status, "miss");
@@ -160,11 +166,11 @@ test("cache hit regenerates artifact reference for the current request", async (
   const service = createVoxWeaveService({ now: () => 1_777_000_000_000 });
   const first = await service.orchestrate(
     { ...baseTtsPacket, text: "うん", final_text: "うん", event_id: "event-cache-artifact-a" },
-    { routeKind: "tts" }
+    { routeKind: "tts", includeDebug: true }
   );
   const second = await service.orchestrate(
     { ...baseTtsPacket, text: "うん", final_text: "うん", event_id: "event-cache-artifact-b" },
-    { routeKind: "tts" }
+    { routeKind: "tts", includeDebug: true }
   );
 
   assert.equal(second.cache.status, "hit");
@@ -210,7 +216,7 @@ test("does not echo canonical envelope or action fields in output", async () => 
         emotion: "neutral",
       },
     },
-    { routeKind: "tts" }
+    { routeKind: "tts", includeDebug: true }
   );
   const serialized = JSON.stringify(result);
 
@@ -230,7 +236,7 @@ test("groups tts subtitle and live2d packets by event and utterance", async () =
   };
   const tts = await service.orchestrate(
     { ...baseTtsPacket, ...common, adapter_kind: "tts" },
-    { routeKind: "tts" }
+    { routeKind: "tts", includeDebug: true }
   );
   const subtitle = await service.orchestrate(
     {
@@ -410,7 +416,10 @@ test("adapter endpoint returns without waiting for the render group to complete"
 
 test("response summary passes IRIS real runtime gate shape", async () => {
   const service = createVoxWeaveService({ now: () => 1_777_000_000_000 });
-  const result = await service.orchestrate(baseTtsPacket, { routeKind: "tts" });
+  const result = await service.orchestrate(baseTtsPacket, {
+    routeKind: "tts",
+    includeDebug: true,
+  });
   assert.equal(result.response_summary.ok, true);
   assert.equal(["accepted", "queued", "enqueued", "job_queued"].includes(result.response_summary.bridge_status), true);
   assert.equal(typeof result.response_summary.artifact_kind, "string");
@@ -427,7 +436,7 @@ test("pronunciation dictionary covers IRIS GPT YouTube and phantom", async () =>
       final_text: "IRIS uses GPT on YouTube with phantom mode.",
       event_id: "event-pronunciation",
     },
-    { routeKind: "tts" }
+    { routeKind: "tts", includeDebug: true }
   );
   const readings = result.debug.pronunciation.repairs.map((repair) => repair.reading);
   assert.equal(readings.includes("アイリス"), true);
@@ -597,7 +606,7 @@ test("speech text URL is normalized without exposing the raw URL", async () => {
       final_text: "このリンクを見て https://example.com/private?q=1",
       event_id: "event-url-normalized",
     },
-    { routeKind: "tts" }
+    { routeKind: "tts", includeDebug: true }
   );
   const serialized = JSON.stringify(result);
 
@@ -669,7 +678,10 @@ for (const [name, field] of [
 
 test("mock TTS does not claim production readiness", async () => {
   const service = createVoxWeaveService({ now: () => 1_777_000_000_000 });
-  const result = await service.orchestrate(baseTtsPacket, { routeKind: "tts" });
+  const result = await service.orchestrate(baseTtsPacket, {
+    routeKind: "tts",
+    includeDebug: true,
+  });
   assert.equal(result.runtime_readiness_claimed, false);
   assert.equal(result.mock_tts.provider_connected, false);
   assert.equal(result.mock_tts.artifact_kind, "mock_audio");
@@ -910,7 +922,10 @@ test("generated Live2D cue validates against local renderer contract when availa
   }
   const { validateRendererCueEnvelope } = await import(pathToFileURL(validationPath).href);
   const service = createVoxWeaveService({ now: () => 1_777_000_000_000, debugResponse: true });
-  const result = await service.orchestrate(makeLive2dPacket("laugh_big"), { routeKind: "live2d" });
+  const result = await service.orchestrate(makeLive2dPacket("laugh_big"), {
+    routeKind: "live2d",
+    includeDebug: true,
+  });
   const validation = validateRendererCueEnvelope(result.debug.live2d_cue_delivery);
   assert.equal(validation.cueSchema, "iris_live2d_renderer_cue_v1");
 });
@@ -929,7 +944,10 @@ test("IRIS httpPostAdapter local source is non-empty when sibling repo is presen
 
 test("does not expose unsafe public response material", async () => {
   const service = createVoxWeaveService({ now: () => 1_777_000_000_000 });
-  const result = await service.orchestrate(baseTtsPacket, { routeKind: "tts" });
+  const result = await service.orchestrate(baseTtsPacket, {
+    routeKind: "tts",
+    includeDebug: true,
+  });
   const serialized = JSON.stringify(result);
   const forbidden = [
     "raw_audio",
@@ -948,9 +966,24 @@ test("does not expose unsafe public response material", async () => {
   }
 });
 
+test("adapter response omits IRIS HTTP adapter forbidden response fields", async () => {
+  const service = createVoxWeaveService({ now: () => 1_777_000_000_000 });
+  const result = await service.orchestrate(baseTtsPacket, {
+    routeKind: "tts",
+    includeDebug: true,
+  });
+
+  assertNoForbiddenResponseFields(result);
+  assert.equal("emotion" in result.prosody, false);
+  assert.equal("prosody_affect_label" in result.prosody, true);
+});
+
 test("default response hides detailed text plans and component scores", async () => {
   const service = createVoxWeaveService({ now: () => 1_777_000_000_000 });
-  const result = await service.orchestrate(baseTtsPacket, { routeKind: "tts" });
+  const result = await service.orchestrate(baseTtsPacket, {
+    routeKind: "tts",
+    includeDebug: true,
+  });
   const serialized = JSON.stringify(result);
 
   assert.equal("debug" in result, false);
@@ -960,12 +993,15 @@ test("default response hides detailed text plans and component scores", async ()
   assert.equal(serialized.includes("corrected_text"), false);
 });
 
-test("debug response includes details without unsafe values", async () => {
+test("direct debug response includes details without unsafe values when explicitly requested", async () => {
   const service = createVoxWeaveService({
     now: () => 1_777_000_000_000,
     debugResponse: true,
   });
-  const result = await service.orchestrate(baseTtsPacket, { routeKind: "tts" });
+  const result = await service.orchestrate(baseTtsPacket, {
+    routeKind: "tts",
+    includeDebug: true,
+  });
   const serialized = JSON.stringify(result);
 
   assert.equal(result.debug.reading_plan.segments.length > 0, true);
@@ -975,6 +1011,66 @@ test("debug response includes details without unsafe values", async () => {
   for (const marker of ["endpoint", "api_key", "token", "raw_audio", "dataset_path", "model_path"]) {
     assert.equal(serialized.includes(marker), false, marker);
   }
+});
+
+test("adapter endpoint stays summary-only even when debug response is enabled", async () => {
+  const service = createVoxWeaveService({
+    now: () => 1_777_000_000_000,
+    debugResponse: true,
+  });
+  const server = createVoxWeaveServer({ service });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address();
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/v1/adapter/tts`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(baseTtsPacket),
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal("debug" in body, false);
+    assertNoForbiddenResponseFields(body);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("debug orchestration endpoint is separated from IRIS adapter endpoints", async () => {
+  const service = createVoxWeaveService({
+    now: () => 1_777_000_000_000,
+    debugResponse: true,
+  });
+  const server = createVoxWeaveServer({ service });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address();
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/v1/debug/orchestrate`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(baseTtsPacket),
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.debug.reading_plan.segments.length > 0, true);
+    assert.equal(typeof body.debug.reading_plan.segments[0].text, "string");
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("IRIS HTTP adapter accepts VOXWEAVE TTS response", async (t) => {
+  await assertIrisHttpAdapterAcceptsVoxWeave(t, "tts", baseTtsPacket);
+});
+
+test("IRIS HTTP adapter accepts VOXWEAVE subtitle response", async (t) => {
+  await assertIrisHttpAdapterAcceptsVoxWeave(t, "subtitle", makeSubtitlePacket());
+});
+
+test("IRIS HTTP adapter accepts VOXWEAVE live2d response", async (t) => {
+  await assertIrisHttpAdapterAcceptsVoxWeave(t, "live2d", makeLive2dPacket("talk"));
 });
 
 test("forwards Live2D cue to configured local renderer endpoint without exposing endpoint", async () => {
@@ -1194,4 +1290,207 @@ function createTestRendererServer(received) {
     response.writeHead(200, { "content-type": "application/json" });
     response.end(JSON.stringify({ ok: true, bridge_status: "accepted" }));
   });
+}
+
+async function assertIrisHttpAdapterAcceptsVoxWeave(t, adapterKind, packet) {
+  const adapterPath = resolve("..", "IRIS", "src", "adapters", "httpPostAdapter.js");
+  if (!existsSync(adapterPath)) {
+    t.skip("sibling IRIS source unavailable");
+    return;
+  }
+  const { createHttpPostAdapter } = await import(pathToFileURL(adapterPath).href);
+  const service = createVoxWeaveService({ now: () => 1_777_000_000_000 });
+  const server = createVoxWeaveServer({ service });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address();
+  try {
+    const adapter = createHttpPostAdapter({
+      adapterKind,
+      endpoint: `http://127.0.0.1:${port}/v1/adapter/${adapterKind}`,
+      timeoutMs: 3000,
+    });
+    const result = await adapter(makeIrisHttpAdapterPacket(adapterKind, packet));
+    const serialized = JSON.stringify(result);
+
+    assert.equal(result.sent, true);
+    assert.equal(result.response_summary.ok, true);
+    assert.equal(
+      ["accepted", "queued", "enqueued", "job_queued"].includes(
+        result.response_summary.bridge_status
+      ) || result.response_summary.artifact_kind !== "",
+      true
+    );
+    assert.equal(result.response_summary.artifact_url.includes("http://"), false);
+    assert.equal(result.response_summary.artifact_url.includes("https://"), false);
+    assert.equal(serialized.includes(`127.0.0.1:${port}`), false);
+    assertNoForbiddenResponseFields(result.response);
+    for (const marker of [
+      "raw_payload",
+      "api_key",
+      "token",
+      "secret",
+      "raw_audio",
+      "model_path",
+      "dataset_path",
+      "raw_phoneme_debug",
+    ]) {
+      assert.equal(serialized.includes(marker), false, marker);
+    }
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+}
+
+function makeIrisHttpAdapterPacket(adapterKind, packet) {
+  if (adapterKind === "subtitle") {
+    return {
+      ...packet,
+      trace_id: "trace-iris-http-subtitle",
+      trace_id_present: true,
+      event_id: "event-iris-http-subtitle",
+      event_id_present: true,
+      line_break_plan: [
+        {
+          segment_index: 0,
+          segment_text: packet.subtitle_text ?? "IRIS subtitle",
+          display_start_ms: 0,
+          display_end_ms: 1800,
+          direction: "ltr",
+          line_count: 1,
+        },
+      ],
+      safe_area_policy: {
+        placement: "bottom_center",
+        avoid_game_ui: true,
+        avoid_face_closeup_occlusion: true,
+        keep_camera_proximity_readable: true,
+      },
+      readability_profile: {
+        safe_for_overlay: true,
+        chunk_count: 1,
+      },
+      script_direction: "ltr",
+    };
+  }
+  if (adapterKind === "live2d") {
+    return {
+      ...packet,
+      trace_id: "trace-iris-http-live2d",
+      trace_id_present: true,
+      event_id: "event-iris-http-live2d",
+      event_id_present: true,
+      action_type: "SPEAK",
+      canonical_envelope: {
+        action_type: "SPEAK",
+        target_presence_id: "iris",
+        tone: "calm",
+        emotion: "neutral",
+        character_tag: "iris",
+        final_normalized_status: "ok",
+        continuity_maintained: true,
+      },
+      motion_cue: makeIrisMotionCue(),
+      performance_plan: makeIrisPerformancePlan("trace-iris-http-live2d", "event-iris-http-live2d"),
+    };
+  }
+  return {
+    ...packet,
+    trace_id: "trace-iris-http-tts",
+    trace_id_present: true,
+    event_id: "event-iris-http-tts",
+    event_id_present: true,
+    speech_cue: makeIrisSpeechCue("trace-iris-http-tts", "event-iris-http-tts"),
+    performance_plan: makeIrisPerformancePlan("trace-iris-http-tts", "event-iris-http-tts"),
+  };
+}
+
+function makeIrisSpeechCue(traceId, eventId) {
+  return {
+    schema: "iris_speech_cue_v1",
+    trace_id: traceId,
+    event_id: eventId,
+    prosody_style: "natural_speech",
+    pace: 1,
+    pitch: 0.5,
+    volume: 0.55,
+    breathiness: 0.2,
+    estimated_duration_ms: 1800,
+    laugh_breaths: [],
+    pause_points: [],
+    mouth_cues: [{ start_ms: 0, end_ms: 160, shape: "a" }],
+    adapter_validation_required: true,
+  };
+}
+
+function makeIrisMotionCue() {
+  return {
+    schema: "iris_motion_cue_v1",
+    motion_style: "talk",
+    expression_hint: "neutral_warm",
+    gaze_hint: "audience_soft",
+    breathing_rate: 0.42,
+    blink_rate: 0.32,
+    head_motion: "soft_nod",
+    body_sway: 0.2,
+    gesture_hint: "small_hand",
+    adapter_validation_required: true,
+  };
+}
+
+function makeIrisPerformancePlan(traceId, eventId) {
+  return {
+    schema: "iris_performance_plan_v1",
+    trace_id: traceId,
+    event_id: eventId,
+    total_duration_ms: 1800,
+    sync_mode: "tts_leads_live2d",
+    tracks: {
+      speech: [],
+      mouth: [],
+      breath: [],
+      expression: [],
+      motion: [],
+      subtitle: [],
+    },
+    adapter_validation_required: true,
+  };
+}
+
+function assertNoForbiddenResponseFields(value, path = "root") {
+  if (value === null || value === undefined || typeof value !== "object") return;
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => assertNoForbiddenResponseFields(item, `${path}[${index}]`));
+    return;
+  }
+  const forbidden = new Set([
+    "emotion",
+    "tone",
+    "character_tag",
+    "action_type",
+    "intent",
+    "conversation_state",
+    "task_type",
+    "canonical",
+    "canonical_envelope",
+    "candidate",
+    "candidates",
+    "commit",
+    "write",
+    "endpoint",
+    "url",
+    "api_key",
+    "token",
+    "secret",
+    "authorization",
+    "raw_audio",
+    "raw_payload",
+    "model_path",
+    "dataset_path",
+    "raw_phoneme_debug",
+  ]);
+  for (const [field, child] of Object.entries(value)) {
+    const normalized = field.toLowerCase().replace(/[\s-]+/gu, "_");
+    assert.equal(forbidden.has(normalized), false, `${path}.${field}`);
+    assertNoForbiddenResponseFields(child, `${path}.${field}`);
+  }
 }

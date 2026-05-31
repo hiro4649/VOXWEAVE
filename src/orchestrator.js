@@ -115,7 +115,7 @@ export function createVoxWeaveService({
       });
     },
 
-    async orchestrate(payload, { routeKind = "" } = {}) {
+    async orchestrate(payload, { routeKind = "", includeDebug = false } = {}) {
       validateInputPayload(payload, { routeKind });
 
       const adapterKind =
@@ -278,7 +278,7 @@ export function createVoxWeaveService({
         adapter_validation_required: true,
       };
 
-      if (debugResponse) {
+      if (debugResponse && includeDebug) {
         response.debug = {
           pronunciation: {
             corrected_text: correctedText,
@@ -315,15 +315,15 @@ function createRequestId(payload, now, sequence = 0) {
 
 function buildProsody(payload, hints, { fallbackAllowed, localeStatus }) {
   const style = hints.prosodyStyle || inferProsodyStyle(hints);
-  const emotion = hints.emotion || inferEmotionFromStyle(style);
+  const affectLabel = hints.emotion || inferAffectFromStyle(style);
   const pace = normalizePace(hints.pace, style);
-  const pitch = normalizePitch(hints.pitch, emotion);
-  const volume = normalizeVolume(hints.volume, emotion);
+  const pitch = normalizePitch(hints.pitch, affectLabel);
+  const volume = normalizeVolume(hints.volume, affectLabel);
   const breathiness = safeText(payload.speech_cue?.breathiness ?? "", 40) || "medium";
   return {
     schema: "voxweave_emotional_prosody_v1",
     style,
-    emotion,
+    prosody_affect_label: affectLabel,
     pace,
     pitch,
     volume,
@@ -703,7 +703,7 @@ function inferProsodyStyle(hints) {
   return "natural_speech";
 }
 
-function inferEmotionFromStyle(style) {
+function inferAffectFromStyle(style) {
   if (style.includes("laugh")) return "joy";
   if (style.includes("surpris")) return "surprise";
   if (style.includes("focused")) return "focused";
@@ -734,17 +734,17 @@ function classifyNumericPace(value) {
   return "medium";
 }
 
-function normalizePitch(pitch, emotion) {
+function normalizePitch(pitch, affectLabel) {
   const normalized = String(pitch ?? "").toLowerCase();
   if (["low", "medium", "high"].includes(normalized)) return normalized;
-  if (["joy", "happy", "surprise"].includes(emotion)) return "high";
+  if (["joy", "happy", "surprise"].includes(affectLabel)) return "high";
   return "medium";
 }
 
-function normalizeVolume(volume, emotion) {
+function normalizeVolume(volume, affectLabel) {
   const normalized = String(volume ?? "").toLowerCase();
   if (["low", "medium", "high"].includes(normalized)) return normalized;
-  if (emotion === "surprise") return "high";
+  if (affectLabel === "surprise") return "high";
   return "medium";
 }
 
@@ -832,7 +832,7 @@ function expressionForMotion(motionStyle, prosody) {
   if (motionStyle === "happy_dance" || motionStyle === "happy_loud_sing") {
     return "bright_smile_high_energy";
   }
-  if (motionStyle === "focused_talk" || prosody.emotion === "focused") {
+  if (motionStyle === "focused_talk" || prosody.prosody_affect_label === "focused") {
     return "focused_bright";
   }
   if (motionStyle === "idle_breath") return "neutral_breath";

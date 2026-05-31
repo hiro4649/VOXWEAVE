@@ -76,9 +76,17 @@ const FORBIDDEN_KEYS = new Set([
 
 const RESPONSE_FORBIDDEN_KEYS = new Set([
   ...FORBIDDEN_KEYS,
+  "canonical",
   "canonical_envelope",
   "action_type",
+  "tone",
+  "emotion",
+  "character_tag",
+  "intent",
+  "conversation_state",
+  "task_type",
   "candidate",
+  "candidates",
 ]);
 RESPONSE_FORBIDDEN_KEYS.delete("artifact_url");
 

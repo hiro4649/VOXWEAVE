@@ -25,6 +25,14 @@ export function createVoxWeaveServer({ service = createVoxWeaveService() } = {})
       assertAuthorizedWrite(request, requiredApiKey);
       const payload = await readJson(request);
       const routeKind = resolveRouteKind(url.pathname);
+      if (url.pathname === "/v1/debug/orchestrate") {
+        const result = await service.orchestrate(payload, {
+          routeKind,
+          includeDebug: true,
+        });
+        sendJson(response, 200, result);
+        return;
+      }
       if (
         url.pathname === "/v1/orchestrate" ||
         url.pathname === "/orchestrate" ||
