@@ -23,6 +23,7 @@ IRIS Core phase.
 - `POST /v1/adapter/tts`
 - `POST /v1/adapter/subtitle`
 - `POST /v1/adapter/live2d`
+- `POST /v1/debug/orchestrate`
 
 The adapter endpoints accept `iris_adapter_packet_v1` payloads and return only
 safe bridge metadata plus generated adapter artifacts. They never return
@@ -31,6 +32,13 @@ model paths.
 
 `/v1/adapter/tts`, `/v1/adapter/subtitle`, and `/v1/adapter/live2d` are the IRIS
 compatible primary path. `/v1/orchestrate` is kept as a future combined path.
+
+`/v1/debug/orchestrate` is a debug-only route. It passes `includeDebug=true` to
+the orchestrator, but detailed debug material is returned only when
+`VOXWEAVE_DEBUG_RESPONSE=true` is set before service creation. Without that env
+flag it returns the same summary-only safe response shape. The IRIS adapter
+endpoints always stay summary-only, including when `VOXWEAVE_DEBUG_RESPONSE` is
+enabled.
 
 For Live2D dry-run mode, leave `VOXWEAVE_LIVE2D_RENDERER_ENDPOINT` unset. To
 forward generated renderer cues to a local LIVE2D renderer, set it to a loopback

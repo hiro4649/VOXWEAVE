@@ -1037,6 +1037,48 @@ test("adapter endpoint stays summary-only even when debug response is enabled", 
   }
 });
 
+test("debug orchestration endpoint stays summary-only when env debug is unset", async () => {
+  await withTemporaryEnv("VOXWEAVE_DEBUG_RESPONSE", undefined, async () => {
+    const service = createVoxWeaveService({ now: () => 1_777_000_000_000 });
+    const body = await postToVoxWeaveServer(service, "/v1/debug/orchestrate", baseTtsPacket);
+
+    assert.equal("debug" in body, false);
+    assertNoForbiddenResponseFields(body);
+  });
+});
+
+test("debug orchestration endpoint returns details when env debug is enabled", async () => {
+  await withTemporaryEnv("VOXWEAVE_DEBUG_RESPONSE", "true", async () => {
+    const service = createVoxWeaveService({ now: () => 1_777_000_000_000 });
+    const body = await postToVoxWeaveServer(service, "/v1/debug/orchestrate", baseTtsPacket);
+    const serialized = JSON.stringify(body);
+
+    assert.equal(body.debug.reading_plan.segments.length > 0, true);
+    assert.equal(body.debug.live2d_cue.schema, "iris_live2d_renderer_cue_v1");
+    for (const marker of [
+      "endpoint",
+      "api_key",
+      "token",
+      "raw_audio",
+      "model_path",
+      "dataset_path",
+      "raw_phoneme_debug",
+    ]) {
+      assert.equal(serialized.includes(marker), false, marker);
+    }
+  });
+});
+
+test("adapter endpoint stays summary-only when env debug is enabled", async () => {
+  await withTemporaryEnv("VOXWEAVE_DEBUG_RESPONSE", "true", async () => {
+    const service = createVoxWeaveService({ now: () => 1_777_000_000_000 });
+    const body = await postToVoxWeaveServer(service, "/v1/adapter/tts", baseTtsPacket);
+
+    assert.equal("debug" in body, false);
+    assertNoForbiddenResponseFields(body);
+  });
+});
+
 test("debug orchestration endpoint is separated from IRIS adapter endpoints", async () => {
   const service = createVoxWeaveService({
     now: () => 1_777_000_000_000,
@@ -1290,6 +1332,41 @@ function createTestRendererServer(received) {
     response.writeHead(200, { "content-type": "application/json" });
     response.end(JSON.stringify({ ok: true, bridge_status: "accepted" }));
   });
+}
+
+async function postToVoxWeaveServer(service, pathname, payload) {
+  const server = createVoxWeaveServer({ service });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address();
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}${pathname}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    assert.equal(response.status, 200);
+    return await response.json();
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+}
+
+async function withTemporaryEnv(name, value, callback) {
+  const previous = process.env[name];
+  if (value === undefined) {
+    delete process.env[name];
+  } else {
+    process.env[name] = value;
+  }
+  try {
+    return await callback();
+  } finally {
+    if (previous === undefined) {
+      delete process.env[name];
+    } else {
+      process.env[name] = previous;
+    }
+  }
 }
 
 async function assertIrisHttpAdapterAcceptsVoxWeave(t, adapterKind, packet) {
