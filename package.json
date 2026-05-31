@@ -1,0 +1,14 @@
+{
+  "name": "voxweave",
+  "version": "0.1.0",
+  "description": "External voice orchestration service for IRIS adapter packets.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "license": "UNLICENSED"
+}
