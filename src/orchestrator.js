@@ -80,7 +80,9 @@ export function createVoxWeaveService({
   cache = new ReactionCache(),
   renderGroups = new RenderGroupStore({ now }),
   live2dForwarder = createLive2dForwarder(),
+  debugResponse = process.env.VOXWEAVE_DEBUG_RESPONSE === "true",
 } = {}) {
+  let requestSequence = 0;
   return {
     health() {
       return assertSafeResponse({
@@ -127,7 +129,8 @@ export function createVoxWeaveService({
       const scriptDirection = extractScriptDirection(payload, language, correctedText);
       const durationMs = extractDurationMs(payload, correctedText);
       const trace = extractTrace(payload);
-      const requestId = createRequestId(payload, now);
+      requestSequence += 1;
+      const requestId = createRequestId(payload, now, requestSequence);
       const cacheKey = hashPayload({
         schema: payload.schema,
         adapter_kind: adapterKind,
@@ -138,24 +141,7 @@ export function createVoxWeaveService({
       });
       const cacheable = isCacheableReaction(correctedText);
       const cached = cacheable ? cache.get(cacheKey) : null;
-      if (cached) {
-        const renderGroup = renderGroups.update({
-          adapterKind,
-          traceId: trace.traceId,
-          eventId: trace.eventId,
-          utteranceId: trace.utteranceId,
-          qualityWarningCount: cached.quality?.deductions?.length ?? 0,
-        });
-        return assertSafeResponse({
-          ...cached,
-          request_id: requestId,
-          render_group: renderGroup,
-          cache: {
-            status: "hit",
-            key: cacheKey,
-          },
-        });
-      }
+      const cacheStatus = cached ? "hit" : "miss";
 
       const fallbackAllowed = extractFallbackAllowed(payload);
       const prosody = buildProsody(payload, extractProsodyHints(payload), {
@@ -229,6 +215,7 @@ export function createVoxWeaveService({
         traceId: trace.traceId,
         eventId: trace.eventId,
         utteranceId: trace.utteranceId,
+        requestId,
         qualityWarningCount: quality.deductions.length,
       });
       const responseSummary = buildIrisResponseSummary({
@@ -260,24 +247,23 @@ export function createVoxWeaveService({
         response_summary: responseSummary,
         pronunciation: {
           dictionary_version,
-          corrected_text: correctedText,
           repair_count: repairs.length,
-          repairs,
+          pronunciation_warning_count: repairs.length,
         },
-        reading_plan: readingPlan,
+        reading_plan: summarizeReadingPlan(readingPlan),
         prosody,
         mock_tts: mockTts,
         tts_routing: prosody.tts_routing,
-        subtitle_timing: subtitleTiming,
-        subtitle_segments: subtitleTiming.chunks,
+        subtitle_timing: summarizeSubtitleTiming(subtitleTiming),
+        subtitle_segments: summarizeSubtitleSegments(subtitleTiming.chunks),
+        subtitle_segment_count: subtitleTiming.chunks.length,
         mouth_cues: mouthCues,
-        live2d_cue: live2dCue,
-        live2d_cue_delivery: live2dCueDelivery,
+        live2d_cue_summary: summarizeLive2dCue(live2dCue),
         live2d_forward: live2dForward,
-        quality,
+        quality: summarizeQuality(quality),
         render_group: renderGroup,
         cache: {
-          status: "miss",
+          status: cacheStatus,
           key: cacheKey,
         },
         boundary_policy: {
@@ -292,15 +278,28 @@ export function createVoxWeaveService({
         adapter_validation_required: true,
       };
 
+      if (debugResponse) {
+        response.debug = {
+          pronunciation: {
+            corrected_text: correctedText,
+            repairs,
+          },
+          reading_plan: readingPlan,
+          subtitle_segments: subtitleTiming.chunks,
+          live2d_cue: live2dCue,
+          live2d_cue_delivery: live2dCueDelivery,
+          quality,
+        };
+      }
+
       assertSafeResponse(response);
       if (cacheable) {
         cache.set(cacheKey, {
-          ...response,
-          request_id: "cached",
-          cache: {
-            status: "stored",
-            key: cacheKey,
-          },
+          schema: "voxweave_reaction_cache_entry_v1",
+          artifact_kind: artifact.artifact_kind,
+          duration_ms: durationMs,
+          viseme_count: mouthCues.length,
+          quality_label: quality.label,
         });
       }
       return response;
@@ -308,9 +307,9 @@ export function createVoxWeaveService({
   };
 }
 
-function createRequestId(payload, now) {
+function createRequestId(payload, now, sequence = 0) {
   const base = safeId(payload.trace_id ?? payload.event_id ?? "");
-  const suffix = hashPayload({ payload, timeBucket: Math.floor(now() / 1000) }).slice(0, 12);
+  const suffix = hashPayload({ payload, sequence, timeBucket: Math.floor(now() / 1000) }).slice(0, 12);
   return `voxweave-${base || "request"}-${suffix}`;
 }
 
@@ -329,6 +328,11 @@ function buildProsody(payload, hints, { fallbackAllowed, localeStatus }) {
     pitch,
     volume,
     breathiness,
+    numeric_prosody: hints.numericProsody,
+    pace_class: classifyNumericPace(hints.numericProsody?.pace),
+    speech_rate_profile: {
+      base_rate: hints.baseRate || "default",
+    },
     tts_routing: {
       mode: localeStatus === "supported" ? "mock_tts" : "dry_run_text_only",
       provider_required: false,
@@ -341,6 +345,8 @@ function buildProsody(payload, hints, { fallbackAllowed, localeStatus }) {
           : fallbackAllowed
             ? "text_only_safe_fallback"
             : "text_only_no_voice_switch",
+      numeric_prosody: hints.numericProsody,
+      speech_rate_base: hints.baseRate || "default",
     },
   };
 }
@@ -634,6 +640,60 @@ function scoreQuality({
   };
 }
 
+function summarizeReadingPlan(plan) {
+  return {
+    schema: plan.schema,
+    primary_language: plan.primary_language,
+    locale_status: plan.locale_status,
+    fallback_mode: plan.fallback_mode,
+    script_direction: plan.script_direction,
+    segment_count: plan.segment_count,
+    reading_candidates: plan.reading_candidates,
+  };
+}
+
+function summarizeSubtitleTiming(timing) {
+  return {
+    schema: timing.schema,
+    language: timing.language,
+    script_direction: timing.script_direction,
+    display_start_ms: timing.display_start_ms,
+    display_end_ms: timing.display_end_ms,
+    readability_profile: timing.readability_profile,
+    boundary_policy: timing.boundary_policy,
+  };
+}
+
+function summarizeSubtitleSegments(chunks) {
+  return chunks.map((chunk) => ({
+    index: chunk.index,
+    start_ms: chunk.start_ms,
+    end_ms: chunk.end_ms,
+  }));
+}
+
+function summarizeLive2dCue(cue) {
+  return {
+    schema: cue.schema,
+    motion_style: cue.motion?.style ?? "talk",
+    duration_ms: cue.timing?.duration_ms ?? null,
+    recovery_required: cue.recovery_required === true,
+    recovery_planned: Boolean(cue.recovery_plan || cue.recovery_cue),
+  };
+}
+
+function summarizeQuality(quality) {
+  return {
+    schema: "voxweave_quality_public_summary_v1",
+    quality_warning_count: quality.deductions.length,
+    pronunciation_warning_count: quality.deductions.includes("pronunciation_repaired") ? 1 : 0,
+    latency_class: quality.score >= 90 ? "normal" : "attention",
+    subtitle_sync_status: quality.component_scores.subtitle_timing >= 90 ? "ok" : "attention",
+    lip_sync_status: quality.component_scores.mouth_cues >= 90 ? "ok" : "attention",
+    quality_label: quality.label,
+  };
+}
+
 function inferProsodyStyle(hints) {
   const joined = `${hints.motionStyle} ${hints.expressionHint} ${hints.emotion}`.toLowerCase();
   if (joined.includes("laugh")) return "laughing_speech";
@@ -653,10 +713,25 @@ function inferEmotionFromStyle(style) {
 
 function normalizePace(pace, style) {
   const normalized = String(pace ?? "").toLowerCase();
+  const numeric = Number(pace);
+  if (Number.isFinite(numeric)) {
+    if (numeric >= 1.1) return "fast";
+    if (numeric <= 0.9) return "slow";
+    return "normal";
+  }
   if (["slow", "normal", "fast"].includes(normalized)) return normalized;
+  if (["lively", "bright", "energetic"].includes(normalized)) return "fast";
   if (style.includes("surpris") || style.includes("laugh")) return "fast";
   if (style.includes("focused")) return "normal";
   return "normal";
+}
+
+function classifyNumericPace(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "unspecified";
+  if (number >= 1.1) return "high";
+  if (number <= 0.9) return "low";
+  return "medium";
 }
 
 function normalizePitch(pitch, emotion) {

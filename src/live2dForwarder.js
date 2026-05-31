@@ -37,6 +37,7 @@ export function createLive2dForwarder({
           method: "POST",
           headers,
           body: JSON.stringify(cueDelivery),
+          redirect: "error",
           signal: controller.signal,
         });
         return {
@@ -87,8 +88,7 @@ function normalizeRendererEndpoint(value) {
     }
     url.scope = endpointScope(url.hostname);
     if (url.pathname === "/live2d-engine" || url.pathname === "/cue") return url;
-    url.pathname = `${url.pathname.replace(/\/$/u, "")}/live2d-engine`;
-    return url;
+    return null;
   } catch {
     return null;
   }

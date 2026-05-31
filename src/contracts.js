@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { VoxWeaveError } from "./errors.js";
+import { normalizeSpeechText } from "./textNormalization.js";
 
 export const SERVICE_SCHEMA = "voxweave_orchestration_result_v1";
 export const HEALTH_SCHEMA = "voxweave_health_v1";
@@ -149,7 +150,7 @@ export function extractInputText(payload) {
     payload.line_text ??
     payload.subtitle_cue?.subtitle_text ??
     "";
-  return safeText(text, MAX_TEXT_LENGTH);
+  return safeText(normalizeSpeechText(text), MAX_TEXT_LENGTH);
 }
 
 export function extractTrace(payload) {
@@ -164,6 +165,9 @@ export function extractLanguage(payload, text) {
   const language =
     payload.subtitle_language ??
     payload.language ??
+    payload.language_profile?.response_language ??
+    payload.language_profile?.subtitle_language ??
+    payload.language_profile?.pronunciation_profile?.voice_locale_hint ??
     payload.language_profile?.language ??
     payload.language_profile?.locale ??
     payload.subtitle_cue?.subtitle_language ??
@@ -177,6 +181,7 @@ export function extractScriptDirection(payload, language, text) {
   const explicit =
     payload.script_direction ??
     payload.subtitle_cue?.script_direction ??
+    payload.language_profile?.script_profile?.direction ??
     payload.language_profile?.script_direction ??
     "";
   const normalized = String(explicit ?? "").trim().toLowerCase();
@@ -205,9 +210,22 @@ export function extractDurationMs(payload, text) {
 export function extractProsodyHints(payload) {
   return {
     prosodyStyle: safeText(payload.speech_cue?.prosody_style ?? payload.prosody_style, 80),
-    pace: safeText(payload.speech_cue?.pace ?? payload.speech_rate_profile?.rate_label, 80),
+    pace: safeText(
+      payload.speech_cue?.pace ??
+        payload.speech_rate_profile?.base_rate ??
+        payload.speech_rate_profile?.rate_label,
+      80
+    ),
     pitch: safeText(payload.speech_cue?.pitch ?? payload.pitch, 40),
     volume: safeText(payload.speech_cue?.volume ?? payload.volume, 40),
+    breathiness: safeText(payload.speech_cue?.breathiness ?? payload.breathiness, 40),
+    numericProsody: {
+      pace: safeOptionalNumber(payload.speech_cue?.pace),
+      pitch: safeOptionalNumber(payload.speech_cue?.pitch),
+      volume: safeOptionalNumber(payload.speech_cue?.volume),
+      breathiness: safeOptionalNumber(payload.speech_cue?.breathiness),
+    },
+    baseRate: safeText(payload.speech_rate_profile?.base_rate, 80),
     emotion: safeText(
       payload.expression_profile?.emotion ??
         payload.canonical_envelope?.emotion ??
@@ -255,7 +273,10 @@ function scanUnsafeInput(value, path) {
     if (value.length > MAX_STRING_LENGTH) {
       throw new VoxWeaveError("string value too large", "payload_too_large");
     }
-    if (UNSAFE_VALUE_PATTERNS.some((pattern) => pattern.test(value))) {
+    const patterns = isSpeechTextPath(path)
+      ? UNSAFE_VALUE_PATTERNS.filter((pattern) => !String(pattern).includes("https?"))
+      : UNSAFE_VALUE_PATTERNS;
+    if (patterns.some((pattern) => pattern.test(value))) {
       throw new VoxWeaveError("unsafe payload value", "unsafe_payload");
     }
     return;
@@ -280,6 +301,12 @@ function scanUnsafeInput(value, path) {
     }
     scanUnsafeInput(child, `${path}.${field}`);
   }
+}
+
+function isSpeechTextPath(path) {
+  return /\.(?:text|final_text|subtitle_text|speech_text|script_text|utterance_text|line_text)$/u.test(
+    path
+  );
 }
 
 function scanUnsafeResponse(value, path) {
@@ -330,4 +357,9 @@ function detectLanguage(text) {
 
 function isPlainObject(value) {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function safeOptionalNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }

@@ -35,7 +35,7 @@ const baseTtsPacket = {
 };
 
 test("orchestrates IRIS TTS adapter packet with mock TTS and pronunciation repair", async () => {
-  const service = createVoxWeaveService({ now: () => 1_777_000_000_000 });
+  const service = createVoxWeaveService({ now: () => 1_777_000_000_000, debugResponse: true });
   const result = await service.orchestrate(baseTtsPacket, { routeKind: "tts" });
 
   assert.equal(result.schema, "voxweave_orchestration_result_v1");
@@ -50,9 +50,9 @@ test("orchestrates IRIS TTS adapter packet with mock TTS and pronunciation repai
   assert.equal(result.mock_tts.provider_connected, false);
   assert.equal(result.runtime_readiness_claimed, false);
   assert.equal(result.duration_ms, 2400);
-  assert.equal(result.pronunciation.corrected_text.includes("VoxWeave"), true);
+  assert.equal(result.debug.pronunciation.corrected_text.includes("VoxWeave"), true);
   assert.equal(result.pronunciation.repair_count >= 2, true);
-  assert.equal(result.quality.score >= 90, true);
+  assert.equal(result.debug.quality.score >= 90, true);
 });
 
 test("generates subtitle timing and bounded mouth cues", async () => {
@@ -60,8 +60,9 @@ test("generates subtitle timing and bounded mouth cues", async () => {
   const result = await service.orchestrate(baseTtsPacket, { routeKind: "tts" });
 
   assert.equal(result.subtitle_timing.schema, "voxweave_subtitle_timing_v1");
-  assert.equal(result.subtitle_timing.chunks.length > 0, true);
-  assert.equal(result.subtitle_segments.length, result.subtitle_timing.chunks.length);
+  assert.equal(result.subtitle_segment_count > 0, true);
+  assert.equal(result.subtitle_segments.length, result.subtitle_segment_count);
+  assert.equal("text" in result.subtitle_segments[0], false);
   assert.equal(result.mouth_cues.length > 0, true);
   for (const cue of result.mouth_cues) {
     assert.equal(cue.end_ms > cue.start_ms, true);
@@ -95,11 +96,10 @@ test("generates Live2D renderer-compatible cue without replacing renderer", asyn
 
   const result = await service.orchestrate(live2dPacket, { routeKind: "live2d" });
 
-  assert.equal(result.live2d_cue.schema, "iris_live2d_renderer_cue_v1");
-  assert.equal(result.live2d_cue.motion.style, "laugh_big");
-  assert.equal(result.live2d_cue.recovery_required, true);
-  assert.equal(result.live2d_cue.recovery_plan.type, "breath_recover");
-  assert.equal(result.live2d_cue_delivery.schema, "iris_live2d_renderer_cue_delivery_v1");
+  assert.equal(result.live2d_cue_summary.schema, "iris_live2d_renderer_cue_v1");
+  assert.equal(result.live2d_cue_summary.motion_style, "laugh_big");
+  assert.equal(result.live2d_cue_summary.recovery_required, true);
+  assert.equal(result.live2d_cue_summary.recovery_planned, true);
   assert.equal(result.live2d_forward.renderer_forward_configured, false);
   assert.equal(result.boundary_policy.live2d_renderer_not_replaced, true);
 });
@@ -118,6 +118,58 @@ test("uses reaction cache on repeated safe requests", async () => {
   assert.equal(first.cache.status, "miss");
   assert.equal(second.cache.status, "hit");
   assert.equal(second.cache.key, first.cache.key);
+});
+
+test("cache hit regenerates event specific identifiers", async () => {
+  const service = createVoxWeaveService({ now: () => 1_777_000_000_000 });
+  const first = await service.orchestrate(
+    {
+      ...baseTtsPacket,
+      text: "うん",
+      final_text: "うん",
+      trace_id: "trace-cache-first",
+      event_id: "event-cache-first",
+      utterance_id: "utt-cache-first",
+    },
+    { routeKind: "tts" }
+  );
+  const second = await service.orchestrate(
+    {
+      ...baseTtsPacket,
+      text: "うん",
+      final_text: "うん",
+      trace_id: "trace-cache-second",
+      event_id: "event-cache-second",
+      utterance_id: "utt-cache-second",
+    },
+    { routeKind: "tts" }
+  );
+
+  assert.equal(first.cache.status, "miss");
+  assert.equal(second.cache.status, "hit");
+  assert.equal(second.trace_id, "trace-cache-second");
+  assert.equal(second.event_id, "event-cache-second");
+  assert.equal(second.utterance_id, "utt-cache-second");
+  assert.equal(second.response_summary.event_id, "event-cache-second");
+  assert.equal(JSON.stringify(second).includes("trace-cache-first"), false);
+  assert.equal(JSON.stringify(second).includes("event-cache-first"), false);
+  assert.equal(JSON.stringify(second).includes("utt-cache-first"), false);
+});
+
+test("cache hit regenerates artifact reference for the current request", async () => {
+  const service = createVoxWeaveService({ now: () => 1_777_000_000_000 });
+  const first = await service.orchestrate(
+    { ...baseTtsPacket, text: "うん", final_text: "うん", event_id: "event-cache-artifact-a" },
+    { routeKind: "tts" }
+  );
+  const second = await service.orchestrate(
+    { ...baseTtsPacket, text: "うん", final_text: "うん", event_id: "event-cache-artifact-b" },
+    { routeKind: "tts" }
+  );
+
+  assert.equal(second.cache.status, "hit");
+  assert.notEqual(second.artifact_url, first.artifact_url);
+  assert.notEqual(second.response_summary.request_id, first.response_summary.request_id);
 });
 
 test("rejects command and secret leakage fields", async () => {
@@ -236,6 +288,48 @@ test("groups tts subtitle and live2d packets by event and utterance", async () =
   assert.equal("raw_text" in live2d.render_group, false);
 });
 
+test("render group key separates different events with the same utterance id", async () => {
+  const service = createVoxWeaveService({ now: () => 1_777_000_000_000 });
+  const first = await service.orchestrate(
+    {
+      ...baseTtsPacket,
+      trace_id: "trace-rg",
+      event_id: "event-render-a",
+      utterance_id: "shared-utterance",
+    },
+    { routeKind: "tts" }
+  );
+  const second = await service.orchestrate(
+    {
+      ...baseTtsPacket,
+      trace_id: "trace-rg",
+      event_id: "event-render-b",
+      utterance_id: "shared-utterance",
+    },
+    { routeKind: "tts" }
+  );
+
+  assert.notEqual(first.render_group.group_id, second.render_group.group_id);
+  assert.equal(first.render_group.event_id, "event-render-a");
+  assert.equal(second.render_group.event_id, "event-render-b");
+});
+
+test("render group key does not reuse a shared anonymous group", async () => {
+  const service = createVoxWeaveService({ now: () => 1_777_000_000_000 });
+  const anonymousPacket = {
+    ...baseTtsPacket,
+    trace_id: undefined,
+    event_id: undefined,
+    utterance_id: undefined,
+  };
+  const first = await service.orchestrate(anonymousPacket, { routeKind: "tts" });
+  const second = await service.orchestrate(anonymousPacket, { routeKind: "tts" });
+
+  assert.notEqual(first.render_group.group_id, second.render_group.group_id);
+  assert.equal(first.render_group.group_complete, false);
+  assert.equal(second.render_group.group_complete, false);
+});
+
 test("uses safe fallback for unsupported locale without switching voice", async () => {
   const service = createVoxWeaveService({ now: () => 1_777_000_000_000 });
   const result = await service.orchestrate(
@@ -300,7 +394,7 @@ test("accepts IRIS live2d adapter packet and returns safe live2d artifact", asyn
   assert.equal(result.adapter_kind, "live2d");
   assert.equal(result.artifact_kind, "live2d_cue_json");
   assert.equal(result.response_summary.ok, true);
-  assert.equal(result.live2d_cue.schema, "iris_live2d_renderer_cue_v1");
+  assert.equal(result.live2d_cue_summary.schema, "iris_live2d_renderer_cue_v1");
 });
 
 test("adapter endpoint returns without waiting for the render group to complete", async () => {
@@ -325,7 +419,7 @@ test("response summary passes IRIS real runtime gate shape", async () => {
 });
 
 test("pronunciation dictionary covers IRIS GPT YouTube and phantom", async () => {
-  const service = createVoxWeaveService({ now: () => 1_777_000_000_000 });
+  const service = createVoxWeaveService({ now: () => 1_777_000_000_000, debugResponse: true });
   const result = await service.orchestrate(
     {
       ...baseTtsPacket,
@@ -335,7 +429,7 @@ test("pronunciation dictionary covers IRIS GPT YouTube and phantom", async () =>
     },
     { routeKind: "tts" }
   );
-  const readings = result.pronunciation.repairs.map((repair) => repair.reading);
+  const readings = result.debug.pronunciation.repairs.map((repair) => repair.reading);
   assert.equal(readings.includes("アイリス"), true);
   assert.equal(readings.includes("ジーピーティー"), true);
   assert.equal(readings.includes("ユーチューブ"), true);
@@ -358,6 +452,84 @@ test("Arabic subtitle direction is RTL", async () => {
   assert.equal(result.reading_plan.script_direction, "rtl");
 });
 
+for (const [name, languageProfile, expectedLanguage] of [
+  ["response_language selects Japanese", { response_language: "ja" }, "ja"],
+  ["subtitle_language selects English", { subtitle_language: "en" }, "en"],
+  [
+    "pronunciation profile selects Chinese",
+    { pronunciation_profile: { voice_locale_hint: "zh" } },
+    "zh",
+  ],
+  ["response_language selects Korean", { response_language: "ko" }, "ko"],
+  ["response_language selects Arabic", { response_language: "ar" }, "ar"],
+]) {
+  test(`IRIS language_profile actual shape: ${name}`, async () => {
+    const service = createVoxWeaveService({ now: () => 1_777_000_000_000 });
+    const result = await service.orchestrate(
+      {
+        ...baseTtsPacket,
+        language: undefined,
+        subtitle_language: undefined,
+        text: "language profile probe",
+        final_text: "language profile probe",
+        event_id: `event-language-${expectedLanguage}`,
+        language_profile: languageProfile,
+      },
+      { routeKind: "tts" }
+    );
+    assert.equal(result.reading_plan.primary_language, expectedLanguage);
+    assert.equal(result.subtitle_timing.language, expectedLanguage);
+  });
+}
+
+test("IRIS script_profile direction preserves Arabic RTL", async () => {
+  const service = createVoxWeaveService({ now: () => 1_777_000_000_000 });
+  const result = await service.orchestrate(
+    {
+      ...baseTtsPacket,
+      language: undefined,
+      subtitle_language: undefined,
+      text: "مرحبا ليلى",
+      final_text: "مرحبا ليلى",
+      event_id: "event-language-profile-rtl",
+      language_profile: {
+        response_language: "ar",
+        script_profile: {
+          direction: "rtl",
+        },
+      },
+    },
+    { routeKind: "tts" }
+  );
+
+  assert.equal(result.reading_plan.primary_language, "ar");
+  assert.equal(result.reading_plan.script_direction, "rtl");
+  assert.equal(result.subtitle_timing.script_direction, "rtl");
+});
+
+test("subtitle_cue language and direction are honored", async () => {
+  const service = createVoxWeaveService({ now: () => 1_777_000_000_000 });
+  const result = await service.orchestrate(
+    {
+      ...baseTtsPacket,
+      language: undefined,
+      subtitle_language: undefined,
+      text: undefined,
+      final_text: undefined,
+      event_id: "event-subtitle-cue-profile",
+      subtitle_cue: {
+        subtitle_text: "مرحبا",
+        subtitle_language: "ar",
+        script_direction: "rtl",
+      },
+    },
+    { routeKind: "tts" }
+  );
+
+  assert.equal(result.reading_plan.primary_language, "ar");
+  assert.equal(result.subtitle_timing.script_direction, "rtl");
+});
+
 test("non Latin scripts do not force extreme slow speech", async () => {
   const service = createVoxWeaveService({ now: () => 1_777_000_000_000 });
   const japanese = await service.orchestrate(
@@ -365,6 +537,98 @@ test("non Latin scripts do not force extreme slow speech", async () => {
     { routeKind: "tts" }
   );
   assert.notEqual(japanese.prosody.pace, "slow");
+});
+
+test("numeric speech_cue prosody is preserved for routing hints", async () => {
+  const service = createVoxWeaveService({ now: () => 1_777_000_000_000 });
+  const result = await service.orchestrate(
+    {
+      ...baseTtsPacket,
+      event_id: "event-numeric-prosody",
+      speech_cue: {
+        ...baseTtsPacket.speech_cue,
+        pace: 1.18,
+        pitch: 1.06,
+        volume: 0.92,
+        breathiness: 0.35,
+      },
+    },
+    { routeKind: "tts" }
+  );
+
+  assert.equal(result.prosody.numeric_prosody.pace, 1.18);
+  assert.equal(result.prosody.pace_class, "high");
+  assert.equal(result.prosody.tts_routing.numeric_prosody.pitch, 1.06);
+  assert.equal(result.prosody.tts_routing.numeric_prosody.volume, 0.92);
+  assert.equal(result.prosody.tts_routing.numeric_prosody.breathiness, 0.35);
+});
+
+test("speech_rate_profile base_rate is reflected in prosody routing", async () => {
+  const service = createVoxWeaveService({ now: () => 1_777_000_000_000 });
+  const result = await service.orchestrate(
+    {
+      ...baseTtsPacket,
+      event_id: "event-base-rate-prosody",
+      speech_cue: {
+        ...baseTtsPacket.speech_cue,
+        pace: undefined,
+      },
+      speech_rate_profile: {
+        base_rate: "lively",
+      },
+    },
+    { routeKind: "tts" }
+  );
+
+  assert.equal(result.prosody.pace, "fast");
+  assert.equal(result.prosody.speech_rate_profile.base_rate, "lively");
+  assert.equal(result.tts_routing.speech_rate_base, "lively");
+});
+
+test("speech text URL is normalized without exposing the raw URL", async () => {
+  const service = createVoxWeaveService({
+    now: () => 1_777_000_000_000,
+    debugResponse: true,
+  });
+  const result = await service.orchestrate(
+    {
+      ...baseTtsPacket,
+      text: "このリンクを見て https://example.com/private?q=1",
+      final_text: "このリンクを見て https://example.com/private?q=1",
+      event_id: "event-url-normalized",
+    },
+    { routeKind: "tts" }
+  );
+  const serialized = JSON.stringify(result);
+
+  assert.equal(result.response_summary.ok, true);
+  assert.equal(result.debug.pronunciation.corrected_text.includes("リンク"), true);
+  assert.equal(serialized.includes("https://example.com"), false);
+});
+
+test("endpoint field URL remains rejected", async () => {
+  const service = createVoxWeaveService({ now: () => 1_777_000_000_000 });
+  await assert.rejects(
+    async () =>
+      service.orchestrate(
+        {
+          ...baseTtsPacket,
+          endpoint: "https://example.com/voice",
+        },
+        { routeKind: "tts" }
+      ),
+    /unsafe payload field/u
+  );
+});
+
+test("api key token and secret fields remain rejected", async () => {
+  const service = createVoxWeaveService({ now: () => 1_777_000_000_000 });
+  for (const field of ["api_key", "token", "secret"]) {
+    await assert.rejects(
+      async () => service.orchestrate({ ...baseTtsPacket, [field]: "value" }, { routeKind: "tts" }),
+      /unsafe payload field/u
+    );
+  }
 });
 
 test("unsafe string values are rejected", async () => {
@@ -550,6 +814,94 @@ test("Live2D forwarder allows private network scope label without leaking URL", 
   assert.equal(JSON.stringify(result).includes("192.168.1.10"), false);
 });
 
+test("Live2D forwarder uses redirect error mode", async () => {
+  let fetchOptions = null;
+  const forwarder = createLive2dForwarder({
+    endpoint: "http://127.0.0.1:9130/cue",
+    apiKey: "renderer-key",
+    fetchImpl: async (_url, options) => {
+      fetchOptions = options;
+      return { ok: true };
+    },
+  });
+  const result = await forwarder.forward({ schema: "iris_live2d_renderer_cue_delivery_v1" });
+
+  assert.equal(result.renderer_forward_ok, true);
+  assert.equal(fetchOptions.redirect, "error");
+  assert.equal(fetchOptions.headers["x-api-key"], "renderer-key");
+});
+
+test("Live2D forwarder does not follow renderer redirects", async () => {
+  const received = [];
+  const renderer = await new Promise((resolve) => {
+    const server = createServer((request, response) => {
+      received.push({
+        path: new URL(request.url, "http://127.0.0.1").pathname,
+        keySeen: request.headers["x-api-key"] === "renderer-key",
+      });
+      response.writeHead(302, { location: "https://example.com/redirect-target" });
+      response.end();
+    });
+    server.listen(0, "127.0.0.1", () => resolve(server));
+  });
+  const { port } = renderer.address();
+  const forwarder = createLive2dForwarder({
+    endpoint: `http://127.0.0.1:${port}/cue`,
+    apiKey: "renderer-key",
+  });
+  try {
+    const result = await forwarder.forward({ schema: "iris_live2d_renderer_cue_delivery_v1" });
+    assert.equal(result.renderer_forward_ok, false);
+    assert.equal(result.renderer_forward_attempted, true);
+    assert.equal(received.length, 1);
+    assert.equal(received[0].keySeen, true);
+  } finally {
+    await new Promise((resolve) => renderer.close(resolve));
+  }
+});
+
+test("Live2D forwarder blocks arbitrary configured paths", async () => {
+  let called = false;
+  const forwarder = createLive2dForwarder({
+    endpoint: "http://127.0.0.1:9130/foo",
+    fetchImpl: async () => {
+      called = true;
+      return { ok: true };
+    },
+  });
+  const result = await forwarder.forward({ schema: "iris_live2d_renderer_cue_delivery_v1" });
+
+  assert.equal(result.renderer_forward_configured, true);
+  assert.equal(result.renderer_forward_scope, "blocked");
+  assert.equal(result.renderer_forward_attempted, false);
+  assert.equal(called, false);
+});
+
+for (const [name, endpoint, expectedPath] of [
+  ["root path is normalized to live2d engine", "http://127.0.0.1:9130/", "/live2d-engine"],
+  ["cue path is allowed", "http://127.0.0.1:9130/cue", "/cue"],
+  [
+    "live2d engine path is allowed",
+    "http://127.0.0.1:9130/live2d-engine",
+    "/live2d-engine",
+  ],
+]) {
+  test(`Live2D forwarder path policy: ${name}`, async () => {
+    let receivedPath = "";
+    const forwarder = createLive2dForwarder({
+      endpoint,
+      fetchImpl: async (url) => {
+        receivedPath = new URL(url).pathname;
+        return { ok: true };
+      },
+    });
+    const result = await forwarder.forward({ schema: "iris_live2d_renderer_cue_delivery_v1" });
+
+    assert.equal(result.renderer_forward_ok, true);
+    assert.equal(receivedPath, expectedPath);
+  });
+}
+
 test("generated Live2D cue validates against local renderer contract when available", async (t) => {
   const validationPath = resolve("..", "LIVE2D", "src", "renderer", "cueValidation.js");
   if (!existsSync(validationPath)) {
@@ -557,9 +909,9 @@ test("generated Live2D cue validates against local renderer contract when availa
     return;
   }
   const { validateRendererCueEnvelope } = await import(pathToFileURL(validationPath).href);
-  const service = createVoxWeaveService({ now: () => 1_777_000_000_000 });
+  const service = createVoxWeaveService({ now: () => 1_777_000_000_000, debugResponse: true });
   const result = await service.orchestrate(makeLive2dPacket("laugh_big"), { routeKind: "live2d" });
-  const validation = validateRendererCueEnvelope(result.live2d_cue_delivery);
+  const validation = validateRendererCueEnvelope(result.debug.live2d_cue_delivery);
   assert.equal(validation.cueSchema, "iris_live2d_renderer_cue_v1");
 });
 
@@ -592,6 +944,35 @@ test("does not expose unsafe public response material", async () => {
     "game_input",
   ];
   for (const marker of forbidden) {
+    assert.equal(serialized.includes(marker), false, marker);
+  }
+});
+
+test("default response hides detailed text plans and component scores", async () => {
+  const service = createVoxWeaveService({ now: () => 1_777_000_000_000 });
+  const result = await service.orchestrate(baseTtsPacket, { routeKind: "tts" });
+  const serialized = JSON.stringify(result);
+
+  assert.equal("debug" in result, false);
+  assert.equal("corrected_text" in result.pronunciation, false);
+  assert.equal("segments" in result.reading_plan, false);
+  assert.equal("component_scores" in result.quality, false);
+  assert.equal(serialized.includes("corrected_text"), false);
+});
+
+test("debug response includes details without unsafe values", async () => {
+  const service = createVoxWeaveService({
+    now: () => 1_777_000_000_000,
+    debugResponse: true,
+  });
+  const result = await service.orchestrate(baseTtsPacket, { routeKind: "tts" });
+  const serialized = JSON.stringify(result);
+
+  assert.equal(result.debug.reading_plan.segments.length > 0, true);
+  assert.equal(typeof result.debug.reading_plan.segments[0].text, "string");
+  assert.equal(result.debug.live2d_cue.schema, "iris_live2d_renderer_cue_v1");
+  assert.equal(typeof result.debug.quality.component_scores, "object");
+  for (const marker of ["endpoint", "api_key", "token", "raw_audio", "dataset_path", "model_path"]) {
     assert.equal(serialized.includes(marker), false, marker);
   }
 });
@@ -744,7 +1125,7 @@ test("serves subtitle and live2d adapter mode endpoints over HTTP", async () => 
     const live2dBody = await live2dResponse.json();
     assert.equal(live2dResponse.status, 200);
     assert.equal(live2dBody.adapter_kind, "live2d");
-    assert.equal(live2dBody.live2d_cue.motion.style, "focused_talk");
+    assert.equal(live2dBody.live2d_cue_summary.motion_style, "focused_talk");
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }

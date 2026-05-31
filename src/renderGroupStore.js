@@ -10,9 +10,10 @@ export class RenderGroupStore {
     traceId = "",
     eventId = "",
     utteranceId = "",
+    requestId = "",
     qualityWarningCount = 0,
   } = {}) {
-    const groupId = groupKey({ traceId, eventId, utteranceId });
+    const groupId = groupKey({ traceId, eventId, utteranceId, requestId });
     const current = this.groups.get(groupId) ?? {
       schema: "voxweave_render_group_v1",
       group_id: groupId,
@@ -50,14 +51,16 @@ export class RenderGroupStore {
     return publicGroup(current);
   }
 
-  get({ traceId = "", eventId = "", utteranceId = "" } = {}) {
-    const group = this.groups.get(groupKey({ traceId, eventId, utteranceId }));
+  get({ traceId = "", eventId = "", utteranceId = "", requestId = "" } = {}) {
+    const group = this.groups.get(groupKey({ traceId, eventId, utteranceId, requestId }));
     return group ? publicGroup(group) : null;
   }
 }
 
-function groupKey({ traceId = "", eventId = "", utteranceId = "" }) {
-  return safeId(utteranceId || eventId || traceId || "anonymous-render-group");
+function groupKey({ traceId = "", eventId = "", utteranceId = "", requestId = "" }) {
+  const parts = [traceId, eventId, utteranceId].map((part) => safeId(part || "none"));
+  if (!traceId && !eventId && !utteranceId) parts.push(safeId(requestId || cryptoSafeFallback()));
+  return parts.join("__");
 }
 
 function publicGroup(group) {
@@ -82,4 +85,8 @@ function safeId(value) {
     .trim()
     .replace(/[^A-Za-z0-9_.:-]/gu, "-")
     .slice(0, 96);
+}
+
+function cryptoSafeFallback() {
+  return `request-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
