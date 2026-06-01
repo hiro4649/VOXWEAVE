@@ -7,6 +7,7 @@ import { resolve } from "node:path";
 import { createVoxWeaveService } from "../src/orchestrator.js";
 import { createVoxWeaveServer } from "../src/server.js";
 import { createLive2dForwarder } from "../src/live2dForwarder.js";
+import { classifyStaleAuditFreshness } from "../scripts/codex-stale-audit-freshness-classifier.mjs";
 
 const baseTtsPacket = {
   schema: "iris_adapter_packet_v1",
@@ -814,3 +815,65 @@ function createTestRendererServer(received) {
     response.end(JSON.stringify({ ok: true, bridge_status: "accepted" }));
   });
 }
+
+test("classifies stale audit as event payload or safe artifact input when live PR body is current", () => {
+  const current = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  const stale = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+  const result = classifyStaleAuditFreshness({
+    currentHeadSha: current,
+    livePrBody: `Head SHA: ${current}`,
+    eventPrBody: `Head SHA: ${stale}`,
+    safeArtifactHeadSha: stale,
+    staleAuditReasonCodes: ["stale_confirmation_detected", "stale_evidence"],
+  });
+
+  assert.equal(result.prBodyLiveFetchStatus, "pass");
+  assert.equal(result.githubEventPayloadFreshnessStatus, "stale_or_unknown");
+  assert.equal(result.safeArtifactHeadMatchStatus, "fail");
+  assert.equal(result.eventPayloadVsLivePrBodyDiffStatus, "mismatch");
+  assert.equal(result.rerunUsesStaleEventPayloadStatus, "suspected");
+  assert.equal(result.staleAuditInputStatus, "external_or_harness_input_blocked");
+  assert.equal(result.staleConfirmationOwnerStatus, "event_payload_or_safe_artifact_input");
+  assert.equal(result.staleEvidenceOwnerStatus, "event_payload_or_safe_artifact_input");
+  assert.equal(result.developmentMode, "5.5-low");
+  assert.equal(result.userManualWorkAvoided, true);
+  assert.equal(result.blockedByExternalState, true);
+  assert.equal(result.mergeReadiness, "no");
+});
+
+test("classifies stale audit as PR body owned when live PR body is stale", () => {
+  const current = "cccccccccccccccccccccccccccccccccccccccc";
+  const stale = "dddddddddddddddddddddddddddddddddddddddd";
+  const result = classifyStaleAuditFreshness({
+    currentHeadSha: current,
+    livePrBody: `Head SHA: ${stale}`,
+    eventPrBody: `Head SHA: ${stale}`,
+    safeArtifactHeadSha: current,
+    staleAuditReasonCodes: ["stale_confirmation_detected"],
+  });
+
+  assert.equal(result.prBodyLiveFetchStatus, "fail");
+  assert.equal(result.safeArtifactHeadMatchStatus, "pass");
+  assert.equal(result.staleAuditInputStatus, "pr_body_blocked");
+  assert.equal(result.staleConfirmationOwnerStatus, "pr_body");
+  assert.equal(result.staleEvidenceOwnerStatus, "pr_body");
+  assert.equal(result.safeSummaryOnly, true);
+});
+
+test("stale audit freshness classifier does not expose raw PR body or artifact text", () => {
+  const current = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+  const result = classifyStaleAuditFreshness({
+    currentHeadSha: current,
+    livePrBody: `Head SHA: ${current}\nraw sensitive body`,
+    eventPrBody: `Head SHA: ${current}\nraw event body`,
+    safeArtifactHeadSha: current,
+    staleAuditReasonCodes: [],
+  });
+  const serialized = JSON.stringify(result);
+
+  assert.equal(result.staleAuditInputStatus, "pass");
+  assert.equal(serialized.includes("raw sensitive body"), false);
+  assert.equal(serialized.includes("raw event body"), false);
+  assert.equal(result.safeNextAction, "Investigate stale audit input freshness without changing PR #5.");
+  assert.equal(result.codexActionAllowed, "classify_stale_audit_freshness_with_safe_summary_only");
+});
