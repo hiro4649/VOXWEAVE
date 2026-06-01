@@ -31,11 +31,49 @@ v1.0.2 should emit these safe summary fields:
 - `productEvidenceScore`
 - `harnessEvidenceScore`
 - `governanceScore`
+- `productTestCommandStatus`
+- `harnessSelfTestCommandStatus`
+- `npmScriptDiscoveryBoundaryStatus`
+- `testCommandScopeStatus`
+- `developmentMode`
+- `codexActionAllowed`
+- `userManualWorkAvoided`
+- `nextRequiredExternalCondition`
+- `blockedByExternalState`
 - `safeNextAction`
 
 `safeNextAction` must be one line and must not include raw payloads, endpoint
 values, API keys, tokens, raw logs, model paths, dataset paths, or private
 integration details.
+
+## Command Scope and External State
+
+v1.0.2 must distinguish product test evidence from harness command discovery
+problems. A product-focused command can pass while a broad npm script can still
+be non-mergeable if it discovers unrelated harness self-test scripts or times
+out outside the product test scope.
+
+Required safe classification fields:
+
+```json
+{
+  "productTestCommandStatus": "pass",
+  "harnessSelfTestCommandStatus": "not_executed_or_out_of_scope",
+  "npmScriptDiscoveryBoundaryStatus": "too_broad",
+  "testCommandScopeStatus": "product_focused_pass_broad_npm_timeout",
+  "developmentMode": "5.5-low",
+  "codexActionAllowed": "docs_only_status_model_update",
+  "userManualWorkAvoided": true,
+  "nextRequiredExternalCondition": "independent reviewer account or approved reviewer app must be available",
+  "blockedByExternalState": true
+}
+```
+
+`codexActionAllowed` must describe only work Codex can perform without asking
+the user for GitHub operations. It must not convert missing independent review
+into a pass. `userManualWorkAvoided` must remain true for this design: Codex may
+post safe status, check metadata, and update design documents, but must not ask
+the user to comment, approve, rerun, rebase, or merge.
 
 ## Current Real Case
 
@@ -55,6 +93,9 @@ Expected safe status:
 {
   "externalBlockedStatus": "independent_reviewer_unavailable",
   "reviewerAvailabilityStatus": "none_available",
+  "developmentMode": "5.5-low",
+  "blockedByExternalState": true,
+  "nextRequiredExternalCondition": "independent reviewer account or approved reviewer app must be available",
   "mergeReadiness": "no",
   "safeNextAction": "Wait for an independent GitHub reviewer or approved reviewer app."
 }
@@ -103,6 +144,7 @@ v1.0.2 should include these cases:
 - independent reviewer approval -> pass
 - npm executed with safe artifact only -> pass with trustLevel safe_artifact
 - npm not executed -> fail
+- product test command passes but broad npm script discovery times out -> blocked_external with product evidence preserved
 - PR #1 blocked by PR #3 -> blocked
 - adapter route returns debug detail -> fail
 - debug route returns debug detail only with env gate -> pass
@@ -114,4 +156,3 @@ v1.0.2 should include these cases:
 This plan does not permit merge by itself. A PR using this plan is not merge
 ready unless an independent GitHub reviewer or approved reviewer app is visible
 in repository metadata and all required gates are green.
-

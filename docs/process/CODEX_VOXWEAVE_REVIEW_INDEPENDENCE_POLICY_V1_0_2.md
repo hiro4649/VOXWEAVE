@@ -36,9 +36,25 @@ Expected result:
   "reviewerAvailabilityStatus": "none_available",
   "externalBlockedStatus": "independent_reviewer_unavailable",
   "reviewIndependenceStatus": "blocked_external",
+  "developmentMode": "5.5-low",
+  "codexActionAllowed": "metadata_check_and_safe_status_comment_only",
+  "userManualWorkAvoided": true,
+  "nextRequiredExternalCondition": "independent reviewer account or approved reviewer app must be available",
+  "blockedByExternalState": true,
   "mergeReadiness": "no"
 }
 ```
+
+## Codex Action Boundary
+
+Codex may verify PR metadata, inspect safe artifacts, post safe summary status,
+and update design documents. Codex must not ask the user to perform GitHub
+comments, approvals, review requests, Actions reruns, rebases, or merge
+decisions.
+
+`codexActionAllowed` must stay within actions available to Codex. If no
+independent reviewer exists in metadata, `blockedByExternalState` must be true
+and `nextRequiredExternalCondition` must name the missing external condition.
 
 ## Rules
 
@@ -83,9 +99,11 @@ Issue comments from the writer are not independent review.
 `mergeReadiness` must remain `no` until an independent reviewer exists and all
 required gates pass.
 
+Writer comments, writer self-review, or non-persisted bot requests must not
+change `blockedByExternalState` to false.
+
 ## Safe Output
 
 The policy output must not include raw review bodies beyond safe summaries. It
 must not include raw payloads, endpoint values, API keys, tokens, model paths,
 dataset paths, or raw logs.
-
