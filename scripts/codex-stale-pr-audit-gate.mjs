@@ -2,6 +2,7 @@
 // CODEX_QUALITY_HARNESS_FILE v1.0.3
 import { fileURLToPath } from 'node:url';
 import { HARNESS_VERSION, marker, isPrContext, prBodyText, simpleStatus, writeJsonReport, exitFor } from './codex-v080-lib.mjs';
+import { classifyStaleAuditFreshness } from './codex-stale-audit-freshness-classifier.mjs';
 
 function headShaValues(body) {
   const values = [];
@@ -35,9 +36,19 @@ export function buildStalePrAuditReport(env = process.env) {
     reasonCodes.push('stale_pr_detected');
   }
   if (env.CODEX_PR_CREATED_BEFORE_HARNESS_VERSION === '1' && touchesHarnessFiles(env)) reasonCodes.push('stale_pr_detected');
+  const freshnessClassification = classifyStaleAuditFreshness({
+    currentHeadSha: currentHead,
+    livePrBody: env.CODEX_LIVE_PR_BODY || body,
+    eventPrBody: env.CODEX_EVENT_PR_BODY || body,
+    safeArtifactHeadSha: env.CODEX_SAFE_ARTIFACT_HEAD_SHA || '',
+    evidencePackHeadSha: env.CODEX_EVIDENCE_PACK_HEAD_SHA || '',
+    manualConfirmationHeadSha: env.CODEX_MANUAL_CONFIRMATION_HEAD_SHA || '',
+    staleAuditReasonCodes: reasonCodes,
+  });
   return simpleStatus('stalePrAuditStatus', reasonCodes.length ? 'fail' : 'pass', {
     reasonCodes: [...new Set(reasonCodes)],
     evidenceHeadCount: heads.length,
+    freshnessClassification,
   });
 }
 
