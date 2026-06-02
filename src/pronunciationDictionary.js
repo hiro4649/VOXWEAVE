@@ -48,6 +48,30 @@ const ENTRIES = [
     reason: "engine_name_reading",
   },
   {
+    pattern: /\bHiro\b/giu,
+    replacement: "Hiro",
+    reading: "ヒロ",
+    reason: "romaji_name_reading",
+  },
+  {
+    pattern: /\bSora\b/giu,
+    replacement: "Sora",
+    reading: "ソラ",
+    reason: "romaji_name_reading",
+  },
+  {
+    pattern: /\bAiri\b/giu,
+    replacement: "Airi",
+    reading: "アイリ",
+    reason: "romaji_name_reading",
+  },
+  {
+    pattern: /読み補正/gu,
+    replacement: "読み補正",
+    reading: "よみほせい",
+    reason: "japanese_term_reading",
+  },
+  {
     pattern: /口パク/gu,
     replacement: "口パク",
     reading: "くちぱく",
