@@ -1,4 +1,4 @@
-# CODEX_QUALITY_HARNESS_FILE v1.0.2
+# CODEX_QUALITY_HARNESS_FILE v1.0.3
 name: quality-gate
 
 on:
@@ -128,11 +128,6 @@ jobs:
           export CODEX_PROFILE_COMPAT_MODE=off
           changed_files="$(git diff --name-only origin/main...HEAD || true)"
           export CODEX_CHANGED_FILES="$changed_files"
-          {
-            echo 'CODEX_CHANGED_FILES<<CODEX_CHANGED_FILES_EOF'
-            printf '%s\n' "$changed_files"
-            echo 'CODEX_CHANGED_FILES_EOF'
-          } >> "$GITHUB_ENV"
           classification_json="$(CODEX_QUALITY_REPORT=json node scripts/codex-change-classification-gate.mjs || true)"
           product_relevant="$(CLASSIFICATION_JSON="$classification_json" node -e "const r=JSON.parse(process.env.CLASSIFICATION_JSON||'{}'); const s=r.changeClassificationStatus||{}; process.stdout.write(s.productRelevantChanged||s.runtimeReadinessClaimed||s.packageOrLockfileChanged?'1':'0')")"
           npm_exit=0
@@ -179,6 +174,12 @@ jobs:
             export CODEX_HARNESS_MODE=target
             export CODEX_PROFILE_COMPAT_MODE=off
             export CODEX_SKIP_NPM="${CODEX_SKIP_NPM:-1}"
+          fi
+          if [ "${CODEX_EVENT_NAME:-}" = "pull_request" ]; then
+            pr_json="$(gh api "repos/${CODEX_REPOSITORY}/pulls/${CODEX_PR_NUMBER}" --jq '{body: .body}' 2>/dev/null || printf '{"body":""}')"
+            export CODEX_PR_BODY="$(printf '%s' "$pr_json" | node -e "let input=''; process.stdin.on('data', c => input += c); process.stdin.on('end', () => { try { const parsed = JSON.parse(input); process.stdout.write(parsed.body || ''); } catch { process.stdout.write(''); } });")"
+            changed_files="$(git diff --name-only "origin/main...HEAD" || true)"
+            export CODEX_CHANGED_FILES="$(printf '%s\n' "$changed_files" | node -e "const fs = require('fs'); const lines = fs.readFileSync(0, 'utf8').split(/\\r?\\n/).filter(Boolean); process.stdout.write(JSON.stringify(lines));")"
           fi
           node scripts/codex-workflow-preflight.mjs > "$RUNNER_TEMP/codex-workflow-preflight.json"
           gate_exit=0
