@@ -70,6 +70,7 @@ import { buildDiagnosticConsolidatedSummary } from './codex-diagnostic-consolida
 
 import { buildInvalidReportRecoverySummary } from './codex-invalid-report-recovery.mjs';
 import { V101_STATUS_KEYS } from './codex-v101-gate-lib.mjs';
+import { classifyGovernanceFailures } from './codex-governance-failure-classifier.mjs';
 
 
 
@@ -3237,6 +3238,57 @@ function statusAllowed(key, status, eventName) {
 
 
 
+function workflowStatusReasonCodes(status) {
+  if (!status || typeof status !== 'object') return [];
+  return Array.isArray(status.reasonCodes) ? status.reasonCodes.map((reason) => String(reason)) : [];
+}
+
+function workflowStatusIsFail(status) {
+  return Boolean(status && typeof status === 'object' && status.status === 'fail');
+}
+
+export function buildWorkflowGovernanceFailureClassificationStatus(report = {}) {
+  const classification = classifyGovernanceFailures({
+    prProfileStatus: report.prProfileStatus,
+    prProfileReasonCodes: workflowStatusReasonCodes(report.prProfileStatus),
+    contractGovernanceStatus: report.contractGovernanceStatus,
+    contractReasonCodes: workflowStatusReasonCodes(report.contractGovernanceStatus),
+    complexityGovernanceStatus: report.complexityGovernanceStatus,
+    complexityReasonCodes: workflowStatusReasonCodes(report.complexityGovernanceStatus),
+    testCoverageEvidenceStatus: report.testCoverageEvidenceStatus,
+    testCoverageReasonCodes: workflowStatusReasonCodes(report.testCoverageEvidenceStatus),
+    targetQualityScoreStatus: report.targetQualityScoreStatus ?? report.qualityScoreStatus,
+    reviewIndependenceStatus: report.reviewIndependenceStatus,
+    reviewIndependenceReasonCodes: workflowStatusReasonCodes(report.reviewIndependenceStatus),
+    dependencyBlocked: workflowStatusIsFail(report.prDependencyBlockedStatus) || report.prDependencyBlockedStatus?.status === 'blocked',
+    dependencyReasonCodes: workflowStatusReasonCodes(report.prDependencyBlockedStatus),
+  });
+
+  return {
+    status: 'pass',
+    reasonCodes: [],
+    schema: classification.schema,
+    governanceFailureClassificationStatus: classification.governanceFailureClassificationStatus,
+    governanceFailureClassificationSummary: classification.governanceFailureClassificationSummary,
+    prProfileOwnerStatus: classification.prProfileOwnerStatus,
+    contractGovernanceOwnerStatus: classification.contractGovernanceOwnerStatus,
+    complexityGovernanceOwnerStatus: classification.complexityGovernanceOwnerStatus,
+    testCoverageEvidenceOwnerStatus: classification.testCoverageEvidenceOwnerStatus,
+    targetQualityScoreOwnerStatus: classification.targetQualityScoreOwnerStatus,
+    reviewIndependenceOwnerStatus: classification.reviewIndependenceOwnerStatus,
+    prDependencyBlockedStatus: classification.prDependencyBlockedStatus,
+    implementationDefectStatus: classification.implementationDefectStatus,
+    evidenceBodyDefectStatus: classification.evidenceBodyDefectStatus,
+    externalBlockedStatus: classification.externalBlockedStatus,
+    codexActionAllowed: classification.codexActionAllowed,
+    userManualWorkAvoided: classification.userManualWorkAvoided,
+    safeNextAction: classification.safeNextAction,
+    developmentMode: classification.developmentMode,
+    mergeReadiness: classification.mergeReadiness,
+    safeSummaryOnly: classification.safeSummaryOnly,
+  };
+}
+
 export function evaluateWorkflowReport(report, options = {}) {
 
 
@@ -4026,6 +4078,8 @@ export function evaluateWorkflowReport(report, options = {}) {
 
 
 
+  const governanceFailureClassificationStatus = report.governanceFailureClassificationStatus || buildWorkflowGovernanceFailureClassificationStatus(report);
+
   const safeSummary = {
 
 
@@ -4132,6 +4186,10 @@ export function evaluateWorkflowReport(report, options = {}) {
 
 
     complexityGovernanceStatus: report.complexityGovernanceStatus || { status: 'missing' },
+
+
+
+    governanceFailureClassificationStatus,
 
 
 

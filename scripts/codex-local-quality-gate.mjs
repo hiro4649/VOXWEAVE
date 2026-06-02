@@ -43,6 +43,7 @@ import { buildCompactReasonSummary } from './codex-reason-summary.mjs';
 import * as v101Gates from './codex-v101-gate-lib.mjs';
 import * as v102Gates from './codex-v102-gate-lib.mjs';
 import * as v103Gates from './codex-v103-gate-lib.mjs';
+import { classifyGovernanceFailures } from './codex-governance-failure-classifier.mjs';
 
 
 
@@ -4957,6 +4958,57 @@ function computeTargetOutputShapeStatus(report) {
 
 
 
+function governanceStatusReasonCodes(status) {
+  if (!status || typeof status !== 'object') return [];
+  return Array.isArray(status.reasonCodes) ? status.reasonCodes.map((reason) => String(reason)) : [];
+}
+
+function governanceStatusIsFail(status) {
+  return Boolean(status && typeof status === 'object' && status.status === 'fail');
+}
+
+export function buildGovernanceFailureClassificationStatus(report = {}) {
+  const classification = classifyGovernanceFailures({
+    prProfileStatus: report.prProfileStatus,
+    prProfileReasonCodes: governanceStatusReasonCodes(report.prProfileStatus),
+    contractGovernanceStatus: report.contractGovernanceStatus,
+    contractReasonCodes: governanceStatusReasonCodes(report.contractGovernanceStatus),
+    complexityGovernanceStatus: report.complexityGovernanceStatus,
+    complexityReasonCodes: governanceStatusReasonCodes(report.complexityGovernanceStatus),
+    testCoverageEvidenceStatus: report.testCoverageEvidenceStatus,
+    testCoverageReasonCodes: governanceStatusReasonCodes(report.testCoverageEvidenceStatus),
+    targetQualityScoreStatus: report.targetQualityScoreStatus ?? report.qualityScoreStatus,
+    reviewIndependenceStatus: report.reviewIndependenceStatus,
+    reviewIndependenceReasonCodes: governanceStatusReasonCodes(report.reviewIndependenceStatus),
+    dependencyBlocked: governanceStatusIsFail(report.prDependencyBlockedStatus) || report.prDependencyBlockedStatus?.status === 'blocked',
+    dependencyReasonCodes: governanceStatusReasonCodes(report.prDependencyBlockedStatus),
+  });
+
+  return {
+    status: 'pass',
+    reasonCodes: [],
+    schema: classification.schema,
+    governanceFailureClassificationStatus: classification.governanceFailureClassificationStatus,
+    governanceFailureClassificationSummary: classification.governanceFailureClassificationSummary,
+    prProfileOwnerStatus: classification.prProfileOwnerStatus,
+    contractGovernanceOwnerStatus: classification.contractGovernanceOwnerStatus,
+    complexityGovernanceOwnerStatus: classification.complexityGovernanceOwnerStatus,
+    testCoverageEvidenceOwnerStatus: classification.testCoverageEvidenceOwnerStatus,
+    targetQualityScoreOwnerStatus: classification.targetQualityScoreOwnerStatus,
+    reviewIndependenceOwnerStatus: classification.reviewIndependenceOwnerStatus,
+    prDependencyBlockedStatus: classification.prDependencyBlockedStatus,
+    implementationDefectStatus: classification.implementationDefectStatus,
+    evidenceBodyDefectStatus: classification.evidenceBodyDefectStatus,
+    externalBlockedStatus: classification.externalBlockedStatus,
+    codexActionAllowed: classification.codexActionAllowed,
+    userManualWorkAvoided: classification.userManualWorkAvoided,
+    safeNextAction: classification.safeNextAction,
+    developmentMode: classification.developmentMode,
+    mergeReadiness: classification.mergeReadiness,
+    safeSummaryOnly: classification.safeSummaryOnly,
+  };
+}
+
 function computeTargetQualityScoreStatus(report) {
 
 
@@ -8963,6 +9015,10 @@ async function runSourceHarnessGate() {
 
 
 
+  report.governanceFailureClassificationStatus = buildGovernanceFailureClassificationStatus(report);
+
+
+
   report.scoreDecompositionStatus = computeScoreDecompositionStatus(report, report.qualityScoreStatus);
 
 
@@ -10951,6 +11007,10 @@ async function runTargetHarnessGate() {
 
 
   if (report.targetQualityScoreStatus.status === 'fail') failures.push({ id: 'targetQualityScoreStatus.failed', message: 'target quality score validation failed' });
+
+
+
+  report.governanceFailureClassificationStatus = buildGovernanceFailureClassificationStatus(report);
 
 
 
