@@ -42,19 +42,29 @@ function containsUnsafeText(value) {
   );
 }
 
-function hintValueSafe(hint) {
+function hintValueReadiness(hint) {
   const value = String(hint.hint_value ?? "");
-  if (containsUnsafeText(value)) return false;
-  if (hint.hint_type === "ipa") return /^[\p{L}\p{M}\sˈˌ.:\-]+$/u.test(value);
-  if (hint.hint_type === "pinyin") return /^[A-Za-z0-9\s:üÜāēīōūáéíóúǎěǐǒǔàèìòùüńňǹ'-]+$/u.test(value);
-  if (hint.hint_type === "kana") return /^[ぁ-ゖァ-ヺー・\s]+$/u.test(value);
-  return true;
+  const hintValueUnsafeReady = !containsUnsafeText(value);
+  let hintValueFormatReady = true;
+  if (hint.hint_type === "ipa") hintValueFormatReady = /^[\p{L}\p{M}\sˈˌ.:\-]+$/u.test(value);
+  if (hint.hint_type === "pinyin") {
+    hintValueFormatReady = /^[A-Za-z0-9\s:üÜāēīōūáéíóúǎěǐǒǔàèìòùüńňǹ'-]+$/u.test(value);
+  }
+  if (hint.hint_type === "kana") hintValueFormatReady = /^[ぁ-ゖァ-ヺー・\s]+$/u.test(value);
+  if (hint.hint_type === "alias") hintValueFormatReady = /^[\p{L}\p{N}\s._-]{1,64}$/u.test(value);
+  if (hint.hint_type === "phoneme") hintValueFormatReady = /^[A-Za-z0-9\s._-]{1,128}$/u.test(value);
+  return { hintValueFormatReady, hintValueUnsafeReady };
 }
 
-function mappingReady(hint) {
-  if (hint.engine_mapping_status === "placeholder") return hint.engine_mapping === "placeholder";
-  if (hint.engine_mapping_status === "not_mapped") return hint.engine_mapping === "";
-  return hint.engine_mapping === "";
+function mappingReadiness(hint) {
+  return {
+    mappingPlaceholderReady:
+      hint.engine_mapping_status !== "placeholder" || hint.engine_mapping === "placeholder",
+    mappingNotMappedReady:
+      hint.engine_mapping_status !== "not_mapped" || hint.engine_mapping === "",
+    mappingBlockedReady:
+      hint.engine_mapping_status !== "blocked" || hint.engine_mapping === "",
+  };
 }
 
 function buildReasonCodes({
@@ -73,13 +83,16 @@ function buildReasonCodes({
   confidenceReady,
   lowConfidenceReviewReady,
   runtimeApprovedSafetyReady,
-  hintValueReady,
+  hintValueFormatReady,
+  hintValueUnsafeReady,
   phonemeReviewReady,
   languageReady,
   localeReady,
   createdAtReady,
   updatedAtReady,
   mappingPlaceholderReady,
+  mappingNotMappedReady,
+  mappingBlockedReady,
 }) {
   const reason_codes = [];
   if (missing_metadata.length > 0) reason_codes.push("required_metadata_missing");
@@ -97,12 +110,15 @@ function buildReasonCodes({
   if (!confidenceReady) reason_codes.push("hint_confidence_invalid");
   if (!lowConfidenceReviewReady) reason_codes.push("low_confidence_requires_human_review");
   if (!runtimeApprovedSafetyReady) reason_codes.push("runtime_approval_requires_approved_safety_status");
-  if (!hintValueReady) reason_codes.push("hint_value_invalid_or_unsafe");
+  if (!hintValueFormatReady) reason_codes.push("pronunciation_hint_value_invalid");
+  if (!hintValueUnsafeReady) reason_codes.push("unsafe_pronunciation_hint_value");
   if (!phonemeReviewReady) reason_codes.push("phoneme_hint_requires_human_review");
-  if (!languageReady) reason_codes.push("hint_language_invalid");
-  if (!localeReady) reason_codes.push("hint_locale_invalid");
-  if (!createdAtReady || !updatedAtReady) reason_codes.push("hint_timestamp_invalid");
-  if (!mappingPlaceholderReady) reason_codes.push("engine_mapping_must_remain_placeholder_or_empty");
+  if (!languageReady) reason_codes.push("pronunciation_language_invalid");
+  if (!localeReady) reason_codes.push("pronunciation_locale_invalid");
+  if (!createdAtReady || !updatedAtReady) reason_codes.push("pronunciation_timestamp_invalid");
+  if (!mappingPlaceholderReady) reason_codes.push("engine_mapping_must_remain_placeholder");
+  if (!mappingNotMappedReady) reason_codes.push("engine_mapping_must_be_empty_when_not_mapped");
+  if (!mappingBlockedReady) reason_codes.push("engine_mapping_must_be_empty_when_blocked");
   return reason_codes;
 }
 
@@ -129,13 +145,17 @@ export function validatePronunciationHint(hint = {}) {
   const lowConfidenceReviewReady = !(hint.confidence < 0.75) || hint.requires_human_review === true;
   const runtimeApprovedSafetyReady =
     hint.approved_for_runtime !== true || hint.safety_status === "approved";
-  const hintValueReady = hintValueSafe(hint);
+  const { hintValueFormatReady, hintValueUnsafeReady } = hintValueReadiness(hint);
   const phonemeReviewReady = hint.hint_type !== "phoneme" || hint.requires_human_review === true;
   const languageReady = safeLanguage(hint.language);
   const localeReady = safeLocale(hint.locale, hint.language);
   const createdAtReady = safeTimestamp(hint.created_at);
   const updatedAtReady = safeTimestamp(hint.updated_at);
-  const mappingPlaceholderReady = mappingReady(hint);
+  const {
+    mappingPlaceholderReady,
+    mappingNotMappedReady,
+    mappingBlockedReady,
+  } = mappingReadiness(hint);
 
   const blocked =
     missing_metadata.length > 0 ||
@@ -153,13 +173,16 @@ export function validatePronunciationHint(hint = {}) {
     !confidenceReady ||
     !lowConfidenceReviewReady ||
     !runtimeApprovedSafetyReady ||
-    !hintValueReady ||
+    !hintValueFormatReady ||
+    !hintValueUnsafeReady ||
     !phonemeReviewReady ||
     !languageReady ||
     !localeReady ||
     !createdAtReady ||
     !updatedAtReady ||
-    !mappingPlaceholderReady;
+    !mappingPlaceholderReady ||
+    !mappingNotMappedReady ||
+    !mappingBlockedReady;
 
   return {
     hint_type: hintTypeAllowed ? hint.hint_type : "blocked",
@@ -186,13 +209,16 @@ export function validatePronunciationHint(hint = {}) {
       confidenceReady,
       lowConfidenceReviewReady,
       runtimeApprovedSafetyReady,
-      hintValueReady,
+      hintValueFormatReady,
+      hintValueUnsafeReady,
       phonemeReviewReady,
       languageReady,
       localeReady,
       createdAtReady,
       updatedAtReady,
       mappingPlaceholderReady,
+      mappingNotMappedReady,
+      mappingBlockedReady,
     }),
     safe_summary_only: true,
   };
@@ -207,7 +233,8 @@ export function buildPronunciationHintSafeSummary(hints = []) {
     candidate_count: validations.filter((item) => !item.blocked && item.safety_status === "candidate")
       .length,
     review_required_count: validations.filter(
-      (item) => !item.blocked && item.safety_status === "review_required",
+      (item) =>
+        !item.blocked && (item.safety_status === "review_required" || item.requires_human_review),
     ).length,
     approved_count: validations.filter((item) => !item.blocked && item.safety_status === "approved")
       .length,

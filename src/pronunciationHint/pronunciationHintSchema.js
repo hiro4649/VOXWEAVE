@@ -68,8 +68,14 @@ export const PRONUNCIATION_ENGINE_MAPPING_STATUSES = Object.freeze([
 
 export const UNSAFE_PRONUNCIATION_HINT_FIELDS = Object.freeze([
   "raw_phoneme_debug",
+  "raw_pronunciation_payload",
+  "raw_tts_engine_payload",
   "raw_prompt",
   "raw_audio",
+  "engine_specific_mapping",
+  "vendor_pronunciation_syntax",
+  "ssml_payload",
+  "raw_alias_source",
   "endpoint",
   "endpoint_url",
   "api_key",

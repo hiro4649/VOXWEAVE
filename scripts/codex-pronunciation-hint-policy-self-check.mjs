@@ -29,11 +29,24 @@ function hint(overrides = {}) {
   };
 }
 
-const kana = validatePronunciationHint(hint());
-assert.equal(kana.blocked, false);
+function assertBlocked(overrides, reasonCode) {
+  const result = validatePronunciationHint(hint(overrides));
+  assert.equal(result.blocked, true, `${reasonCode} should block`);
+  assert.equal(result.reason_codes.includes(reasonCode), true, `${reasonCode} missing`);
+  return result;
+}
+
+function assertValid(overrides = {}) {
+  const result = validatePronunciationHint(hint(overrides));
+  assert.equal(result.blocked, false);
+  assert.equal(result.runtime_ready, false);
+  return result;
+}
+
+const kana = assertValid();
 assert.equal(kana.runtime_ready, false);
 
-const pinyin = validatePronunciationHint(hint({
+assertValid({
   surface: "你好",
   normalized_surface: "你好",
   hint_type: "pinyin",
@@ -41,115 +54,141 @@ const pinyin = validatePronunciationHint(hint({
   language: "zh",
   locale: "zh-CN",
   script: "pinyin",
-}));
-assert.equal(pinyin.blocked, false);
-assert.equal(pinyin.runtime_ready, false);
+});
 
-const ipa = validatePronunciationHint(hint({
+assertValid({
   surface: "phantom",
   normalized_surface: "phantom",
   hint_type: "ipa",
-  hint_value: "ˈfæn.təm",
+  hint_value: "a i ɾ i s",
   language: "en",
   locale: "en-US",
   script: "ipa",
-}));
-assert.equal(ipa.blocked, false);
-assert.equal(ipa.runtime_ready, false);
+});
 
-const phonemeNoReview = validatePronunciationHint(hint({
+assertBlocked({
   hint_type: "phoneme",
   hint_value: "F AE N T AH M",
   script: "latin",
   requires_human_review: false,
-}));
-assert.equal(phonemeNoReview.blocked, true);
-assert.equal(phonemeNoReview.reason_codes.includes("phoneme_hint_requires_human_review"), true);
+}, "phoneme_hint_requires_human_review");
 
-const lowConfidence = validatePronunciationHint(hint({ confidence: 0.7 }));
-assert.equal(lowConfidence.blocked, true);
-assert.equal(lowConfidence.reason_codes.includes("low_confidence_requires_human_review"), true);
+assertValid({
+  hint_type: "phoneme",
+  hint_value: "F AE N T AH M",
+  script: "latin",
+  requires_human_review: true,
+});
 
-const runtimeCandidate = validatePronunciationHint(hint({
+assertBlocked({ confidence: "0.8" }, "hint_confidence_invalid");
+assertBlocked({ confidence: -0.1 }, "hint_confidence_invalid");
+assertBlocked({ confidence: 1.2 }, "hint_confidence_invalid");
+assertBlocked({ confidence: Number.NaN }, "hint_confidence_invalid");
+assertBlocked({ confidence: 0.7, requires_human_review: false }, "low_confidence_requires_human_review");
+assertValid({ confidence: 0.7, requires_human_review: true });
+
+assertBlocked({
   approved_for_runtime: true,
   safety_status: "candidate",
-}));
-assert.equal(runtimeCandidate.blocked, true);
-assert.equal(
-  runtimeCandidate.reason_codes.includes("runtime_approval_requires_approved_safety_status"),
-  true,
-);
-
-const runtimeApproved = validatePronunciationHint(hint({
+}, "runtime_approval_requires_approved_safety_status");
+assertValid({
   approved_for_runtime: true,
   safety_status: "approved",
-}));
-assert.equal(runtimeApproved.blocked, false);
-assert.equal(runtimeApproved.runtime_ready, false);
+});
 
-const blockedType = validatePronunciationHint(hint({ hint_type: "blocked" }));
-assert.equal(blockedType.blocked, true);
-assert.equal(blockedType.reason_codes.includes("hint_type_blocked"), true);
+assertBlocked({ hint_type: "blocked" }, "hint_type_blocked");
+assertBlocked({ source: "blocked" }, "hint_source_blocked");
+assertBlocked({ script: "blocked" }, "hint_script_blocked");
+assertBlocked({ safety_status: "blocked" }, "hint_safety_status_blocked");
 
-const blockedSource = validatePronunciationHint(hint({ source: "blocked" }));
-assert.equal(blockedSource.blocked, true);
-assert.equal(blockedSource.reason_codes.includes("hint_source_blocked"), true);
-
-const blockedScript = validatePronunciationHint(hint({ script: "blocked" }));
-assert.equal(blockedScript.blocked, true);
-assert.equal(blockedScript.reason_codes.includes("hint_script_blocked"), true);
-
-const blockedMapping = validatePronunciationHint(hint({
+assertBlocked({
   engine_mapping_status: "blocked",
   engine_mapping: "",
-}));
-assert.equal(blockedMapping.blocked, true);
-assert.equal(blockedMapping.reason_codes.includes("engine_mapping_status_blocked"), true);
-
-const rawMapping = validatePronunciationHint(hint({
-  engine_mapping_status: "placeholder",
-  engine_mapping: "moss:phoneme",
-}));
-assert.equal(rawMapping.blocked, true);
-assert.equal(rawMapping.reason_codes.includes("engine_mapping_must_remain_placeholder_or_empty"), true);
-
-const notMappedWithValue = validatePronunciationHint(hint({
+}, "engine_mapping_status_blocked");
+assertBlocked({
   engine_mapping_status: "not_mapped",
   engine_mapping: "placeholder",
-}));
-assert.equal(notMappedWithValue.blocked, true);
-assert.equal(
-  notMappedWithValue.reason_codes.includes("engine_mapping_must_remain_placeholder_or_empty"),
-  true,
-);
+}, "engine_mapping_must_be_empty_when_not_mapped");
 
-const unsafeAlias = validatePronunciationHint(hint({
+for (const engineMapping of [
+  "moss:ipa",
+  "moss:pinyin",
+  "ipa:/a/",
+  "pinyin:ni3",
+  "engine:pronunciation",
+  '<phoneme alphabet="ipa">',
+]) {
+  assertBlocked({
+    engine_mapping_status: "placeholder",
+    engine_mapping: engineMapping,
+  }, "engine_mapping_must_remain_placeholder");
+}
+
+assertBlocked({ language: "" }, "required_metadata_missing");
+assertBlocked({ language: "https://bad.invalid" }, "pronunciation_language_invalid");
+assertBlocked({ locale: "endpoint=https://bad.invalid" }, "pronunciation_locale_invalid");
+assertBlocked({ created_at: "not a timestamp" }, "pronunciation_timestamp_invalid");
+
+assertValid({ hint_type: "kana", hint_value: "アイリス", script: "kana" });
+assertBlocked({ hint_type: "kana", hint_value: "https://bad.invalid", script: "kana" }, "unsafe_pronunciation_hint_value");
+assertValid({
+  hint_type: "pinyin",
+  hint_value: "ni3 hao3",
+  language: "zh",
+  locale: "zh-CN",
+  script: "pinyin",
+});
+assertBlocked({
+  hint_type: "pinyin",
+  hint_value: "api_key=abc",
+  language: "zh",
+  locale: "zh-CN",
+  script: "pinyin",
+}, "unsafe_pronunciation_hint_value");
+assertValid({
+  hint_type: "ipa",
+  hint_value: "a i ɾ i s",
+  language: "en",
+  locale: "en-US",
+  script: "ipa",
+});
+assertBlocked({
+  hint_type: "ipa",
+  hint_value: "endpoint=https://bad.invalid",
+  language: "en",
+  locale: "en-US",
+  script: "ipa",
+}, "unsafe_pronunciation_hint_value");
+assertValid({
   hint_type: "alias",
-  hint_value: "endpoint=https://bad.invalid api_key=secret token=secret",
+  hint_value: "IRIS",
   script: "latin",
-}));
-assert.equal(unsafeAlias.blocked, true);
-assert.equal(unsafeAlias.reason_codes.includes("hint_value_invalid_or_unsafe"), true);
+});
+assertBlocked({
+  hint_type: "alias",
+  hint_value: "token=abc",
+  script: "latin",
+}, "unsafe_pronunciation_hint_value");
 
-const unsafe = validatePronunciationHint(hint({
-  raw_phoneme_debug: "raw phoneme debug",
-  raw_prompt: "raw prompt",
-  raw_audio: "raw audio",
-  endpoint: "https://hint.invalid",
-  api_key: "api-key",
-  token: "token",
-  secret: "secret",
-  model_path: "model/path",
-  dataset_path: "dataset/path",
-}));
-assert.equal(unsafe.blocked, true);
-assert.equal(unsafe.reason_codes.includes("unsafe_pronunciation_hint_fields_present"), true);
+for (const unsafeField of [
+  "raw_phoneme_debug",
+  "raw_pronunciation_payload",
+  "raw_tts_engine_payload",
+  "engine_specific_mapping",
+  "vendor_pronunciation_syntax",
+  "ssml_payload",
+  "raw_alias_source",
+]) {
+  assertBlocked({ [unsafeField]: "unsafe" }, "unsafe_pronunciation_hint_fields_present");
+}
 
+const blockedApproved = hint({
+  safety_status: "approved",
+  raw_phoneme_debug: "raw phoneme",
+});
 const summary = buildPronunciationHintSafeSummary([
   hint(),
   hint({
-    surface: "你好",
-    normalized_surface: "你好",
     hint_type: "pinyin",
     hint_value: "ni3 hao3",
     language: "zh",
@@ -157,10 +196,8 @@ const summary = buildPronunciationHintSafeSummary([
     script: "pinyin",
   }),
   hint({
-    surface: "phantom",
-    normalized_surface: "phantom",
     hint_type: "ipa",
-    hint_value: "ˈfæn.təm",
+    hint_value: "a i ɾ i s",
     language: "en",
     locale: "en-US",
     script: "ipa",
@@ -178,53 +215,55 @@ const summary = buildPronunciationHintSafeSummary([
     safety_status: "approved",
   }),
   hint({
+    hint_type: "alias",
     hint_value: "endpoint=https://bad.invalid api_key=secret token=secret",
     endpoint: "https://hint.invalid",
     raw_audio: "raw audio",
     model_path: "model/path",
     dataset_path: "dataset/path",
   }),
+  blockedApproved,
 ]);
 
-assert.equal(summary.hint_count, 7);
+assert.equal(summary.hint_count, 8);
+assert.equal(summary.candidate_count, 3);
+assert.equal(summary.review_required_count, 1);
+assert.equal(summary.approved_count, 1);
+assert.equal(summary.blocked_count, 3);
 assert.equal(summary.runtime_ready_count, 0);
+assert.equal(summary.human_review_required_count, 1);
 assert.equal(summary.safe_summary_only, true);
 
 const serialized = JSON.stringify(summary);
 for (const forbidden of [
-  "IRIS",
-  "iris",
-  "アイリス",
-  "你好",
-  "ni3 hao3",
-  "phantom",
-  "ˈfæn.təm",
-  "F AE N T AH M",
+  "hint_id",
   "surface",
   "normalized_surface",
   "hint_value",
+  "アイリス",
+  "ni3 hao3",
+  "a i ɾ i s",
+  "IRIS",
   "endpoint",
-  "https://hint.invalid",
   "api_key",
   "token",
   "secret",
-  "raw audio",
-  "raw_audio",
-  "raw phoneme debug",
+  "raw phoneme",
   "raw_phoneme_debug",
-  "model/path",
-  "model_path",
-  "dataset/path",
-  "dataset_path",
-  "private_path",
-  "raw_pr_body",
-  "raw_artifact_text",
+  "raw prompt",
+  "raw audio",
+  "model path",
+  "dataset path",
+  "private path",
+  "engine_mapping",
+  "moss:ipa",
+  "pinyin:ni3",
 ]) {
   assert.equal(serialized.includes(forbidden), false, `unsafe summary leaked: ${forbidden}`);
 }
 
 console.log(JSON.stringify({
   status: "pass",
-  checked: 17,
+  checked: 54,
   safe_summary_only: true,
 }, null, 2));
