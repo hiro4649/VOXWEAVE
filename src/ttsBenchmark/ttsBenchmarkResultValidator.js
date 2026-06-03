@@ -2,6 +2,11 @@ import {
   REQUIRED_TTS_BENCHMARK_RESULT_FIELDS,
   RESULT_QUALITY_REVIEW_COMPLETED_STATUSES,
   TTS_BENCHMARK_EXECUTION_MODES,
+  TTS_BENCHMARK_RESULT_BENCHMARK_STATUSES,
+  TTS_BENCHMARK_RESULT_CANDIDATE_STATUSES,
+  TTS_BENCHMARK_RESULT_HUMAN_REVIEW_STATUSES,
+  TTS_BENCHMARK_RESULT_LICENSE_REVIEW_STATUSES,
+  TTS_BENCHMARK_RESULT_REFERENCE_CONSENT_STATUSES,
   TTS_BENCHMARK_RESULT_SAFE_SUMMARY_SCHEMA,
   TTS_BENCHMARK_RESULT_STATUSES,
   UNSAFE_TTS_BENCHMARK_RESULT_FIELDS,
@@ -23,34 +28,101 @@ function isVoiceReferenceResult(result) {
   return result.reference_voice_consent_status !== "not_required_for_mock";
 }
 
+function scoreValuesReady(result) {
+  return [
+    "pause_control_score",
+    "pronunciation_control_score",
+    "subtitle_alignment_score",
+    "lip_sync_alignment_score",
+    "live2d_alignment_score",
+    "long_form_stability_score",
+  ].every((field) => {
+    const value = result[field];
+    return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
+  });
+}
+
+function numericMetricsReady(result) {
+  return [
+    "text_to_first_audio_latency_ms",
+    "total_synthesis_latency_ms",
+    "vram_used_mb",
+  ].every((field) => {
+    const value = result[field];
+    return typeof value === "number" && Number.isFinite(value) && value >= 0;
+  });
+}
+
 function buildReasonCodes({
   missing_metadata,
   unsafe_fields_present,
   resultStatusAllowed,
+  candidateStatusAllowed,
+  benchmarkStatusAllowed,
+  licenseReviewStatusAllowed,
+  referenceConsentStatusAllowed,
+  humanReviewStatusAllowed,
+  benchmarkStatusBlocked,
+  resultStatusBlocked,
+  licenseReviewBlocked,
+  referenceConsentBlocked,
+  humanReviewBlocked,
   executionModeAllowed,
   completedWithoutExecution,
   completedWithNotExecutedMode,
+  completedWithMismatchedBenchmarkStatus,
   prohibitedRuntimeActionPresent,
   production_ready,
   approved_for_runtime,
+  humanReviewStatusConflict,
   humanReviewIncomplete,
+  humanReviewCompletionInvalid,
   referenceConsentReady,
+  testedLanguagesArray,
+  testedLanguagesReadyForCompletedLab,
+  scoresReady,
+  numericMetricsReady,
   completedQualityReviewReady,
 }) {
   const reason_codes = [];
   if (missing_metadata.length > 0) reason_codes.push("required_metadata_missing");
   if (unsafe_fields_present.length > 0) reason_codes.push("unsafe_tts_benchmark_result_fields_present");
   if (!resultStatusAllowed) reason_codes.push("result_status_not_allowed");
+  if (!candidateStatusAllowed) reason_codes.push("candidate_status_not_allowed");
+  if (!benchmarkStatusAllowed) reason_codes.push("benchmark_status_not_allowed");
+  if (!licenseReviewStatusAllowed) reason_codes.push("license_review_status_not_allowed");
+  if (!referenceConsentStatusAllowed) reason_codes.push("reference_voice_consent_status_not_allowed");
+  if (!humanReviewStatusAllowed) reason_codes.push("human_review_status_not_allowed");
+  if (benchmarkStatusBlocked) reason_codes.push("benchmark_status_blocked");
+  if (resultStatusBlocked) reason_codes.push("result_status_blocked");
+  if (licenseReviewBlocked) reason_codes.push("license_review_blocked");
+  if (referenceConsentBlocked) reason_codes.push("reference_voice_consent_blocked");
+  if (humanReviewBlocked) reason_codes.push("human_review_blocked");
   if (!executionModeAllowed) reason_codes.push("benchmark_execution_mode_not_allowed");
   if (completedWithoutExecution) reason_codes.push("completed_lab_evaluation_requires_execution");
   if (completedWithNotExecutedMode) {
     reason_codes.push("completed_lab_evaluation_requires_executed_mode");
   }
+  if (completedWithMismatchedBenchmarkStatus) {
+    reason_codes.push("completed_lab_evaluation_requires_matching_benchmark_status");
+  }
   if (prohibitedRuntimeActionPresent) reason_codes.push("runtime_side_effect_prohibited");
   if (production_ready) reason_codes.push("production_ready_claim_prohibited_for_result_report");
   if (approved_for_runtime) reason_codes.push("runtime_approval_prohibited_for_result_report");
+  if (humanReviewStatusConflict) {
+    reason_codes.push("human_review_status_conflicts_with_required_flag");
+  }
   if (humanReviewIncomplete) reason_codes.push("human_review_completion_required");
+  if (humanReviewCompletionInvalid) {
+    reason_codes.push("human_review_completion_requires_approved_status");
+  }
   if (!referenceConsentReady) reason_codes.push("reference_voice_explicit_consent_required");
+  if (!testedLanguagesArray) reason_codes.push("tested_languages_must_be_array");
+  if (!testedLanguagesReadyForCompletedLab) {
+    reason_codes.push("tested_languages_required_for_completed_lab_evaluation");
+  }
+  if (!scoresReady) reason_codes.push("score_value_out_of_range");
+  if (!numericMetricsReady) reason_codes.push("numeric_metric_invalid");
   if (!completedQualityReviewReady) {
     reason_codes.push("completed_lab_evaluation_requires_quality_review");
   }
@@ -61,10 +133,30 @@ export function validateTtsBenchmarkResult(result = {}) {
   const missing_metadata = missingRequiredFields(result);
   const unsafe_fields_present = unsafeFieldsPresent(result);
   const resultStatusAllowed = TTS_BENCHMARK_RESULT_STATUSES.includes(result.result_status);
+  const candidateStatusAllowed = TTS_BENCHMARK_RESULT_CANDIDATE_STATUSES.includes(
+    result.candidate_status,
+  );
+  const benchmarkStatusAllowed = TTS_BENCHMARK_RESULT_BENCHMARK_STATUSES.includes(
+    result.benchmark_status,
+  );
+  const licenseReviewStatusAllowed = TTS_BENCHMARK_RESULT_LICENSE_REVIEW_STATUSES.includes(
+    result.license_review_status,
+  );
+  const referenceConsentStatusAllowed = TTS_BENCHMARK_RESULT_REFERENCE_CONSENT_STATUSES.includes(
+    result.reference_voice_consent_status,
+  );
+  const humanReviewStatusAllowed = TTS_BENCHMARK_RESULT_HUMAN_REVIEW_STATUSES.includes(
+    result.human_review_status,
+  );
   const executionModeAllowed = TTS_BENCHMARK_EXECUTION_MODES.includes(
     result.benchmark_execution_mode,
   );
   const completedLab = result.result_status === "completed_lab_evaluation";
+  const benchmarkStatusBlocked = result.benchmark_status === "blocked";
+  const resultStatusBlocked = result.result_status === "blocked";
+  const licenseReviewBlocked = result.license_review_status === "blocked";
+  const referenceConsentBlocked = result.reference_voice_consent_status === "blocked";
+  const humanReviewBlocked = result.human_review_status === "blocked";
   const runtime_connected = Boolean(result.runtime_connected);
   const production_ready = Boolean(result.production_ready);
   const model_downloaded = Boolean(result.model_downloaded);
@@ -86,9 +178,20 @@ export function validateTtsBenchmarkResult(result = {}) {
   const completedWithoutExecution = completedLab && !benchmark_executed;
   const completedWithNotExecutedMode =
     completedLab && result.benchmark_execution_mode === "not_executed";
+  const completedWithMismatchedBenchmarkStatus =
+    completedLab && result.benchmark_status !== "completed_lab_evaluation";
+  const humanReviewStatusConflict =
+    human_review_required === false && ["required", "pending"].includes(result.human_review_status);
   const humanReviewIncomplete = human_review_required && !human_review_completed;
+  const humanReviewCompletionInvalid =
+    human_review_required && human_review_completed && result.human_review_status !== "approved_for_lab";
   const referenceConsentReady =
     !isVoiceReferenceResult(result) || result.reference_voice_consent_status === "explicit_consent";
+  const testedLanguagesArray = Array.isArray(result.tested_languages);
+  const testedLanguagesReadyForCompletedLab =
+    !completedLab || (testedLanguagesArray && result.tested_languages.length > 0);
+  const scoresReady = scoreValuesReady(result);
+  const metricsReady = numericMetricsReady(result);
   const completedQualityReviewReady =
     !completedLab || RESULT_QUALITY_REVIEW_COMPLETED_STATUSES.includes(result.quality_review_status);
 
@@ -96,14 +199,31 @@ export function validateTtsBenchmarkResult(result = {}) {
     missing_metadata.length > 0 ||
     unsafe_fields_present.length > 0 ||
     !resultStatusAllowed ||
+    !candidateStatusAllowed ||
+    !benchmarkStatusAllowed ||
+    !licenseReviewStatusAllowed ||
+    !referenceConsentStatusAllowed ||
+    !humanReviewStatusAllowed ||
+    benchmarkStatusBlocked ||
+    resultStatusBlocked ||
+    licenseReviewBlocked ||
+    referenceConsentBlocked ||
+    humanReviewBlocked ||
     !executionModeAllowed ||
     completedWithoutExecution ||
     completedWithNotExecutedMode ||
+    completedWithMismatchedBenchmarkStatus ||
     prohibitedRuntimeActionPresent ||
     production_ready ||
     approved_for_runtime ||
+    humanReviewStatusConflict ||
     humanReviewIncomplete ||
+    humanReviewCompletionInvalid ||
     !referenceConsentReady ||
+    !testedLanguagesArray ||
+    !testedLanguagesReadyForCompletedLab ||
+    !scoresReady ||
+    !metricsReady ||
     !completedQualityReviewReady;
 
   return {
@@ -130,14 +250,31 @@ export function validateTtsBenchmarkResult(result = {}) {
       missing_metadata,
       unsafe_fields_present,
       resultStatusAllowed,
+      candidateStatusAllowed,
+      benchmarkStatusAllowed,
+      licenseReviewStatusAllowed,
+      referenceConsentStatusAllowed,
+      humanReviewStatusAllowed,
+      benchmarkStatusBlocked,
+      resultStatusBlocked,
+      licenseReviewBlocked,
+      referenceConsentBlocked,
+      humanReviewBlocked,
       executionModeAllowed,
       completedWithoutExecution,
       completedWithNotExecutedMode,
+      completedWithMismatchedBenchmarkStatus,
       prohibitedRuntimeActionPresent,
       production_ready,
       approved_for_runtime,
+      humanReviewStatusConflict,
       humanReviewIncomplete,
+      humanReviewCompletionInvalid,
       referenceConsentReady,
+      testedLanguagesArray,
+      testedLanguagesReadyForCompletedLab,
+      scoresReady,
+      numericMetricsReady: metricsReady,
       completedQualityReviewReady,
     }),
     runtime_readiness_claimed: false,

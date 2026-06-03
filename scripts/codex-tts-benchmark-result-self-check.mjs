@@ -62,6 +62,7 @@ function result(overrides = {}) {
 
 function completedLabResult(overrides = {}) {
   return result({
+    benchmark_status: "completed_lab_evaluation",
     result_status: "completed_lab_evaluation",
     benchmark_executed: true,
     benchmark_execution_mode: "lab_manual",
@@ -76,10 +77,64 @@ function completedLabResult(overrides = {}) {
     lip_sync_alignment_score: 0.9,
     live2d_alignment_score: 0.9,
     long_form_stability_score: 0.88,
+    tested_languages: ["ja", "en"],
     quality_review_status: "completed",
     ...overrides,
   });
 }
+
+const unknownCandidateStatus = validateTtsBenchmarkResult(result({
+  candidate_status: "unknown",
+}));
+assert.equal(unknownCandidateStatus.blocked, true);
+assert.equal(unknownCandidateStatus.reason_codes.includes("candidate_status_not_allowed"), true);
+
+const unknownBenchmarkStatus = validateTtsBenchmarkResult(result({
+  benchmark_status: "unknown",
+}));
+assert.equal(unknownBenchmarkStatus.blocked, true);
+assert.equal(unknownBenchmarkStatus.reason_codes.includes("benchmark_status_not_allowed"), true);
+
+const blockedBenchmarkStatus = validateTtsBenchmarkResult(result({
+  benchmark_status: "blocked",
+}));
+assert.equal(blockedBenchmarkStatus.blocked, true);
+assert.equal(blockedBenchmarkStatus.reason_codes.includes("benchmark_status_blocked"), true);
+
+const blockedResultStatus = validateTtsBenchmarkResult(result({
+  result_status: "blocked",
+}));
+assert.equal(blockedResultStatus.blocked, true);
+assert.equal(blockedResultStatus.reason_codes.includes("result_status_blocked"), true);
+
+const blockedLicense = validateTtsBenchmarkResult(result({
+  license_review_status: "blocked",
+}));
+assert.equal(blockedLicense.blocked, true);
+assert.equal(blockedLicense.reason_codes.includes("license_review_blocked"), true);
+
+const blockedReferenceConsent = validateTtsBenchmarkResult(result({
+  reference_voice_consent_status: "blocked",
+}));
+assert.equal(blockedReferenceConsent.blocked, true);
+assert.equal(blockedReferenceConsent.reason_codes.includes("reference_voice_consent_blocked"), true);
+
+const blockedHumanReview = validateTtsBenchmarkResult(result({
+  human_review_status: "blocked",
+}));
+assert.equal(blockedHumanReview.blocked, true);
+assert.equal(blockedHumanReview.reason_codes.includes("human_review_blocked"), true);
+
+const completedWithPlannedBenchmark = validateTtsBenchmarkResult(completedLabResult({
+  benchmark_status: "planned",
+}));
+assert.equal(completedWithPlannedBenchmark.blocked, true);
+assert.equal(
+  completedWithPlannedBenchmark.reason_codes.includes(
+    "completed_lab_evaluation_requires_matching_benchmark_status",
+  ),
+  true,
+);
 
 const completedWithoutExecution = validateTtsBenchmarkResult(completedLabResult({
   benchmark_executed: false,
@@ -145,6 +200,39 @@ const highScores = validateTtsBenchmarkResult(result({
 assert.equal(highScores.production_readiness_claimed, false);
 assert.equal(highScores.runtime_adoption_allowed, false);
 
+const failedResult = validateTtsBenchmarkResult(result({
+  result_status: "failed",
+  human_review_status: "approved_for_lab",
+  human_review_required: true,
+  human_review_completed: true,
+}));
+assert.equal(failedResult.blocked, false);
+assert.equal(failedResult.runtime_adoption_allowed, false);
+assert.equal(failedResult.production_ready, false);
+assert.equal(failedResult.runtime_readiness_claimed, false);
+assert.equal(failedResult.production_readiness_claimed, false);
+
+const reviewFlagConflict = validateTtsBenchmarkResult(result({
+  human_review_required: false,
+  human_review_status: "pending",
+}));
+assert.equal(reviewFlagConflict.blocked, true);
+assert.equal(
+  reviewFlagConflict.reason_codes.includes("human_review_status_conflicts_with_required_flag"),
+  true,
+);
+
+const reviewCompletionInvalid = validateTtsBenchmarkResult(result({
+  human_review_required: true,
+  human_review_completed: true,
+  human_review_status: "pending",
+}));
+assert.equal(reviewCompletionInvalid.blocked, true);
+assert.equal(
+  reviewCompletionInvalid.reason_codes.includes("human_review_completion_requires_approved_status"),
+  true,
+);
+
 const reviewIncomplete = validateTtsBenchmarkResult(result({
   human_review_required: true,
   human_review_completed: false,
@@ -157,6 +245,35 @@ const missingConsent = validateTtsBenchmarkResult(result({
 }));
 assert.equal(missingConsent.blocked, true);
 assert.equal(missingConsent.reason_codes.includes("reference_voice_explicit_consent_required"), true);
+
+const invalidLanguages = validateTtsBenchmarkResult(result({
+  tested_languages: "ja",
+}));
+assert.equal(invalidLanguages.blocked, true);
+assert.equal(invalidLanguages.reason_codes.includes("tested_languages_must_be_array"), true);
+
+const completedWithoutLanguages = validateTtsBenchmarkResult(completedLabResult({
+  tested_languages: [],
+}));
+assert.equal(completedWithoutLanguages.blocked, true);
+assert.equal(
+  completedWithoutLanguages.reason_codes.includes(
+    "tested_languages_required_for_completed_lab_evaluation",
+  ),
+  true,
+);
+
+const invalidScore = validateTtsBenchmarkResult(result({
+  pause_control_score: 1.1,
+}));
+assert.equal(invalidScore.blocked, true);
+assert.equal(invalidScore.reason_codes.includes("score_value_out_of_range"), true);
+
+const invalidMetric = validateTtsBenchmarkResult(result({
+  text_to_first_audio_latency_ms: -1,
+}));
+assert.equal(invalidMetric.blocked, true);
+assert.equal(invalidMetric.reason_codes.includes("numeric_metric_invalid"), true);
 
 const completed = validateTtsBenchmarkResult(completedLabResult());
 assert.equal(completed.blocked, false);
@@ -201,7 +318,11 @@ const summary = buildTtsBenchmarkResultSafeSummary([
   result({ result_status: "not_run" }),
   result({ result_status: "planned" }),
   result({ result_status: "blocked" }),
-  result({ result_status: "failed" }),
+  result({
+    result_status: "failed",
+    human_review_status: "approved_for_lab",
+    human_review_completed: true,
+  }),
   completedLabResult(),
   result({ runtime_connected: true }),
   result({ production_ready: true }),
@@ -210,6 +331,7 @@ const summary = buildTtsBenchmarkResultSafeSummary([
 ]);
 
 assert.equal(summary.result_count, 9);
+assert.equal(summary.failed_count, 1);
 assert.equal(summary.runtime_connected_count, 0);
 assert.equal(summary.production_ready_count, 0);
 assert.equal(summary.runtime_approved_count, 0);
@@ -245,6 +367,17 @@ for (const forbidden of [
   "speaker_embedding",
   "moss-tts",
   "mock-tts",
+  "result-1",
+  "benchmark-1",
+  "engine_id",
+  "engine_family",
+  "result_id",
+  "benchmark_id",
+  "notes_redacted",
+  "gpu_name_redacted",
+  "redacted result notes",
+  "redacted",
+  "gpu",
   "raw gpu id",
   "unredacted reviewer notes",
 ]) {

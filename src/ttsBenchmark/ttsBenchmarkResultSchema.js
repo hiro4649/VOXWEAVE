@@ -61,6 +61,47 @@ export const TTS_BENCHMARK_RESULT_STATUSES = Object.freeze([
   "completed_lab_evaluation",
 ]);
 
+export const TTS_BENCHMARK_RESULT_CANDIDATE_STATUSES = Object.freeze([
+  "candidate_only",
+  "lab_only",
+  "benchmark_required",
+  "separate_low_latency_candidate",
+  "blocked",
+]);
+
+export const TTS_BENCHMARK_RESULT_BENCHMARK_STATUSES = Object.freeze([
+  "not_started",
+  "planned",
+  "lab_only",
+  "blocked",
+  "completed_lab_evaluation",
+]);
+
+export const TTS_BENCHMARK_RESULT_LICENSE_REVIEW_STATUSES = Object.freeze([
+  "required",
+  "pending",
+  "approved_for_lab",
+  "approved_for_benchmark",
+  "blocked",
+  "not_required_for_mock",
+]);
+
+export const TTS_BENCHMARK_RESULT_REFERENCE_CONSENT_STATUSES = Object.freeze([
+  "not_required_for_mock",
+  "explicit_consent",
+  "missing_consent",
+  "unknown",
+  "blocked",
+]);
+
+export const TTS_BENCHMARK_RESULT_HUMAN_REVIEW_STATUSES = Object.freeze([
+  "not_required_for_mock",
+  "required",
+  "pending",
+  "approved_for_lab",
+  "blocked",
+]);
+
 export const TTS_BENCHMARK_EXECUTION_MODES = Object.freeze([
   "not_executed",
   "mock_only",
