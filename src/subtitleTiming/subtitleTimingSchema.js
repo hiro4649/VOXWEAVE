@@ -71,6 +71,7 @@ export const SUBTITLE_LANGUAGES = Object.freeze([
   "ar",
   "multi",
   "unknown",
+  "blocked",
 ]);
 
 export const SUBTITLE_LOCALES = Object.freeze([
@@ -86,6 +87,7 @@ export const SUBTITLE_LOCALES = Object.freeze([
   "ar-EG",
   "multi",
   "unknown",
+  "blocked",
 ]);
 
 export const SUBTITLE_SCRIPTS = Object.freeze([
@@ -98,6 +100,7 @@ export const SUBTITLE_SCRIPTS = Object.freeze([
   "arabic",
   "mixed",
   "unknown",
+  "blocked",
 ]);
 
 export const SUBTITLE_DIRECTIONS = Object.freeze([
@@ -105,10 +108,15 @@ export const SUBTITLE_DIRECTIONS = Object.freeze([
   "rtl",
   "mixed",
   "unknown",
+  "blocked",
 ]);
 
 export const UNSAFE_SUBTITLE_TIMING_FIELDS = Object.freeze([
   "raw_subtitle_text",
+  "raw_subtitle_payload",
+  "raw_tts_payload",
+  "raw_live2d_payload",
+  "raw_lip_sync_payload",
   "raw_payload",
   "raw_audio",
   "endpoint",

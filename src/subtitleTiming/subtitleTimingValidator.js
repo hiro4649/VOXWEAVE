@@ -41,8 +41,8 @@ function safeTimestamp(value) {
 function safeTextRef(value) {
   return (
     typeof value === "string" &&
-    /^[a-z0-9._:-]{3,80}$/i.test(value) &&
-    !/(https?:\/\/|endpoint\s*[=:]|api[_-]?key|token|secret|authorization|\s{2,})/i.test(value)
+    /^[a-z0-9._:-]{3,64}$/i.test(value) &&
+    !/(https?:\/\/|endpoint\s*[=:]|api[_-]?key|token|secret|authorization|<[^>]+>|[ぁ-ゖァ-ヺ一-龯]|\s)/i.test(value)
   );
 }
 
@@ -61,14 +61,20 @@ function buildReasonCodes(checks) {
   if (!checks.longDurationReviewReady) reason_codes.push("long_subtitle_segment_requires_human_review");
   if (!checks.maxCharsReady) reason_codes.push("max_chars_per_segment_invalid");
   if (!checks.textRefReady) reason_codes.push("subtitle_text_ref_invalid");
-  if (!checks.languageAllowed) reason_codes.push("subtitle_language_not_allowed");
-  if (!checks.localeAllowed || checks.localeUnsafe) reason_codes.push("subtitle_locale_invalid");
-  if (!checks.localeLanguageReady) reason_codes.push("subtitle_locale_language_mismatch");
-  if (!checks.scriptAllowed) reason_codes.push("subtitle_script_not_allowed");
-  if (!checks.directionAllowed) reason_codes.push("subtitle_direction_not_allowed");
-  if (!checks.rtlReady) reason_codes.push("rtl_subtitle_requires_arabic_or_human_review");
+  if (!checks.languageAllowed || checks.languageBlocked) reason_codes.push("subtitle_language_invalid");
+  if (!checks.localeAllowed || checks.localeUnsafe || checks.localeBlocked) reason_codes.push("subtitle_locale_invalid");
+  if (!checks.localeLanguageReady) reason_codes.push("subtitle_language_locale_mismatch");
+  if (!checks.scriptAllowed || checks.scriptBlocked) reason_codes.push("subtitle_script_invalid");
+  if (!checks.directionAllowed || checks.directionBlocked) reason_codes.push("subtitle_direction_invalid");
+  if (!checks.arabicDirectionReady) reason_codes.push("arabic_subtitle_requires_rtl_or_unknown_direction");
+  if (!checks.nonArabicRtlReady) reason_codes.push("non_arabic_rtl_requires_human_review");
   if (!checks.readingSpeedAllowed) reason_codes.push("subtitle_reading_speed_not_allowed");
-  if (checks.readingSpeedBlocked) reason_codes.push("subtitle_reading_speed_blocked");
+  if (checks.readingSpeedBlocked) {
+    reason_codes.push("subtitle_reading_speed_blocked");
+    reason_codes.push("reading_speed_label_blocked");
+  }
+  if (!checks.denseSegmentReady) reason_codes.push("subtitle_segment_too_dense_for_duration");
+  if (!checks.veryFastReviewReady) reason_codes.push("very_fast_subtitle_requires_human_review");
   if (!checks.subtitleBehaviorAllowed) reason_codes.push("subtitle_behavior_not_allowed");
   if (checks.subtitleBehaviorBlocked) reason_codes.push("subtitle_behavior_blocked");
   if (!checks.pauseAlignmentAllowed) reason_codes.push("pause_alignment_status_not_allowed");
@@ -79,7 +85,10 @@ function buildReasonCodes(checks) {
   if (checks.live2dAlignmentBlocked) reason_codes.push("live2d_alignment_status_blocked");
   if (!checks.safetyStatusAllowed) reason_codes.push("subtitle_safety_status_not_allowed");
   if (checks.safetyStatusBlocked) reason_codes.push("subtitle_safety_status_blocked");
-  if (!checks.runtimeApprovalReady) reason_codes.push("subtitle_runtime_approval_requires_approved_safety_status");
+  if (!checks.runtimeApprovalReady) {
+    reason_codes.push("subtitle_runtime_approval_requires_approved_safety_status");
+    reason_codes.push("runtime_approval_requires_approved_safety_status");
+  }
   if (!checks.createdAtReady || !checks.updatedAtReady) reason_codes.push("subtitle_timestamp_invalid");
   return reason_codes;
 }
@@ -111,21 +120,35 @@ export function validateSubtitleTimingSegment(segment = {}) {
     segment.max_chars_per_segment <= 80;
   const textRefReady = safeTextRef(segment.text_ref);
   const languageAllowed = SUBTITLE_LANGUAGES.includes(segment.language);
+  const languageBlocked = segment.language === "blocked";
   const localeAllowed = SUBTITLE_LOCALES.includes(segment.locale);
+  const localeBlocked = segment.locale === "blocked";
   const localeUnsafe = /(https?:\/\/|endpoint\s*[=:]|api[_-]?key|token|secret)/i.test(
     String(segment.locale ?? ""),
   );
   const localeLanguageReady =
-    languageAllowed && localeAllowed && Boolean(LOCALES_BY_LANGUAGE[segment.language]?.has(segment.locale));
+    languageAllowed &&
+    !languageBlocked &&
+    localeAllowed &&
+    !localeBlocked &&
+    Boolean(LOCALES_BY_LANGUAGE[segment.language]?.has(segment.locale));
   const scriptAllowed = SUBTITLE_SCRIPTS.includes(segment.script);
+  const scriptBlocked = segment.script === "blocked";
   const directionAllowed = SUBTITLE_DIRECTIONS.includes(segment.direction);
-  const rtlReady =
+  const directionBlocked = segment.direction === "blocked";
+  const isArabic = segment.language === "ar" || segment.script === "arabic";
+  const arabicDirectionReady =
+    !isArabic || segment.direction === "rtl" || segment.direction === "unknown";
+  const nonArabicRtlReady =
     segment.direction !== "rtl" ||
-    segment.script === "arabic" ||
-    segment.language === "ar" ||
+    isArabic ||
     segment.requires_human_review === true;
   const readingSpeedAllowed = SUBTITLE_READING_SPEED_LABELS.includes(segment.reading_speed_label);
   const readingSpeedBlocked = segment.reading_speed_label === "blocked";
+  const denseSegmentReady =
+    !numericTimingReady || !(segment.duration_ms < 500 && segment.max_chars_per_segment > 40);
+  const veryFastReviewReady =
+    segment.reading_speed_label !== "very_fast" || segment.requires_human_review === true;
   const subtitleBehaviorAllowed = SUBTITLE_BEHAVIORS.includes(segment.subtitle_behavior);
   const subtitleBehaviorBlocked = segment.subtitle_behavior === "blocked";
   const pauseAlignmentAllowed = SUBTITLE_ALIGNMENT_STATUSES.includes(segment.pause_alignment_status);
@@ -152,14 +175,21 @@ export function validateSubtitleTimingSegment(segment = {}) {
     maxCharsReady,
     textRefReady,
     languageAllowed,
+    languageBlocked,
     localeAllowed,
+    localeBlocked,
     localeUnsafe,
     localeLanguageReady,
     scriptAllowed,
+    scriptBlocked,
     directionAllowed,
-    rtlReady,
+    directionBlocked,
+    arabicDirectionReady,
+    nonArabicRtlReady,
     readingSpeedAllowed,
     readingSpeedBlocked,
+    denseSegmentReady,
+    veryFastReviewReady,
     subtitleBehaviorAllowed,
     subtitleBehaviorBlocked,
     pauseAlignmentAllowed,
