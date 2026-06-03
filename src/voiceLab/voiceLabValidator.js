@@ -10,6 +10,12 @@ function hasValue(value) {
   return value !== undefined && value !== null && value !== "";
 }
 
+function hasProhibitedUseCases(candidate) {
+  return Array.isArray(candidate.prohibited_use_cases)
+    ? candidate.prohibited_use_cases.length > 0
+    : hasValue(candidate.prohibited_use_cases);
+}
+
 export function validateVoiceLabCandidate(candidate = {}) {
   const missing_metadata = REQUIRED_CANDIDATE_METADATA.filter(
     (field) => !hasValue(candidate[field]),
@@ -30,10 +36,17 @@ export function validateVoiceLabCandidate(candidate = {}) {
   const approvedReview = review_status === "approved";
   const metadataComplete = missing_metadata.length === 0;
   const unsafeClean = unsafe_fields_present.length === 0;
+  const prohibitedUseCasesClean = !hasProhibitedUseCases(candidate);
   const approved_for_runtime = Boolean(candidate.approved_for_runtime);
   const runtime_eligible =
-    approved_for_runtime && approvedReview && explicitConsent && metadataComplete && unsafeClean;
-  const can_promote_to_approved = approvedReview && explicitConsent && metadataComplete && unsafeClean;
+    approved_for_runtime &&
+    approvedReview &&
+    explicitConsent &&
+    metadataComplete &&
+    unsafeClean &&
+    prohibitedUseCasesClean;
+  const can_promote_to_approved =
+    approvedReview && explicitConsent && metadataComplete && unsafeClean && prohibitedUseCasesClean;
 
   return {
     candidate_id: String(candidate.candidate_id ?? ""),
@@ -49,6 +62,7 @@ export function validateVoiceLabCandidate(candidate = {}) {
       explicitConsent,
       metadataComplete,
       unsafeClean,
+      prohibitedUseCasesClean,
       approved_for_runtime,
     }),
     safe_summary_only: true,
@@ -60,6 +74,7 @@ function buildReasonCodes({
   explicitConsent,
   metadataComplete,
   unsafeClean,
+  prohibitedUseCasesClean,
   approved_for_runtime,
 }) {
   const reasons = [];
@@ -67,6 +82,7 @@ function buildReasonCodes({
   if (!approvedReview) reasons.push("human_review_approval_required");
   if (!metadataComplete) reasons.push("required_metadata_missing");
   if (!unsafeClean) reasons.push("unsafe_voice_lab_fields_present");
+  if (!prohibitedUseCasesClean) reasons.push("prohibited_use_cases_present");
   if (!approved_for_runtime) reasons.push("runtime_approval_flag_required");
   return reasons;
 }
