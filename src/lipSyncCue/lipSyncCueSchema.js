@@ -109,6 +109,8 @@ export const UNSAFE_LIP_SYNC_CUE_FIELDS = Object.freeze([
   "raw_viseme_payload",
   "raw_live2d_payload",
   "raw_tts_payload",
+  "raw_subtitle_payload",
+  "raw_pause_payload",
   "raw_audio",
   "endpoint",
   "endpoint_url",
@@ -121,4 +123,6 @@ export const UNSAFE_LIP_SYNC_CUE_FIELDS = Object.freeze([
   "private_path",
   "raw_pr_body",
   "raw_artifact_text",
+  "vendor_lip_sync_payload",
+  "engine_lip_sync_payload",
 ]);

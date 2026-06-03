@@ -55,7 +55,9 @@ function buildReasonCodes(checks) {
   const reason_codes = [];
   if (checks.missing_metadata.length > 0) reason_codes.push("required_metadata_missing");
   if (checks.unsafe_fields_present.length > 0) reason_codes.push("unsafe_lip_sync_cue_fields_present");
-  if (!checks.referenceReady) reason_codes.push("lip_sync_reference_invalid");
+  if (!checks.segmentRefReady) reason_codes.push("lip_sync_segment_ref_invalid");
+  if (!checks.subtitleRefReady) reason_codes.push("lip_sync_subtitle_ref_invalid");
+  if (!checks.pauseCueRefReady) reason_codes.push("lip_sync_pause_cue_ref_invalid");
   if (!checks.languageAllowed) reason_codes.push("lip_sync_language_invalid");
   if (!checks.localeAllowed || checks.localeUnsafe) reason_codes.push("lip_sync_locale_invalid");
   if (!checks.localeLanguageReady) reason_codes.push("lip_sync_language_locale_mismatch");
@@ -71,10 +73,12 @@ function buildReasonCodes(checks) {
   if (!checks.smoothingReviewReady) reason_codes.push("lip_sync_smoothing_requires_human_review");
   if (!checks.mouthShapeAllowed) reason_codes.push("lip_sync_mouth_shape_not_allowed");
   if (checks.mouthShapeBlocked) reason_codes.push("lip_sync_mouth_shape_blocked");
+  if (!checks.unknownMouthReviewReady) reason_codes.push("unknown_mouth_shape_requires_human_review");
   if (!checks.sourceTypeAllowed) reason_codes.push("lip_sync_source_type_not_allowed");
   if (checks.sourceTypeBlocked) reason_codes.push("lip_sync_source_type_blocked");
   if (!checks.syncModeAllowed) reason_codes.push("lip_sync_mode_not_allowed");
   if (checks.syncModeBlocked) reason_codes.push("lip_sync_mode_blocked");
+  if (!checks.reviewSyncModeReady) reason_codes.push("review_required_sync_mode_requires_human_review");
   if (!checks.subtitleAlignmentAllowed) reason_codes.push("subtitle_alignment_status_not_allowed");
   if (checks.subtitleAlignmentBlocked) reason_codes.push("subtitle_alignment_status_blocked");
   if (!checks.pauseAlignmentAllowed) reason_codes.push("pause_alignment_status_not_allowed");
@@ -83,7 +87,10 @@ function buildReasonCodes(checks) {
   if (checks.live2dAlignmentBlocked) reason_codes.push("live2d_alignment_status_blocked");
   if (!checks.safetyStatusAllowed) reason_codes.push("lip_sync_safety_status_not_allowed");
   if (checks.safetyStatusBlocked) reason_codes.push("lip_sync_safety_status_blocked");
-  if (!checks.runtimeApprovalReady) reason_codes.push("lip_sync_runtime_approval_requires_approved_safety_status");
+  if (!checks.runtimeApprovalReady) {
+    reason_codes.push("lip_sync_runtime_approval_requires_approved_safety_status");
+    reason_codes.push("runtime_approval_requires_approved_safety_status");
+  }
   if (!checks.createdAtReady || !checks.updatedAtReady) reason_codes.push("lip_sync_timestamp_invalid");
   return reason_codes;
 }
@@ -91,8 +98,9 @@ function buildReasonCodes(checks) {
 export function validateLipSyncCue(cue = {}) {
   const missing_metadata = missingRequiredFields(cue);
   const unsafe_fields_present = unsafeFieldsPresent(cue);
-  const referenceReady =
-    safeReference(cue.segment_ref) && safeReference(cue.subtitle_ref) && safeReference(cue.pause_cue_ref);
+  const segmentRefReady = safeReference(cue.segment_ref);
+  const subtitleRefReady = safeReference(cue.subtitle_ref);
+  const pauseCueRefReady = safeReference(cue.pause_cue_ref);
   const languageAllowed = LIP_SYNC_LANGUAGES.includes(cue.language);
   const localeAllowed = LIP_SYNC_LOCALES.includes(cue.locale);
   const localeUnsafe = /(https?:\/\/|endpoint\s*[=:]|api[_-]?key|token|secret)/i.test(
@@ -122,10 +130,12 @@ export function validateLipSyncCue(cue = {}) {
     !smoothingReady || cue.smoothing_ms <= 500 || cue.requires_human_review === true;
   const mouthShapeAllowed = LIP_SYNC_MOUTH_SHAPES.includes(cue.mouth_shape);
   const mouthShapeBlocked = cue.mouth_shape === "blocked";
+  const unknownMouthReviewReady = cue.mouth_shape !== "unknown" || cue.requires_human_review === true;
   const sourceTypeAllowed = LIP_SYNC_SOURCE_TYPES.includes(cue.source_type);
   const sourceTypeBlocked = cue.source_type === "blocked";
   const syncModeAllowed = LIP_SYNC_MODES.includes(cue.sync_mode);
   const syncModeBlocked = cue.sync_mode === "blocked";
+  const reviewSyncModeReady = cue.sync_mode !== "review_required" || cue.requires_human_review === true;
   const subtitleAlignmentAllowed = LIP_SYNC_ALIGNMENT_STATUSES.includes(cue.subtitle_alignment_status);
   const subtitleAlignmentBlocked = cue.subtitle_alignment_status === "blocked";
   const pauseAlignmentAllowed = LIP_SYNC_ALIGNMENT_STATUSES.includes(cue.pause_alignment_status);
@@ -141,7 +151,9 @@ export function validateLipSyncCue(cue = {}) {
   const checks = {
     missing_metadata,
     unsafe_fields_present,
-    referenceReady,
+    segmentRefReady,
+    subtitleRefReady,
+    pauseCueRefReady,
     languageAllowed,
     localeAllowed,
     localeUnsafe,
@@ -158,10 +170,12 @@ export function validateLipSyncCue(cue = {}) {
     smoothingReviewReady,
     mouthShapeAllowed,
     mouthShapeBlocked,
+    unknownMouthReviewReady,
     sourceTypeAllowed,
     sourceTypeBlocked,
     syncModeAllowed,
     syncModeBlocked,
+    reviewSyncModeReady,
     subtitleAlignmentAllowed,
     subtitleAlignmentBlocked,
     pauseAlignmentAllowed,

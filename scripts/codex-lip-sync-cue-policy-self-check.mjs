@@ -76,28 +76,46 @@ assertBlocked({ live2d_alignment_status: "blocked" }, "live2d_alignment_status_b
 assertBlocked({
   approved_for_runtime: true,
   safety_status: "candidate",
-}, "lip_sync_runtime_approval_requires_approved_safety_status");
+}, "runtime_approval_requires_approved_safety_status");
 assertValid({
   approved_for_runtime: true,
   safety_status: "approved",
 });
-assertBlocked({ segment_ref: "raw text or https://bad.invalid" }, "lip_sync_reference_invalid");
-assertBlocked({ subtitle_ref: "https://bad.invalid" }, "lip_sync_reference_invalid");
-assertBlocked({ pause_cue_ref: "口パク" }, "lip_sync_reference_invalid");
+assertBlocked({ segment_ref: "実テキスト" }, "lip_sync_segment_ref_invalid");
+assertBlocked({ subtitle_ref: "https://bad.invalid" }, "lip_sync_subtitle_ref_invalid");
+assertBlocked({ pause_cue_ref: '<break time="1s"/>' }, "lip_sync_pause_cue_ref_invalid");
 assertBlocked({ language: "https://bad.invalid" }, "lip_sync_language_invalid");
 assertBlocked({ locale: "endpoint=https://bad.invalid" }, "lip_sync_locale_invalid");
 assertBlocked({ locale: "en-US" }, "lip_sync_language_locale_mismatch");
+assertBlocked({ mouth_shape: "unknown", requires_human_review: false }, "unknown_mouth_shape_requires_human_review");
+assertValid({
+  mouth_shape: "unknown",
+  requires_human_review: true,
+  safety_status: "review_required",
+});
+assertBlocked({ sync_mode: "review_required", requires_human_review: false }, "review_required_sync_mode_requires_human_review");
+assertValid({
+  sync_mode: "review_required",
+  requires_human_review: true,
+  safety_status: "review_required",
+});
+assertBlocked({ created_at: "not a timestamp" }, "lip_sync_timestamp_invalid");
+assertBlocked({ updated_at: "not a timestamp" }, "lip_sync_timestamp_invalid");
 assertBlocked({ raw_mouth_payload: "raw mouth payload" }, "unsafe_lip_sync_cue_fields_present");
 assertBlocked({ raw_phoneme_payload: "raw phoneme payload" }, "unsafe_lip_sync_cue_fields_present");
 assertBlocked({ raw_viseme_payload: "raw viseme payload" }, "unsafe_lip_sync_cue_fields_present");
 assertBlocked({ raw_live2d_payload: "raw Live2D payload" }, "unsafe_lip_sync_cue_fields_present");
 assertBlocked({ raw_tts_payload: "raw TTS payload" }, "unsafe_lip_sync_cue_fields_present");
+assertBlocked({ raw_subtitle_payload: "raw subtitle payload" }, "unsafe_lip_sync_cue_fields_present");
+assertBlocked({ raw_pause_payload: "raw pause payload" }, "unsafe_lip_sync_cue_fields_present");
 assertBlocked({ endpoint: "https://lip.invalid" }, "unsafe_lip_sync_cue_fields_present");
 assertBlocked({ api_key: "api-key" }, "unsafe_lip_sync_cue_fields_present");
 assertBlocked({ token: "token" }, "unsafe_lip_sync_cue_fields_present");
 assertBlocked({ secret: "secret" }, "unsafe_lip_sync_cue_fields_present");
 assertBlocked({ model_path: "model/path" }, "unsafe_lip_sync_cue_fields_present");
 assertBlocked({ dataset_path: "dataset/path" }, "unsafe_lip_sync_cue_fields_present");
+assertBlocked({ vendor_lip_sync_payload: "vendor payload" }, "unsafe_lip_sync_cue_fields_present");
+assertBlocked({ engine_lip_sync_payload: "engine payload" }, "unsafe_lip_sync_cue_fields_present");
 
 const summary = buildLipSyncCueSafeSummary([
   cue(),
@@ -134,11 +152,22 @@ for (const forbidden of [
   "segment-ref-1",
   "subtitle-ref-1",
   "pause-ref-1",
+  "language",
+  "locale",
   "ja-JP",
+  "en-US",
+  "ar-MSA",
   "mouth_shape",
   "aa",
   "closed",
+  "subtitle_alignment_status",
+  "pause_alignment_status",
+  "live2d_alignment_status",
+  "placeholder",
+  "not_aligned",
   "raw mouth payload",
+  "raw subtitle payload",
+  "raw pause payload",
   "raw phoneme payload",
   "raw viseme payload",
   "raw Live2D payload",
@@ -159,6 +188,6 @@ for (const forbidden of [
 
 console.log(JSON.stringify({
   status: "pass",
-  checked: 72,
+  checked: 91,
   safe_summary_only: true,
 }, null, 2));
