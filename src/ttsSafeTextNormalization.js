@@ -1,6 +1,6 @@
 const URL_PATTERN = /\b(?:https?:\/\/|www\.)[^\s<>"']+/giu;
 const CONFIG_MARKER_PATTERN =
-  /\b(?:api[_-]?key|token|secret|authorization|endpoint)\b\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;)]*)/giu;
+  /\b(?:api[_-]?key|token|secret|endpoint)\b\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;)]*)|\bauthorization\b\s*[:=]\s*(?:"[^"]*"|'[^']*'|(?:[A-Za-z]+\s+)?[^\s,;)]*)/giu;
 
 const SYMBOL_REPLACEMENTS = [
   { pattern: /&/gu, replacement: " and " },

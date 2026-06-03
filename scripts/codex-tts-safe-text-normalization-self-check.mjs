@@ -37,6 +37,41 @@ assert.equal(endpointValue.normalized_text.includes("internal.invalid"), false);
 const authorizationValue = normalizeTtsSafeText("authorization=Bearer abc");
 assert.equal(authorizationValue.normalized_text.includes("authorization"), false);
 assert.equal(authorizationValue.normalized_text.includes("Bearer"), false);
+assert.equal(authorizationValue.normalized_text.includes("abc"), false);
+
+const authorizationColonValue = normalizeTtsSafeText("authorization: Bearer abc");
+assert.equal(authorizationColonValue.normalized_text.includes("authorization"), false);
+assert.equal(authorizationColonValue.normalized_text.includes("Bearer"), false);
+assert.equal(authorizationColonValue.normalized_text.includes("abc"), false);
+
+const tokenColonValue = normalizeTtsSafeText("token: def");
+assert.equal(tokenColonValue.normalized_text.includes("token"), false);
+assert.equal(tokenColonValue.normalized_text.includes("def"), false);
+
+const secretColonValue = normalizeTtsSafeText("secret: ghi");
+assert.equal(secretColonValue.normalized_text.includes("secret"), false);
+assert.equal(secretColonValue.normalized_text.includes("ghi"), false);
+
+const apiKeyColonValue = normalizeTtsSafeText("api_key: abc");
+assert.equal(apiKeyColonValue.normalized_text.includes("api_key"), false);
+assert.equal(apiKeyColonValue.normalized_text.includes("abc"), false);
+
+const apiKeyHyphenColonValue = normalizeTtsSafeText("api-key: xyz");
+assert.equal(apiKeyHyphenColonValue.normalized_text.includes("api-key"), false);
+assert.equal(apiKeyHyphenColonValue.normalized_text.includes("xyz"), false);
+
+const endpointColonValue = normalizeTtsSafeText("endpoint: https://internal.invalid");
+assert.equal(endpointColonValue.normalized_text.includes("endpoint"), false);
+assert.equal(endpointColonValue.normalized_text.includes("https://"), false);
+assert.equal(endpointColonValue.normalized_text.includes("internal.invalid"), false);
+
+const naturalToken = normalizeTtsSafeText("token economy is not authentication");
+assert.equal(naturalToken.normalized_text, "token economy is not authentication");
+assert.equal(naturalToken.configuration_marker_count, 0);
+
+const naturalSecret = normalizeTtsSafeText("secret base in a game story");
+assert.equal(naturalSecret.normalized_text, "secret base in a game story");
+assert.equal(naturalSecret.configuration_marker_count, 0);
 
 const apiKeyValues = normalizeTtsSafeText("api-key=abc api_key=def");
 assert.equal(apiKeyValues.normalized_text.includes("api-key"), false);
@@ -51,6 +86,12 @@ const serialized = JSON.stringify([
   normalized,
   endpointValue,
   authorizationValue,
+  authorizationColonValue,
+  tokenColonValue,
+  secretColonValue,
+  apiKeyColonValue,
+  apiKeyHyphenColonValue,
+  endpointColonValue,
   apiKeyValues,
   urlReplacement,
 ]);
@@ -61,12 +102,22 @@ for (const forbidden of [
   "api_key",
   "api-key",
   "token",
+  "token=",
+  "token:",
   "secret",
+  "secret=",
+  "secret:",
   "authorization",
+  "authorization=",
+  "authorization:",
   "endpoint",
   "endpoint=",
   "endpoint:",
   "Bearer",
+  "abc",
+  "def",
+  "ghi",
+  "xyz",
 ]) {
   assert.equal(serialized.includes(forbidden), false, `unsafe text leaked: ${forbidden}`);
 }
@@ -83,6 +134,6 @@ assert.equal(mockTtsBoundary.production_readiness_claimed, false);
 
 console.log(JSON.stringify({
   status: "pass",
-  checked: 14,
+  checked: 25,
   safe_output_only: true,
 }, null, 2));
