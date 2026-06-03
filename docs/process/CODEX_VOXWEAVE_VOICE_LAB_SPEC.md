@@ -14,6 +14,25 @@ This specification defines the adoption boundary for experimental voice
 candidate workflows such as Irodori-TTS VoiceDesign. It is design-only and does
 not connect any voice generation system to VOXWEAVE Runtime.
 
+## VOXWEAVE Runtime
+
+VOXWEAVE Runtime is the production voice path. It is optimized for stable,
+low-latency speech orchestration and safe adapter output.
+
+Runtime owns:
+
+- production speech orchestration
+- reading correction
+- pronunciation correction
+- subtitle synchronization
+- mouth cue synchronization
+- Live2D-safe cue generation
+- safe summary responses
+- runtime-safe metadata only
+
+Runtime does not own voice candidate generation, Colab execution, dataset
+preparation, raw reference voice handling, or human review workflows.
+
 ## VOXWEAVE Voice Lab
 
 VOXWEAVE Voice Lab is a research and production lane for exploring voice,
@@ -27,6 +46,10 @@ Voice Lab may produce candidate artifacts for human evaluation, including:
 - short voice sample candidates
 - VoiceDesign captions
 - review metadata for comparison and rejection
+- Irodori-TTS VoiceDesign experiments
+- Colab-based candidate generation
+- caption-based voice design
+- dataset preparation for reviewed material only
 
 Voice Lab is not the production runtime. Voice Lab output must not be routed
 directly into IRIS runtime responses, public speech, livestream delivery,
@@ -49,6 +72,21 @@ coordination. Runtime responsibilities include:
 Runtime must not run Irodori-TTS, Colab notebooks, candidate generation jobs, or
 unreviewed voice model selection.
 
+Runtime must not receive Voice Lab raw audio, raw datasets, raw reference voice,
+model paths, Colab paths, API keys, endpoints, raw prompts, or raw caption
+debug output.
+
+Runtime may receive only:
+
+- approved voice_profile_id
+- approved style_profile_id
+- safe pronunciation hints
+- safe prosody hints
+- safe metadata
+
+Unapproved candidate identifiers must not be treated as runtime voice profile
+identifiers.
+
 ## Human Review Gate
 
 Human Review Gate is required before any Voice Lab output can become a
@@ -63,6 +101,17 @@ The gate must confirm:
 - the candidate fits IRIS voice direction and character continuity
 - the candidate does not contain unsafe, private, raw, or diagnostic material
 - the candidate is approved by an authorized human reviewer
+- IRIS-likeness
+- consistency with the contracted actor voice
+- consistency with character personality
+- pronunciation naturalness
+- intonation quality
+- emotion expression range
+- absence of noise, collapse, clipping, or unstable delivery
+- compatibility with subtitles, mouth cues, and Live2D expression timing
+- viewer misidentification risk
+- contract scope fit
+- whether production runtime use is allowed
 
 AI-only scoring, ranking, labeling, or preference selection is not sufficient
 for final adoption. AI may assist review, but cannot be the final approval
@@ -81,6 +130,10 @@ include safe summaries of:
 - review status
 - consent status label
 
+The initial status is always candidate. Until the candidate is approved, it must
+not be used in runtime, livestreams, public videos, advertising, applications,
+games, or external API responses.
+
 It must not include raw audio, raw reference voice, dataset path, model path,
 endpoint, API key, raw caption debug, raw prompt, private file path, or vendor
 diagnostics in runtime or public diagnostics.
@@ -96,6 +149,22 @@ intended performance. It may describe safe attributes such as:
 - review scenario
 - non-identifying style notes
 
+VoiceDesign captions must not be unconstrained free text in adoption workflows.
+For IRIS work, captions must be selected from approved style caption presets.
+Captions that conflict with the reference voice, contract scope, or IRIS
+character direction must be rejected.
+
+The following caption intents are forbidden or require explicit review:
+
+- excessive screaming
+- excessive crying
+- excessive breathiness
+- acting that may cause speaker misidentification
+- sexual performance direction
+- political persuasion
+- scam-like performance direction
+- aggressive or abusive performance direction
+
 It must not encode a command to imitate an unconsented person, celebrity, public
 figure, private individual, or third-party voice sample.
 
@@ -106,6 +175,8 @@ Allowed reference voices:
 - explicitly consented voice actor recordings
 - contract-approved recordings for IRIS or VOXWEAVE use
 - recordings with documented usage scope, review scope, and retention policy
+- recordings whose actor, contract, language scope, medium scope, retention
+  scope, and reuse scope are known
 
 Forbidden reference voices:
 
@@ -113,8 +184,12 @@ Forbidden reference voices:
 - third-party private voices
 - celebrity voices
 - public figure voices
+- streamer voices
+- general private individual voices
 - voices extracted from public videos, streams, interviews, films, games, or
   social media
+- voices extracted from advertisements, podcasts, livestream archives, or
+  short-form public clips
 - raw samples whose rights, speaker identity, or usage scope cannot be verified
 
 Reference voice material must remain outside runtime and public diagnostics.
@@ -124,18 +199,32 @@ Reference voice material must remain outside runtime and public diagnostics.
 Every VoiceDesign Candidate must carry safe metadata:
 
 - candidate_id
-- voice_lab_schema
-- source_consent_status
-- reference_voice_policy_status
-- reviewer_required
-- human_review_status
-- promotion_status
-- intended_language
-- intended_voice_direction
-- sample_duration_class
+- source_voice_profile_id
+- reference_voice_consent_status
+- voice_design_model
+- caption_preset_id
+- generated_text
+- generated_audio_ref
+- language
+- locale
+- emotion_style
+- review_status
+- reviewer_id_or_role
+- review_notes_redacted
+- approved_for_runtime
+- approved_for_dataset
+- approved_for_training
+- approved_for_publication
+- approved_for_multilingual_use
+- prohibited_use_cases
 - created_at
-- retention_policy_label
-- runtime_eligible: false until approved
+- updated_at
+
+Default required values before approval:
+
+- review_status: candidate
+- approved_for_runtime: false
+- approved_for_publication: false
 - safe_summary_only: true
 
 The metadata must not include raw audio, raw reference voice, dataset path,
@@ -158,6 +247,17 @@ Promotion flow:
 
 Voice Lab output must not be automatically promoted based on AI score, model
 confidence, generated caption quality, or successful sample generation.
+
+After approval, usage scope must remain metadata-controlled:
+
+- language
+- locale
+- emotion style
+- media type
+- publication scope
+- storage duration
+- retraining permission
+- multilingual permission
 
 ## Approved Voice Candidate
 
@@ -197,6 +297,15 @@ responses, adapter responses, or Live2D cue payloads:
 
 Voice Lab must preserve a safe-summary-only boundary for public and runtime
 surfaces.
+
+Allowed public safe summaries include:
+
+- candidate_count
+- approved_count
+- review_required_count
+- blocked_count
+- voice_lab_enabled
+- runtime_connected: false
 
 ## Non Goals
 
