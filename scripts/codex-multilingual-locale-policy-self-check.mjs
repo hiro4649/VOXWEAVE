@@ -56,19 +56,96 @@ assertBlocked({ language: "ar", locale: "ar-MSA", script: "arabic", direction: "
 assertBlocked({ language: "en", locale: "en-US", script: "arabic", direction: "ltr" }, "arabic_locale_requires_rtl_or_unknown_direction");
 assertValid({ language: "zh", locale: "zh-CN", script: "simplified_chinese" });
 assertValid({ language: "ko", locale: "ko-KR", script: "hangul" });
-assertBlocked({ language: "multi", locale: "multi", script: "mixed", supports_multilingual: true, requires_human_review: false }, "code_switching_requires_human_review");
-assertBlocked({ language: "multi", locale: "multi", script: "mixed", supports_multilingual: false, requires_human_review: true }, "multilingual_language_requires_multilingual_support");
-assertBlocked({ supports_voice_cloning: true, requires_reference_voice_consent: false, requires_human_review: true }, "voice_cloning_requires_reference_voice_consent");
-assertBlocked({ supports_voice_cloning: true, requires_reference_voice_consent: true, requires_human_review: false }, "voice_cloning_requires_human_review");
+
+assertBlocked({
+  language: "multi",
+  locale: "multi",
+  script: "mixed",
+  supports_multilingual: true,
+  requires_human_review: false,
+}, "code_switching_capability_requires_human_review");
+assertBlocked({
+  language: "ja",
+  locale: "ja-JP",
+  script: "kana",
+  supports_code_switching: true,
+  requires_human_review: false,
+}, "code_switching_capability_requires_human_review");
+assertBlocked({
+  language: "multi",
+  locale: "multi",
+  script: "mixed",
+  supports_multilingual: false,
+  requires_human_review: true,
+}, "multilingual_language_requires_multilingual_support");
+
+assertBlocked({
+  supports_voice_cloning: true,
+  requires_reference_voice_consent: false,
+  requires_human_review: true,
+}, "voice_cloning_requires_reference_voice_consent");
+assertBlocked({
+  supports_voice_cloning: true,
+  requires_reference_voice_consent: true,
+  requires_human_review: false,
+}, "voice_cloning_requires_human_review");
+
 assertBlocked({ locale: "endpoint=https://bad.invalid" }, "locale_value_invalid");
 assertBlocked({ engine_id_redacted: "model_path/C:/private/model" }, "engine_id_redacted_invalid");
-assertValid({ safety_status: "approved", supports_runtime: true });
+assertBlocked({ engine_family: "endpoint=https://bad.invalid" }, "engine_family_invalid");
+assertBlocked({ engine_family: "model_path/C:/private/model" }, "engine_family_invalid");
+assertBlocked({ created_at: "not a timestamp" }, "locale_timestamp_invalid");
+assertBlocked({ updated_at: "not a timestamp" }, "locale_timestamp_invalid");
+
+assertBlocked({ supports_runtime: true, safety_status: "candidate" }, "runtime_support_requires_approved_safety_status");
+assertBlocked({ supports_runtime: true, safety_status: "review_required" }, "runtime_support_requires_approved_safety_status");
+assertValid({ supports_runtime: true, safety_status: "approved" });
+
+assertBlocked({ language: "unknown", locale: "unknown", requires_human_review: false }, "unknown_locale_requires_human_review");
+assertValid({
+  language: "unknown",
+  locale: "unknown",
+  script: "unknown",
+  direction: "unknown",
+  requires_human_review: true,
+  safety_status: "review_required",
+});
+
+assertBlocked({ fallback_policy: "safe_placeholder_voice", requires_human_review: false }, "safe_placeholder_voice_requires_human_review");
+assertValid({
+  fallback_policy: "safe_placeholder_voice",
+  requires_human_review: true,
+  safety_status: "review_required",
+});
+
 assertBlocked({ fallback_policy: "blocked" }, "locale_fallback_policy_blocked");
 assertBlocked({ language: "blocked" }, "locale_language_blocked");
 assertBlocked({ script: "blocked" }, "locale_script_blocked");
 assertBlocked({ direction: "blocked" }, "locale_direction_blocked");
 assertBlocked({ candidate_status: "blocked" }, "locale_candidate_status_blocked");
 assertBlocked({ safety_status: "blocked" }, "locale_safety_status_blocked");
+assertBlocked({ pronunciation_hint_policy_status: "blocked" }, "pronunciation_hint_policy_status_blocked");
+assertBlocked({ subtitle_direction_policy_status: "blocked" }, "subtitle_direction_policy_status_blocked");
+assertBlocked({ lip_sync_policy_status: "blocked" }, "lip_sync_policy_status_blocked");
+assertBlocked({ live2d_policy_status: "blocked" }, "live2d_policy_status_blocked");
+assertBlocked({ pronunciation_hint_policy_status: "unknown_status" }, "pronunciation_hint_policy_status_not_allowed");
+assertBlocked({ subtitle_direction_policy_status: "unknown_status" }, "subtitle_direction_policy_status_not_allowed");
+assertBlocked({ lip_sync_policy_status: "unknown_status" }, "lip_sync_policy_status_not_allowed");
+assertBlocked({ live2d_policy_status: "unknown_status" }, "live2d_policy_status_not_allowed");
+
+for (const unsafeField of [
+  "raw_translation_prompt",
+  "raw_language_detection_payload",
+  "raw_tts_engine_locale_payload",
+  "endpoint",
+  "api_key",
+  "token",
+  "secret",
+  "model_path",
+  "dataset_path",
+]) {
+  assertBlocked({ [unsafeField]: "unsafe" }, "unsafe_multilingual_locale_fields_present");
+}
 
 const summary = buildMultilingualLocaleSafeSummary([
   policy(),
@@ -85,27 +162,51 @@ const summary = buildMultilingualLocaleSafeSummary([
     requires_human_review: true,
     safety_status: "review_required",
   }),
-  policy({ supports_voice_cloning: true, requires_reference_voice_consent: true, requires_human_review: true }),
+  policy({
+    supports_voice_cloning: true,
+    requires_reference_voice_consent: true,
+    requires_human_review: true,
+  }),
+  policy({ requires_pronunciation_review: true }),
   policy({ locale: "endpoint=https://bad.invalid", engine_id_redacted: "engine-redacted" }),
   policy({ safety_status: "approved", supports_runtime: true }),
 ]);
 
-assert.equal(summary.locale_policy_count, 9);
+assert.equal(summary.locale_policy_count, 10);
+assert.equal(summary.rtl_policy_count, 1);
+assert.equal(summary.code_switching_review_required_count, 1);
+assert.equal(summary.voice_consent_required_count, 1);
+assert.equal(summary.human_review_required_count, 2);
+assert.equal(summary.pronunciation_review_required_count, 1);
 assert.equal(summary.runtime_ready_count, 0);
 assert.equal(summary.safe_summary_only, true);
 
 const serialized = JSON.stringify(summary);
 for (const forbidden of [
-  "locale_policy_id",
+  "locale-policy-1",
   "engine_id_redacted",
   "engine_id",
   "engine_family",
-  "script",
-  "direction",
+  "mock-redacted",
+  "mock-tts",
+  "moss-tts",
+  "irodori-tts",
   "ja-JP",
   "en-US",
+  "zh-CN",
+  "ko-KR",
   "ar-MSA",
-  "mock-tts",
+  "kana",
+  "latin",
+  "arabic",
+  "hangul",
+  "simplified_chinese",
+  "ltr",
+  "mixed",
+  "candidate_only",
+  "benchmark_required",
+  "safe_placeholder_voice",
+  "text_only",
   "endpoint",
   "api_key",
   "token",
@@ -122,6 +223,6 @@ for (const forbidden of [
 
 console.log(JSON.stringify({
   status: "pass",
-  checked: 38,
+  checked: 73,
   safe_summary_only: true,
 }, null, 2));

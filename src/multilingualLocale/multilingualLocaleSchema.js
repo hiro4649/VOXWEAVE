@@ -96,3 +96,28 @@ export const MULTILINGUAL_SAFETY_STATUSES = Object.freeze([
   "approved",
   "blocked",
 ]);
+
+export const MULTILINGUAL_POLICY_STATUSES = Object.freeze([
+  "candidate",
+  "review_required",
+  "approved",
+  "blocked",
+]);
+
+export const UNSAFE_MULTILINGUAL_LOCALE_FIELDS = Object.freeze([
+  "raw_locale_payload",
+  "raw_translation_prompt",
+  "raw_language_detection_payload",
+  "raw_tts_engine_locale_payload",
+  "endpoint",
+  "endpoint_url",
+  "api_key",
+  "token",
+  "secret",
+  "authorization",
+  "model_path",
+  "dataset_path",
+  "private_path",
+  "raw_pr_body",
+  "raw_artifact_text",
+]);
