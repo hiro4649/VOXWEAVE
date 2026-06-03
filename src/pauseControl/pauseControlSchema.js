@@ -78,6 +78,13 @@ export const TTS_ENGINE_MAPPING_STATUSES = Object.freeze([
 export const UNSAFE_PAUSE_CONTROL_FIELDS = Object.freeze([
   "raw_pause_syntax",
   "engine_specific_syntax",
+  "raw_subtitle_text",
+  "raw_lip_sync_payload",
+  "raw_live2d_payload",
+  "raw_tts_engine_payload",
+  "engine_pause_syntax",
+  "ssml_payload",
+  "vendor_pause_syntax",
   "raw_text",
   "raw_prompt",
   "raw_audio",

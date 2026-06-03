@@ -28,12 +28,37 @@ function mappingPlaceholderOnly(cue) {
   return cue.tts_engine_mapping === "placeholder";
 }
 
+function mappingEmptyWhenNotMapped(cue) {
+  return cue.tts_engine_mapping_status !== "not_mapped" || cue.tts_engine_mapping === "";
+}
+
+function safeLanguage(value) {
+  return typeof value === "string" && /^[a-z-]{2,8}$/.test(value);
+}
+
+function safeLocale(value, language) {
+  return (
+    typeof value === "string" &&
+    (value === language || /^[a-z]{2,8}(-[A-Z0-9]{2,8})?$/.test(value))
+  );
+}
+
+function isoLikeTimestamp(value) {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(value);
+}
+
 function buildReasonCodes({
   missing_metadata,
   unsafe_fields_present,
   durationReady,
+  durationIntegerReady,
   zeroDurationReady,
   longPauseReviewReady,
+  runtimeAllowedSafetyReady,
+  languageReady,
+  localeReady,
+  createdAtReady,
+  updatedAtReady,
   reasonAllowed,
   reasonBlocked,
   positionAllowed,
@@ -46,14 +71,23 @@ function buildReasonCodes({
   safetyAllowed,
   safetyBlocked,
   mappingStatusAllowed,
+  mappingStatusBlocked,
+  mappingEmptyReady,
   mappingPlaceholderReady,
 }) {
   const reason_codes = [];
   if (missing_metadata.length > 0) reason_codes.push("required_metadata_missing");
   if (unsafe_fields_present.length > 0) reason_codes.push("unsafe_pause_control_fields_present");
   if (!durationReady) reason_codes.push("pause_duration_invalid");
+  if (!durationIntegerReady) reason_codes.push("pause_duration_must_be_integer_ms");
   if (!zeroDurationReady) reason_codes.push("zero_duration_requires_sentence_boundary");
   if (!longPauseReviewReady) reason_codes.push("long_pause_requires_human_review");
+  if (!runtimeAllowedSafetyReady) {
+    reason_codes.push("runtime_allowed_requires_approved_safety_status");
+  }
+  if (!languageReady) reason_codes.push("pause_language_invalid");
+  if (!localeReady) reason_codes.push("pause_locale_invalid");
+  if (!createdAtReady || !updatedAtReady) reason_codes.push("pause_timestamp_invalid");
   if (!reasonAllowed) reason_codes.push("pause_reason_not_allowed");
   if (reasonBlocked) reason_codes.push("pause_reason_blocked");
   if (!positionAllowed) reason_codes.push("pause_position_not_allowed");
@@ -66,6 +100,8 @@ function buildReasonCodes({
   if (!safetyAllowed) reason_codes.push("safety_status_not_allowed");
   if (safetyBlocked) reason_codes.push("safety_status_blocked");
   if (!mappingStatusAllowed) reason_codes.push("tts_engine_mapping_status_not_allowed");
+  if (mappingStatusBlocked) reason_codes.push("tts_engine_mapping_status_blocked");
+  if (!mappingEmptyReady) reason_codes.push("tts_engine_mapping_must_be_empty_when_not_mapped");
   if (!mappingPlaceholderReady) reason_codes.push("tts_engine_mapping_must_remain_placeholder");
   return reason_codes;
 }
@@ -78,8 +114,15 @@ export function validatePauseCue(cue = {}) {
     Number.isFinite(cue.duration_ms) &&
     cue.duration_ms >= 0 &&
     cue.duration_ms <= 3000;
+  const durationIntegerReady = Number.isInteger(cue.duration_ms);
   const zeroDurationReady = cue.duration_ms !== 0 || cue.reason === "sentence_boundary";
   const longPauseReviewReady = !(cue.duration_ms > 1500) || cue.requires_human_review === true;
+  const runtimeAllowedSafetyReady =
+    cue.allowed_for_runtime !== true || cue.safety_status === "approved";
+  const languageReady = safeLanguage(cue.language);
+  const localeReady = safeLocale(cue.locale, cue.language);
+  const createdAtReady = isoLikeTimestamp(cue.created_at);
+  const updatedAtReady = isoLikeTimestamp(cue.updated_at);
   const reasonAllowed = PAUSE_REASONS.includes(cue.reason);
   const reasonBlocked = cue.reason === "blocked";
   const positionAllowed = PAUSE_POSITIONS.includes(cue.position);
@@ -92,14 +135,22 @@ export function validatePauseCue(cue = {}) {
   const safetyAllowed = PAUSE_SAFETY_STATUSES.includes(cue.safety_status);
   const safetyBlocked = cue.safety_status === "blocked";
   const mappingStatusAllowed = TTS_ENGINE_MAPPING_STATUSES.includes(cue.tts_engine_mapping_status);
+  const mappingStatusBlocked = cue.tts_engine_mapping_status === "blocked";
+  const mappingEmptyReady = mappingEmptyWhenNotMapped(cue);
   const mappingPlaceholderReady = mappingPlaceholderOnly(cue);
 
   const blocked =
     missing_metadata.length > 0 ||
     unsafe_fields_present.length > 0 ||
     !durationReady ||
+    !durationIntegerReady ||
     !zeroDurationReady ||
     !longPauseReviewReady ||
+    !runtimeAllowedSafetyReady ||
+    !languageReady ||
+    !localeReady ||
+    !createdAtReady ||
+    !updatedAtReady ||
     !reasonAllowed ||
     reasonBlocked ||
     !positionAllowed ||
@@ -112,6 +163,8 @@ export function validatePauseCue(cue = {}) {
     !safetyAllowed ||
     safetyBlocked ||
     !mappingStatusAllowed ||
+    mappingStatusBlocked ||
+    !mappingEmptyReady ||
     !mappingPlaceholderReady;
 
   return {
@@ -127,8 +180,14 @@ export function validatePauseCue(cue = {}) {
       missing_metadata,
       unsafe_fields_present,
       durationReady,
+      durationIntegerReady,
       zeroDurationReady,
       longPauseReviewReady,
+      runtimeAllowedSafetyReady,
+      languageReady,
+      localeReady,
+      createdAtReady,
+      updatedAtReady,
       reasonAllowed,
       reasonBlocked,
       positionAllowed,
@@ -141,6 +200,8 @@ export function validatePauseCue(cue = {}) {
       safetyAllowed,
       safetyBlocked,
       mappingStatusAllowed,
+      mappingStatusBlocked,
+      mappingEmptyReady,
       mappingPlaceholderReady,
     }),
     safe_summary_only: true,
@@ -153,13 +214,17 @@ export function buildPauseControlSafeSummary(cues = []) {
   return {
     schema: PAUSE_CONTROL_SAFE_SUMMARY_SCHEMA,
     pause_cue_count: validations.length,
-    candidate_count: validations.filter((item) => item.safety_status === "candidate").length,
-    review_required_count: validations.filter((item) => item.safety_status === "review_required")
+    candidate_count: validations.filter((item) => !item.blocked && item.safety_status === "candidate")
       .length,
-    approved_count: validations.filter((item) => item.safety_status === "approved").length,
+    review_required_count: validations.filter(
+      (item) => !item.blocked && item.safety_status === "review_required",
+    ).length,
+    approved_count: validations.filter((item) => !item.blocked && item.safety_status === "approved")
+      .length,
     blocked_count: validations.filter((item) => item.blocked).length,
-    long_pause_review_required_count: validations.filter((item) => item.requires_human_review)
-      .length,
+    long_pause_review_required_count: validations.filter(
+      (item) => !item.blocked && item.requires_human_review,
+    ).length,
     runtime_ready_count: validations.filter((item) => item.runtime_ready).length,
     safe_summary_only: true,
   };

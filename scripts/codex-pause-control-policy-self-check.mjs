@@ -84,15 +84,100 @@ const approvedRuntime = validatePauseCue(pauseCue({
 assert.equal(approvedRuntime.blocked, false);
 assert.equal(approvedRuntime.runtime_ready, false);
 
+const runtimeAllowedCandidate = validatePauseCue(pauseCue({
+  allowed_for_runtime: true,
+  safety_status: "candidate",
+}));
+assert.equal(runtimeAllowedCandidate.blocked, true);
+assert.equal(
+  runtimeAllowedCandidate.reason_codes.includes("runtime_allowed_requires_approved_safety_status"),
+  true,
+);
+
+const runtimeAllowedReviewRequired = validatePauseCue(pauseCue({
+  allowed_for_runtime: true,
+  safety_status: "review_required",
+  requires_human_review: true,
+}));
+assert.equal(runtimeAllowedReviewRequired.blocked, true);
+assert.equal(
+  runtimeAllowedReviewRequired.reason_codes.includes(
+    "runtime_allowed_requires_approved_safety_status",
+  ),
+  true,
+);
+
+const blockedMappingStatus = validatePauseCue(pauseCue({
+  tts_engine_mapping_status: "blocked",
+  tts_engine_mapping: "",
+}));
+assert.equal(blockedMappingStatus.blocked, true);
+assert.equal(
+  blockedMappingStatus.reason_codes.includes("tts_engine_mapping_status_blocked"),
+  true,
+);
+
+const notMappedWithValue = validatePauseCue(pauseCue({
+  tts_engine_mapping_status: "not_mapped",
+  tts_engine_mapping: "placeholder",
+}));
+assert.equal(notMappedWithValue.blocked, true);
+assert.equal(
+  notMappedWithValue.reason_codes.includes("tts_engine_mapping_must_be_empty_when_not_mapped"),
+  true,
+);
+
 const rawSyntaxMapping = validatePauseCue(pauseCue({
   tts_engine_mapping: "[pause 0.7s]",
 }));
 assert.equal(rawSyntaxMapping.blocked, true);
 assert.equal(rawSyntaxMapping.reason_codes.includes("tts_engine_mapping_must_remain_placeholder"), true);
 
+const ssmlMapping = validatePauseCue(pauseCue({
+  tts_engine_mapping: "<break time=\"1s\"/>",
+}));
+assert.equal(ssmlMapping.blocked, true);
+assert.equal(ssmlMapping.reason_codes.includes("tts_engine_mapping_must_remain_placeholder"), true);
+
+for (const unsafeMapping of ["[pause 1.0s]", "SSML break", "moss_pause", "engine:pause"]) {
+  const checked = validatePauseCue(pauseCue({ tts_engine_mapping: unsafeMapping }));
+  assert.equal(checked.blocked, true, `${unsafeMapping} should block`);
+  assert.equal(
+    checked.reason_codes.includes("tts_engine_mapping_must_remain_placeholder"),
+    true,
+  );
+}
+
+const decimalDuration = validatePauseCue(pauseCue({ duration_ms: 700.5 }));
+assert.equal(decimalDuration.blocked, true);
+assert.equal(decimalDuration.reason_codes.includes("pause_duration_must_be_integer_ms"), true);
+
+const emptyLanguage = validatePauseCue(pauseCue({ language: "" }));
+assert.equal(emptyLanguage.blocked, true);
+assert.equal(emptyLanguage.reason_codes.includes("pause_language_invalid"), true);
+
+const urlLanguage = validatePauseCue(pauseCue({ language: "https://bad.invalid" }));
+assert.equal(urlLanguage.blocked, true);
+assert.equal(urlLanguage.reason_codes.includes("pause_language_invalid"), true);
+
+const badLocale = validatePauseCue(pauseCue({ locale: "endpoint=https://bad.invalid" }));
+assert.equal(badLocale.blocked, true);
+assert.equal(badLocale.reason_codes.includes("pause_locale_invalid"), true);
+
+const badTimestamp = validatePauseCue(pauseCue({ created_at: "not a timestamp" }));
+assert.equal(badTimestamp.blocked, true);
+assert.equal(badTimestamp.reason_codes.includes("pause_timestamp_invalid"), true);
+
 const unsafe = validatePauseCue(pauseCue({
   raw_pause_syntax: "[pause 0.7s]",
   engine_specific_syntax: "[pause 0.7s]",
+  raw_subtitle_text: "raw subtitle",
+  raw_lip_sync_payload: "raw lip sync",
+  raw_live2d_payload: "raw live2d",
+  raw_tts_engine_payload: "raw tts engine",
+  engine_pause_syntax: "[pause 1.0s]",
+  ssml_payload: "<break time=\"1s\"/>",
+  vendor_pause_syntax: "moss_pause",
   raw_prompt: "raw prompt",
   raw_text: "raw text",
   raw_audio: "raw audio",
@@ -113,6 +198,7 @@ const summary = buildPauseControlSafeSummary([
   pauseCue({ duration_ms: 1600 }),
   pauseCue({ duration_ms: 1600, requires_human_review: true, safety_status: "review_required" }),
   pauseCue({ safety_status: "approved", allowed_for_runtime: true }),
+  pauseCue({ safety_status: "approved", raw_audio: "raw audio" }),
   pauseCue({
     tts_engine_mapping: "[pause 0.7s]",
     raw_pause_syntax: "[pause 0.7s]",
@@ -126,7 +212,8 @@ const summary = buildPauseControlSafeSummary([
   }),
 ]);
 
-assert.equal(summary.pause_cue_count, 7);
+assert.equal(summary.pause_cue_count, 8);
+assert.equal(summary.approved_count, 1);
 assert.equal(summary.runtime_ready_count, 0);
 assert.equal(summary.safe_summary_only, true);
 
@@ -135,6 +222,22 @@ for (const forbidden of [
   "[pause 0.7s]",
   "raw_pause_syntax",
   "engine_specific_syntax",
+  "raw_subtitle_text",
+  "raw_lip_sync_payload",
+  "raw_live2d_payload",
+  "raw_tts_engine_payload",
+  "engine_pause_syntax",
+  "ssml_payload",
+  "vendor_pause_syntax",
+  "pause-cue-1",
+  "thinking",
+  "inside_utterance",
+  "ja-JP",
+  "before_utterance",
+  "small_blink",
+  "show_ellipsis",
+  "mouth_closed",
+  "placeholder",
   "raw text",
   "raw_text",
   "raw prompt",
