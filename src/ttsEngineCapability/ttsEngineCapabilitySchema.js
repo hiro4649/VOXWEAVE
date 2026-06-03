@@ -36,7 +36,17 @@ export const TTS_ENGINE_CANDIDATE_STATUSES = Object.freeze([
   "candidate_only",
   "lab_only",
   "benchmark_required",
+  "separate_low_latency_candidate",
   "blocked",
+]);
+
+export const TTS_ENGINE_LICENSE_REVIEW_STATUSES = Object.freeze([
+  "required",
+  "pending",
+  "approved_for_lab",
+  "approved_for_benchmark",
+  "blocked",
+  "not_required_for_mock",
 ]);
 
 export const UNSAFE_TTS_ENGINE_PROFILE_FIELDS = Object.freeze([

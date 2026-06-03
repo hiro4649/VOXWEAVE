@@ -2,6 +2,7 @@ import {
   REQUIRED_TTS_ENGINE_PROFILE_FIELDS,
   TTS_ENGINE_CANDIDATE_STATUSES,
   TTS_ENGINE_CAPABILITY_SAFE_SUMMARY_SCHEMA,
+  TTS_ENGINE_LICENSE_REVIEW_STATUSES,
   UNSAFE_TTS_ENGINE_PROFILE_FIELDS,
 } from "./ttsEngineCapabilitySchema.js";
 
@@ -27,6 +28,9 @@ function buildReasonCodes({
   missing_metadata,
   unsafe_fields_present,
   candidateStatusAllowed,
+  licenseReviewStatusAllowed,
+  supportedLanguagesReady,
+  realtimeCandidateSafe,
   runtime_connected,
   production_ready,
   voiceCloningConsentReady,
@@ -37,6 +41,13 @@ function buildReasonCodes({
   if (missing_metadata.length > 0) reason_codes.push("required_metadata_missing");
   if (unsafe_fields_present.length > 0) reason_codes.push("unsafe_tts_engine_profile_fields_present");
   if (!candidateStatusAllowed) reason_codes.push("candidate_status_not_allowed");
+  if (!licenseReviewStatusAllowed) {
+    reason_codes.push("license_review_status_not_allowed_for_candidate_slice");
+  }
+  if (!supportedLanguagesReady) reason_codes.push("supported_languages_required");
+  if (!realtimeCandidateSafe) {
+    reason_codes.push("realtime_candidate_requires_separate_low_latency_or_benchmark_status");
+  }
   if (runtime_connected) reason_codes.push("runtime_connection_prohibited_for_candidate_slice");
   if (production_ready) reason_codes.push("production_ready_claim_prohibited_for_candidate_slice");
   if (!voiceCloningConsentReady) reason_codes.push("voice_cloning_reference_consent_required");
@@ -49,21 +60,35 @@ export function validateTtsEngineCapabilityProfile(profile = {}) {
   const missing_metadata = missingRequiredFields(profile);
   const unsafe_fields_present = unsafeFieldsPresent(profile);
   const candidateStatusAllowed = TTS_ENGINE_CANDIDATE_STATUSES.includes(profile.candidate_status);
+  const licenseReviewStatusAllowed = TTS_ENGINE_LICENSE_REVIEW_STATUSES.includes(
+    profile.license_review_status,
+  );
+  const supportedLanguagesReady =
+    Array.isArray(profile.supported_languages) && profile.supported_languages.length > 0;
   const runtime_connected = Boolean(profile.runtime_connected);
   const production_ready = Boolean(profile.production_ready);
+  const supportsRealtime = Boolean(profile.supports_realtime);
+  const realtimeCandidateSafe =
+    !supportsRealtime ||
+    ["separate_low_latency_candidate", "benchmark_required"].includes(profile.candidate_status);
   const supportsVoiceCloning = Boolean(profile.supports_voice_cloning);
   const voiceCloningConsentReady =
     !supportsVoiceCloning || profile.requires_reference_voice_consent === true;
   const voiceCloningHumanReviewReady = !supportsVoiceCloning || profile.requires_human_review === true;
   const mossCandidateSafe =
     !isMossTtsProfile(profile) ||
-    (["candidate_only", "benchmark_required"].includes(profile.candidate_status) &&
+    (["candidate_only", "benchmark_required", "separate_low_latency_candidate"].includes(
+      profile.candidate_status,
+    ) &&
       runtime_connected === false &&
       production_ready === false);
   const blocked =
     missing_metadata.length > 0 ||
     unsafe_fields_present.length > 0 ||
     !candidateStatusAllowed ||
+    !licenseReviewStatusAllowed ||
+    !supportedLanguagesReady ||
+    !realtimeCandidateSafe ||
     runtime_connected ||
     production_ready ||
     !voiceCloningConsentReady ||
@@ -87,6 +112,9 @@ export function validateTtsEngineCapabilityProfile(profile = {}) {
       missing_metadata,
       unsafe_fields_present,
       candidateStatusAllowed,
+      licenseReviewStatusAllowed,
+      supportedLanguagesReady,
+      realtimeCandidateSafe,
       runtime_connected,
       production_ready,
       voiceCloningConsentReady,

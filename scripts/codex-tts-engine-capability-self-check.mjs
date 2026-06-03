@@ -78,6 +78,51 @@ assert.equal(moss.production_ready, false);
 assert.equal(moss.blocked, false);
 assert.equal(moss.runtime_adoption_allowed, false);
 
+const mossRealtime = validateTtsEngineCapabilityProfile(mossTtsProfile({
+  engine_id: "moss-tts-realtime",
+  candidate_status: "separate_low_latency_candidate",
+  supports_realtime: true,
+  benchmark_required: true,
+  notes_redacted: "MOSS-TTS-Realtime separate low-latency candidate.",
+}));
+assert.equal(mossRealtime.blocked, false);
+assert.equal(mossRealtime.runtime_connected, false);
+assert.equal(mossRealtime.production_ready, false);
+assert.equal(mossRealtime.runtime_adoption_allowed, false);
+
+const invalidRealtimeStatus = validateTtsEngineCapabilityProfile(mossTtsProfile({
+  supports_realtime: true,
+  candidate_status: "candidate_only",
+}));
+assert.equal(invalidRealtimeStatus.blocked, true);
+assert.equal(
+  invalidRealtimeStatus.reason_codes.includes(
+    "realtime_candidate_requires_separate_low_latency_or_benchmark_status",
+  ),
+  true,
+);
+
+const runtimeLicenseStatus = validateTtsEngineCapabilityProfile(mossTtsProfile({
+  license_review_status: "approved_for_runtime",
+}));
+assert.equal(runtimeLicenseStatus.blocked, true);
+assert.equal(
+  runtimeLicenseStatus.reason_codes.includes("license_review_status_not_allowed_for_candidate_slice"),
+  true,
+);
+
+const emptyLanguages = validateTtsEngineCapabilityProfile(mossTtsProfile({
+  supported_languages: [],
+}));
+assert.equal(emptyLanguages.blocked, true);
+assert.equal(emptyLanguages.reason_codes.includes("supported_languages_required"), true);
+
+const invalidLanguages = validateTtsEngineCapabilityProfile(mossTtsProfile({
+  supported_languages: "ja",
+}));
+assert.equal(invalidLanguages.blocked, true);
+assert.equal(invalidLanguages.reason_codes.includes("supported_languages_required"), true);
+
 const cloningWithoutConsent = validateTtsEngineCapabilityProfile(mossTtsProfile({
   requires_reference_voice_consent: false,
 }));
@@ -129,6 +174,13 @@ assert.equal(unsafe.unsafe_fields_present.length >= 8, true);
 
 const summary = buildTtsEngineCapabilitySafeSummary([
   mossTtsProfile(),
+  mossTtsProfile({
+    engine_id: "moss-tts-realtime",
+    candidate_status: "separate_low_latency_candidate",
+    supports_realtime: true,
+    benchmark_required: true,
+    notes_redacted: "MOSS-TTS-Realtime separate low-latency candidate.",
+  }),
   mockTtsProfile(),
   mockTtsProfile({ production_ready: true }),
   mockTtsProfile({ runtime_connected: true }),
@@ -144,13 +196,13 @@ const summary = buildTtsEngineCapabilitySafeSummary([
   }),
 ]);
 
-assert.equal(summary.engine_count, 5);
-assert.equal(summary.benchmark_required_count, 2);
+assert.equal(summary.engine_count, 6);
+assert.equal(summary.benchmark_required_count, 3);
 assert.equal(summary.runtime_connected_count, 0);
 assert.equal(summary.production_ready_count, 0);
 assert.equal(summary.blocked_count, 3);
-assert.equal(summary.voice_consent_required_count, 2);
-assert.equal(summary.human_review_required_count, 2);
+assert.equal(summary.voice_consent_required_count, 3);
+assert.equal(summary.human_review_required_count, 3);
 assert.equal(summary.runtime_connected, false);
 assert.equal(summary.production_readiness_claimed, false);
 assert.equal(summary.runtime_readiness_claimed, false);
@@ -177,12 +229,19 @@ for (const forbidden of [
   "raw_reference_voice",
   "raw_pr_body",
   "raw_artifact_text",
+  "moss-tts-v1.5",
+  "moss-tts",
+  "MOSS-TTS-Realtime",
+  "vLLM-Omni",
+  "SGLang-Omni",
+  "mock-tts",
+  "mock TTS only",
 ]) {
   assert.equal(serialized.includes(forbidden), false, `unsafe summary leaked: ${forbidden}`);
 }
 
 console.log(JSON.stringify({
   status: "pass",
-  checked: 10,
+  checked: 16,
   safe_summary_only: true,
 }, null, 2));
