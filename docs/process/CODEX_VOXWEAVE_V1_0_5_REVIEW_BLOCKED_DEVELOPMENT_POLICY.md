@@ -4,15 +4,24 @@
 
 ## Status
 
-- Document type: adopted process policy
+- Status: adopted process policy
+- Document type: review-blocked development policy
 - Development mode: 5.5-low
 - Main reflected: no
 - Runtime readiness claimed: no
 - Production readiness claimed: no
+- Real TTS readiness claimed: no
 - Merge readiness: no
+- User manual work avoided: yes
 
 This policy records how VOXWEAVE development proceeds while independent review
 metadata and quality-gate blockers remain unresolved.
+
+## Scope
+
+This policy applies to review-blocked VOXWEAVE development during v1.0.5. It
+defines preserve-only behavior, allowed read-only analysis, and the limited
+docs-only spec persistence backfill exception.
 
 ## Core Policy
 
@@ -25,9 +34,9 @@ workflow files, product tests, or existing pull request branches.
 
 Existing PR changes are prohibited. Runtime integration is prohibited.
 
-Writer self review is not independent review. A bot request that does not leave
-review metadata is not independent review. Review request API success alone is
-not independent review.
+Writer self review is not independent review. Writer comments only are not
+independent review. A bot request that does not leave review metadata is not
+independent review. Review request API success alone is not independent review.
 
 PR #3 must be handled before PR #1. PR #1 must not be advanced while PR #3 is
 blocked.
@@ -74,6 +83,19 @@ confirmation.
 - do not connect runtime
 - do not claim runtime or production readiness
 
+## Runtime Boundary
+
+Runtime integration is prohibited while the review-blocked policy is active.
+This policy does not permit orchestrator changes, runtime adapter path changes,
+TTS engine calls, Live2D renderer calls, package changes, workflow changes, or
+benchmark execution.
+
+## Safety Boundary
+
+Review independence must not be weakened. Writer self review and writer comments
+only must not be treated as approval. Quality gates must not be disabled or
+weakened to bypass the review-blocked state.
+
 ## Non Goals
 
 This policy does not approve:
@@ -90,5 +112,18 @@ This policy does not approve:
 
 - Runtime readiness claimed: no
 - Production readiness claimed: no
+- Real TTS readiness claimed: no
 - Merge readiness: no
 - User manual work avoided: yes
+
+## Forbidden Claims
+
+The following claims are forbidden:
+
+- PR #3 is merge-ready without independent reviewer metadata
+- PR #1 can proceed before PR #3 is reviewed and green
+- writer comments only satisfy independent review
+- a review request API success is independent review
+- runtime integration is allowed by this policy
+- this policy grants runtime readiness
+- this policy grants production readiness

@@ -4,21 +4,34 @@
 
 ## Status
 
-- Document type: adopted candidate policy
+- Status: adopted candidate policy
+- Document type: candidate engine policy
 - Development mode: 5.5-low
 - Main reflected: no
 - Runtime readiness claimed: no
 - Production readiness claimed: no
+- Real TTS readiness claimed: no
 - Merge readiness: no
+- User manual work avoided: yes
 
 This document records the VOXWEAVE candidate policy for MisoTTS / Miso TTS 8B.
 It is design-only and spec-only. It does not connect MisoTTS to VOXWEAVE
 Runtime, does not add model downloads, does not add API calls, does not add
 endpoint configuration, and does not run benchmarks.
 
+## Scope
+
+This policy is limited to candidate classification and future evaluation
+requirements for MisoTTS / Miso TTS 8B. It is not an implementation plan and
+does not authorize runtime integration.
+
 ## Candidate Classification
 
 MisoTTS / Miso TTS 8B is a VOXWEAVE TTS engine candidate.
+
+Use `MisoTTS` or `Miso TTS 8B` as the policy name. Do not use social-post or
+informal naming such as `Miso One` as the canonical VOXWEAVE specification
+name.
 
 Candidate evaluation lanes:
 
@@ -51,12 +64,17 @@ This policy does not:
 - execute benchmarks
 
 `runtime_connected` must remain `false`.
+`production_ready` must remain `false`.
 
 ## Safety Boundary
 
 Prompt audio and audio context conditioning are treated as voice reference and
 voice cloning risk surfaces. They require explicit consent checks and Human
 Review Gate review before any adoption discussion.
+
+Voice cloning, prompt audio conditioning, and audio context conditioning require
+explicit consent. They also require Human Review Gate review before any runtime
+adoption discussion.
 
 The following must not be exposed in public summaries:
 
@@ -141,10 +159,13 @@ The following claims are forbidden:
 - MisoTTS generated voice can bypass Human Review Gate
 - MisoTTS benchmark is complete
 - MisoTTS can be used for public IRIS voice without review
+- MisoTTS is real TTS production ready for VOXWEAVE
+- MisoTTS runtime readiness is approved by this policy
 
 ## Readiness
 
 - Runtime adoption: prohibited
 - Production readiness: prohibited
 - Runtime readiness: prohibited
+- Real TTS readiness claimed: no
 - User manual work avoided: yes

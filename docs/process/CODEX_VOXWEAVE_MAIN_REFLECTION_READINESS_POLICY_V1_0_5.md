@@ -4,15 +4,24 @@
 
 ## Status
 
-- Document type: read-only planned, not ready
+- Status: read-only planned, not ready
+- Document type: main reflection readiness policy
 - Development mode: 5.5-low
 - Main reflected: no
 - Runtime readiness claimed: no
 - Production readiness claimed: no
+- Real TTS readiness claimed: no
 - Merge readiness: no
+- User manual work avoided: yes
 
 This policy records the future main reflection readiness order for VOXWEAVE
 PR #15 through PR #28. It is not merge permission.
+
+## Scope
+
+This policy is limited to future main reflection readiness planning. It does not
+reflect any PR to `main`, does not permit merge, and does not authorize runtime
+adoption.
 
 ## Current Readiness
 
@@ -56,6 +65,19 @@ Downstream synchronization policies:
 All PRs must be reevaluated after independent review and quality-gate blockers
 are resolved. This document does not permit merge.
 
+## Runtime Boundary
+
+Main reflection planning does not permit runtime integration. Any future
+reflection candidate must still show no runtime connection, no orchestrator
+connection, no adapter path connection, no TTS engine call, no Live2D renderer
+call, no package change, no workflow change, and no benchmark execution.
+
+## Safety Boundary
+
+Future reflection must preserve safe summary count-only behavior where
+applicable, Human Review Gate policy, Reference Voice explicit consent policy,
+and no automatic candidate promotion.
+
 ## Required Recheck Before Future Reflection
 
 For any future reflection candidate, recheck:
@@ -93,9 +115,21 @@ This policy does not approve:
 - product test changes
 - benchmark execution
 
+## Forbidden Claims
+
+The following claims are forbidden:
+
+- this policy grants merge readiness
+- this policy grants runtime readiness
+- this policy grants production readiness
+- main reflection planning is runtime adoption
+- PR #15 through PR #28 are ready now
+- spec reflection bypasses independent review or quality-gate blockers
+
 ## Readiness
 
 - Runtime readiness claimed: no
 - Production readiness claimed: no
+- Real TTS readiness claimed: no
 - Merge readiness: no
 - User manual work avoided: yes
