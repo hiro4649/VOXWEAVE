@@ -1,7 +1,10 @@
 import {
   REQUIRED_TTS_BENCHMARK_FIELDS,
+  TTS_BENCHMARK_CANDIDATE_STATUSES,
+  TTS_BENCHMARK_COMPLETED_FIELD_STATUSES,
   TTS_BENCHMARK_HUMAN_REVIEW_STATUSES,
   TTS_BENCHMARK_LICENSE_REVIEW_STATUSES,
+  TTS_BENCHMARK_REALTIME_FIELD_STATUSES,
   TTS_BENCHMARK_REFERENCE_CONSENT_STATUSES,
   TTS_BENCHMARK_SAFE_SUMMARY_SCHEMA,
   TTS_BENCHMARK_STATUSES,
@@ -18,8 +21,30 @@ function isMossTtsManifest(manifest) {
   return engineId.includes("moss-tts") || family.includes("moss-tts");
 }
 
+function isMossTtsRealtimeManifest(manifest) {
+  const engineId = String(manifest.engine_id ?? "").toLowerCase();
+  return engineId.includes("realtime");
+}
+
 function isVoiceReferenceBenchmark(manifest) {
   return manifest.reference_voice_consent_status !== "not_required_for_mock";
+}
+
+function completedBenchmarkFieldsReady(manifest) {
+  if (manifest.benchmark_status !== "completed_lab_evaluation") return true;
+  return [
+    "latency_benchmark_status",
+    "gpu_benchmark_status",
+    "vram_benchmark_status",
+    "multilingual_benchmark_status",
+    "pause_control_benchmark_status",
+    "pronunciation_control_benchmark_status",
+    "subtitle_alignment_benchmark_status",
+    "lip_sync_alignment_benchmark_status",
+    "live2d_alignment_benchmark_status",
+    "long_form_benchmark_status",
+    "quality_review_status",
+  ].every((field) => TTS_BENCHMARK_COMPLETED_FIELD_STATUSES.includes(manifest[field]));
 }
 
 function findMissingMetadata(manifest) {
@@ -34,13 +59,24 @@ function buildReasonCodes({
   missing_metadata,
   unsafe_fields_present,
   benchmarkStatusAllowed,
+  candidateStatusAllowed,
   licenseReviewStatusAllowed,
   referenceConsentStatusAllowed,
   humanReviewStatusAllowed,
+  benchmarkStatusBlocked,
+  licenseReviewBlocked,
+  referenceConsentBlocked,
+  humanReviewBlocked,
   prohibitedRuntimeActionPresent,
   production_ready,
   completedLabClaimsProduction,
+  mossV15CandidateStatusReady,
+  mossRealtimeCandidateStatusReady,
   mossCandidateSafe,
+  realtimeBenchmarkReady,
+  testedLanguagesArray,
+  testedLanguagesReadyForCompletedLab,
+  completedBenchmarkFieldsComplete,
   referenceConsentReady,
   humanReviewReady,
 }) {
@@ -48,15 +84,34 @@ function buildReasonCodes({
   if (missing_metadata.length > 0) reason_codes.push("required_metadata_missing");
   if (unsafe_fields_present.length > 0) reason_codes.push("unsafe_tts_benchmark_fields_present");
   if (!benchmarkStatusAllowed) reason_codes.push("benchmark_status_not_allowed");
+  if (!candidateStatusAllowed) reason_codes.push("candidate_status_not_allowed");
   if (!licenseReviewStatusAllowed) reason_codes.push("license_review_status_not_allowed");
   if (!referenceConsentStatusAllowed) reason_codes.push("reference_voice_consent_status_not_allowed");
   if (!humanReviewStatusAllowed) reason_codes.push("human_review_status_not_allowed");
+  if (benchmarkStatusBlocked) reason_codes.push("benchmark_status_blocked");
+  if (licenseReviewBlocked) reason_codes.push("license_review_blocked");
+  if (humanReviewBlocked) reason_codes.push("human_review_blocked");
+  if (referenceConsentBlocked) reason_codes.push("reference_voice_consent_blocked");
   if (prohibitedRuntimeActionPresent) reason_codes.push("runtime_side_effect_prohibited");
   if (production_ready) reason_codes.push("production_ready_claim_prohibited_for_benchmark_manifest");
   if (completedLabClaimsProduction) {
     reason_codes.push("completed_lab_evaluation_is_not_production_ready");
   }
+  if (!mossV15CandidateStatusReady) {
+    reason_codes.push("moss_tts_v1_5_candidate_status_invalid");
+  }
+  if (!mossRealtimeCandidateStatusReady) {
+    reason_codes.push("moss_tts_realtime_candidate_status_invalid");
+  }
   if (!mossCandidateSafe) reason_codes.push("moss_tts_benchmark_candidate_boundary_required");
+  if (!realtimeBenchmarkReady) reason_codes.push("realtime_candidate_requires_realtime_benchmark");
+  if (!testedLanguagesArray) reason_codes.push("tested_languages_must_be_array");
+  if (!testedLanguagesReadyForCompletedLab) {
+    reason_codes.push("tested_languages_required_for_completed_lab_evaluation");
+  }
+  if (!completedBenchmarkFieldsComplete) {
+    reason_codes.push("completed_lab_evaluation_requires_completed_benchmark_fields");
+  }
   if (!referenceConsentReady) reason_codes.push("reference_voice_explicit_consent_required");
   if (!humanReviewReady) reason_codes.push("human_review_approval_required_before_runtime_adoption");
   return reason_codes;
@@ -66,6 +121,7 @@ export function validateTtsBenchmarkManifest(manifest = {}) {
   const missing_metadata = findMissingMetadata(manifest);
   const unsafe_fields_present = findUnsafeFields(manifest);
   const benchmarkStatusAllowed = TTS_BENCHMARK_STATUSES.includes(manifest.benchmark_status);
+  const candidateStatusAllowed = TTS_BENCHMARK_CANDIDATE_STATUSES.includes(manifest.candidate_status);
   const licenseReviewStatusAllowed = TTS_BENCHMARK_LICENSE_REVIEW_STATUSES.includes(
     manifest.license_review_status,
   );
@@ -75,6 +131,10 @@ export function validateTtsBenchmarkManifest(manifest = {}) {
   const humanReviewStatusAllowed = TTS_BENCHMARK_HUMAN_REVIEW_STATUSES.includes(
     manifest.human_review_status,
   );
+  const benchmarkStatusBlocked = manifest.benchmark_status === "blocked";
+  const licenseReviewBlocked = manifest.license_review_status === "blocked";
+  const referenceConsentBlocked = manifest.reference_voice_consent_status === "blocked";
+  const humanReviewBlocked = manifest.human_review_status === "blocked";
 
   const runtime_connected = Boolean(manifest.runtime_connected);
   const production_ready = Boolean(manifest.production_ready);
@@ -92,11 +152,28 @@ export function validateTtsBenchmarkManifest(manifest = {}) {
     workflow_changed;
   const completedLabClaimsProduction =
     manifest.benchmark_status === "completed_lab_evaluation" && production_ready;
+  const mossRealtime = isMossTtsRealtimeManifest(manifest);
+  const mossV15CandidateStatusReady =
+    !isMossTtsManifest(manifest) ||
+    mossRealtime ||
+    ["benchmark_required", "lab_only"].includes(manifest.candidate_status);
+  const mossRealtimeCandidateStatusReady =
+    !isMossTtsManifest(manifest) ||
+    !mossRealtime ||
+    ["separate_low_latency_candidate", "benchmark_required"].includes(manifest.candidate_status);
   const mossCandidateSafe =
     !isMossTtsManifest(manifest) ||
     ["benchmark_required", "lab_only", "separate_low_latency_candidate"].includes(
       manifest.candidate_status,
     );
+  const realtimeBenchmarkReady =
+    manifest.candidate_status !== "separate_low_latency_candidate" ||
+    TTS_BENCHMARK_REALTIME_FIELD_STATUSES.includes(manifest.realtime_benchmark_status);
+  const testedLanguagesArray = Array.isArray(manifest.tested_languages);
+  const testedLanguagesReadyForCompletedLab =
+    manifest.benchmark_status !== "completed_lab_evaluation" ||
+    (testedLanguagesArray && manifest.tested_languages.length > 0);
+  const completedBenchmarkFieldsComplete = completedBenchmarkFieldsReady(manifest);
   const referenceConsentReady =
     !isVoiceReferenceBenchmark(manifest) ||
     manifest.reference_voice_consent_status === "explicit_consent";
@@ -106,13 +183,24 @@ export function validateTtsBenchmarkManifest(manifest = {}) {
     missing_metadata.length > 0 ||
     unsafe_fields_present.length > 0 ||
     !benchmarkStatusAllowed ||
+    !candidateStatusAllowed ||
     !licenseReviewStatusAllowed ||
     !referenceConsentStatusAllowed ||
     !humanReviewStatusAllowed ||
+    benchmarkStatusBlocked ||
+    licenseReviewBlocked ||
+    referenceConsentBlocked ||
+    humanReviewBlocked ||
     prohibitedRuntimeActionPresent ||
     production_ready ||
     completedLabClaimsProduction ||
+    !mossV15CandidateStatusReady ||
+    !mossRealtimeCandidateStatusReady ||
     !mossCandidateSafe ||
+    !realtimeBenchmarkReady ||
+    !testedLanguagesArray ||
+    !testedLanguagesReadyForCompletedLab ||
+    !completedBenchmarkFieldsComplete ||
     !referenceConsentReady ||
     !humanReviewReady;
 
@@ -137,13 +225,24 @@ export function validateTtsBenchmarkManifest(manifest = {}) {
       missing_metadata,
       unsafe_fields_present,
       benchmarkStatusAllowed,
+      candidateStatusAllowed,
       licenseReviewStatusAllowed,
       referenceConsentStatusAllowed,
       humanReviewStatusAllowed,
+      benchmarkStatusBlocked,
+      licenseReviewBlocked,
+      referenceConsentBlocked,
+      humanReviewBlocked,
       prohibitedRuntimeActionPresent,
       production_ready,
       completedLabClaimsProduction,
+      mossV15CandidateStatusReady,
+      mossRealtimeCandidateStatusReady,
       mossCandidateSafe,
+      realtimeBenchmarkReady,
+      testedLanguagesArray,
+      testedLanguagesReadyForCompletedLab,
+      completedBenchmarkFieldsComplete,
       referenceConsentReady,
       humanReviewReady,
     }),

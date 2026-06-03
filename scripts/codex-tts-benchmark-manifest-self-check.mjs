@@ -48,6 +48,27 @@ function mossBenchmark(overrides = {}) {
   };
 }
 
+function completedMossBenchmark(overrides = {}) {
+  return mossBenchmark({
+    benchmark_status: "completed_lab_evaluation",
+    latency_benchmark_status: "completed",
+    text_to_first_audio_latency_ms: 140,
+    total_synthesis_latency_ms: 900,
+    gpu_benchmark_status: "completed",
+    vram_benchmark_status: "completed",
+    multilingual_benchmark_status: "completed",
+    tested_languages: ["ja", "en"],
+    pause_control_benchmark_status: "completed",
+    pronunciation_control_benchmark_status: "completed",
+    subtitle_alignment_benchmark_status: "completed",
+    lip_sync_alignment_benchmark_status: "completed",
+    live2d_alignment_benchmark_status: "completed",
+    long_form_benchmark_status: "completed",
+    quality_review_status: "approved_for_lab",
+    ...overrides,
+  });
+}
+
 function mossRealtimeBenchmark(overrides = {}) {
   return mossBenchmark({
     benchmark_id: "benchmark-2",
@@ -109,6 +130,67 @@ assert.equal(moss.model_downloaded, false);
 assert.equal(moss.api_call_performed, false);
 assert.equal(moss.blocked, false);
 
+const unknownCandidateStatus = validateTtsBenchmarkManifest(mossBenchmark({
+  candidate_status: "unknown",
+}));
+assert.equal(unknownCandidateStatus.blocked, true);
+assert.equal(unknownCandidateStatus.reason_codes.includes("candidate_status_not_allowed"), true);
+
+const blockedBenchmarkStatus = validateTtsBenchmarkManifest(mossBenchmark({
+  benchmark_status: "blocked",
+}));
+assert.equal(blockedBenchmarkStatus.blocked, true);
+assert.equal(blockedBenchmarkStatus.reason_codes.includes("benchmark_status_blocked"), true);
+
+const blockedLicenseReview = validateTtsBenchmarkManifest(mossBenchmark({
+  license_review_status: "blocked",
+}));
+assert.equal(blockedLicenseReview.blocked, true);
+assert.equal(blockedLicenseReview.reason_codes.includes("license_review_blocked"), true);
+
+const blockedHumanReview = validateTtsBenchmarkManifest(mossBenchmark({
+  human_review_status: "blocked",
+}));
+assert.equal(blockedHumanReview.blocked, true);
+assert.equal(blockedHumanReview.reason_codes.includes("human_review_blocked"), true);
+
+const blockedReferenceConsent = validateTtsBenchmarkManifest(mossBenchmark({
+  reference_voice_consent_status: "blocked",
+}));
+assert.equal(blockedReferenceConsent.blocked, true);
+assert.equal(
+  blockedReferenceConsent.reason_codes.includes("reference_voice_consent_blocked"),
+  true,
+);
+
+const mossV15RealtimeStatus = validateTtsBenchmarkManifest(mossBenchmark({
+  candidate_status: "separate_low_latency_candidate",
+  realtime_benchmark_status: "required",
+}));
+assert.equal(mossV15RealtimeStatus.blocked, true);
+assert.equal(
+  mossV15RealtimeStatus.reason_codes.includes("moss_tts_v1_5_candidate_status_invalid"),
+  true,
+);
+
+const mossRealtimeCandidateOnly = validateTtsBenchmarkManifest(mossRealtimeBenchmark({
+  candidate_status: "candidate_only",
+}));
+assert.equal(mossRealtimeCandidateOnly.blocked, true);
+assert.equal(
+  mossRealtimeCandidateOnly.reason_codes.includes("moss_tts_realtime_candidate_status_invalid"),
+  true,
+);
+
+const realtimeWithoutBenchmark = validateTtsBenchmarkManifest(mossRealtimeBenchmark({
+  realtime_benchmark_status: "not_applicable",
+}));
+assert.equal(realtimeWithoutBenchmark.blocked, true);
+assert.equal(
+  realtimeWithoutBenchmark.reason_codes.includes("realtime_candidate_requires_realtime_benchmark"),
+  true,
+);
+
 const endpointConfigured = validateTtsBenchmarkManifest(mossBenchmark({ endpoint_configured: true }));
 assert.equal(endpointConfigured.blocked, true);
 assert.equal(endpointConfigured.reason_codes.includes("runtime_side_effect_prohibited"), true);
@@ -121,16 +203,40 @@ const workflowChanged = validateTtsBenchmarkManifest(mossBenchmark({ workflow_ch
 assert.equal(workflowChanged.blocked, true);
 assert.equal(workflowChanged.reason_codes.includes("runtime_side_effect_prohibited"), true);
 
-const completedLab = validateTtsBenchmarkManifest(mossBenchmark({
-  benchmark_status: "completed_lab_evaluation",
-  latency_benchmark_status: "completed",
-  text_to_first_audio_latency_ms: 140,
-  total_synthesis_latency_ms: 900,
+const completedWithNoLanguages = validateTtsBenchmarkManifest(completedMossBenchmark({
+  tested_languages: [],
 }));
+assert.equal(completedWithNoLanguages.blocked, true);
+assert.equal(
+  completedWithNoLanguages.reason_codes.includes(
+    "tested_languages_required_for_completed_lab_evaluation",
+  ),
+  true,
+);
+
+const invalidLanguages = validateTtsBenchmarkManifest(mossBenchmark({
+  tested_languages: "ja",
+}));
+assert.equal(invalidLanguages.blocked, true);
+assert.equal(invalidLanguages.reason_codes.includes("tested_languages_must_be_array"), true);
+
+const completedWithIncompleteFields = validateTtsBenchmarkManifest(completedMossBenchmark({
+  gpu_benchmark_status: "required",
+}));
+assert.equal(completedWithIncompleteFields.blocked, true);
+assert.equal(
+  completedWithIncompleteFields.reason_codes.includes(
+    "completed_lab_evaluation_requires_completed_benchmark_fields",
+  ),
+  true,
+);
+
+const completedLab = validateTtsBenchmarkManifest(completedMossBenchmark());
 assert.equal(completedLab.blocked, false);
 assert.equal(completedLab.production_ready, false);
 assert.equal(completedLab.runtime_adoption_allowed, false);
 assert.equal(completedLab.runtime_readiness_claimed, false);
+assert.equal(completedLab.production_readiness_claimed, false);
 
 const mossRealtime = validateTtsBenchmarkManifest(mossRealtimeBenchmark());
 assert.equal(mossRealtime.blocked, false);
@@ -192,7 +298,7 @@ const summary = buildTtsBenchmarkSafeSummary([
   mossBenchmark({ endpoint_configured: true }),
   mossBenchmark({ package_dependency_added: true }),
   mossBenchmark({ workflow_changed: true }),
-  mossBenchmark({ benchmark_status: "completed_lab_evaluation" }),
+  completedMossBenchmark(),
   mossBenchmark({ reference_voice_consent_status: "missing_consent" }),
   mossBenchmark({ human_review_status: "pending" }),
   mockBenchmark({ production_ready: true }),

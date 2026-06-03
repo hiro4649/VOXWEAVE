@@ -49,6 +49,27 @@ export const TTS_BENCHMARK_STATUSES = Object.freeze([
   "completed_lab_evaluation",
 ]);
 
+export const TTS_BENCHMARK_CANDIDATE_STATUSES = Object.freeze([
+  "candidate_only",
+  "lab_only",
+  "benchmark_required",
+  "separate_low_latency_candidate",
+  "blocked",
+]);
+
+export const TTS_BENCHMARK_COMPLETED_FIELD_STATUSES = Object.freeze([
+  "completed",
+  "approved_for_lab",
+  "not_required_for_mock",
+]);
+
+export const TTS_BENCHMARK_REALTIME_FIELD_STATUSES = Object.freeze([
+  "required",
+  "planned",
+  "not_started",
+  "completed_lab_evaluation",
+]);
+
 export const TTS_BENCHMARK_LICENSE_REVIEW_STATUSES = Object.freeze([
   "required",
   "pending",
