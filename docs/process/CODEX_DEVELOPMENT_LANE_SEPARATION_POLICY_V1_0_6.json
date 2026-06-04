@@ -1,0 +1,109 @@
+{
+  "policy_id": "codex-development-lane-separation-policy-v1-0-6",
+  "status": "implementation_candidate_policy",
+  "main_reflected": false,
+  "runtime_readiness_claimed": false,
+  "production_readiness_claimed": false,
+  "real_tts_readiness_claimed": false,
+  "merge_readiness": false,
+  "development_mode": "5.5-low",
+  "safe_summary_only": true,
+  "lanes": {
+    "merge": {
+      "status": "blocked",
+      "allowed_actions": ["read_only_readiness_classification"],
+      "blocked_actions": ["merge", "merge_ready_claim", "review_bypass", "quality_gate_bypass"],
+      "safe_next_action": "keep merge lane blocked until review governance and quality-gate evidence are complete"
+    },
+    "runtime": {
+      "status": "blocked",
+      "allowed_actions": ["read_only_runtime_prerequisite_classification"],
+      "blocked_actions": ["runtime_connection", "adapter_path_connection", "orchestrator_connection"],
+      "safe_next_action": "keep runtime lane blocked until adapter contract prerequisites are complete"
+    },
+    "existing_pr": {
+      "status": "preserve_only",
+      "allowed_actions": ["read_only_classification"],
+      "blocked_actions": ["edit_existing_pr", "comment", "review_request", "rerun", "rebase", "merge"],
+      "safe_next_action": "preserve existing PRs without edits, reruns, rebases, comments, or merges"
+    },
+    "docs_only_planning": {
+      "status": "allowed_if_explicitly_scoped",
+      "allowed_actions": ["draft_docs_process_only_planning"],
+      "blocked_actions": ["runtime_change", "src_change", "test_change", "package_change", "workflow_change"],
+      "safe_next_action": "continue docs-only planning within the explicit scope only"
+    },
+    "spec_persistence": {
+      "status": "allowed_if_docs_only",
+      "allowed_actions": ["draft_docs_process_only_spec_persistence"],
+      "blocked_actions": ["runtime_change", "src_change", "test_change", "package_change", "workflow_change"],
+      "safe_next_action": "persist specifications in docs/process only"
+    },
+    "roadmap_recovery": {
+      "status": "allowed_if_docs_only",
+      "allowed_actions": ["draft_docs_process_only_roadmap_planning"],
+      "blocked_actions": ["implementation_restart", "runtime_change", "src_change", "package_change", "workflow_change"],
+      "safe_next_action": "record ordering and recovery decisions without implementing product changes"
+    },
+    "common_utility_planning": {
+      "status": "allowed_if_docs_only",
+      "allowed_actions": ["draft_docs_process_only_common_utility_planning"],
+      "blocked_actions": ["shared_utility_implementation", "runtime_change", "src_change", "package_change", "workflow_change"],
+      "safe_next_action": "plan common utilities without implementing or migrating existing PRs"
+    },
+    "new_schema_validator": {
+      "status": "blocked_by_default",
+      "allowed_actions": ["none_without_explicit_later_scope"],
+      "blocked_actions": ["schema_creation", "validator_creation"],
+      "safe_next_action": "do not create new schema or validator work unless explicitly scoped later"
+    },
+    "new_runtime_integration": {
+      "status": "blocked",
+      "allowed_actions": ["none"],
+      "blocked_actions": ["runtime_integration", "adapter_path_connection", "orchestrator_connection"],
+      "safe_next_action": "do not start runtime integration while runtime lane remains blocked"
+    },
+    "new_product_implementation": {
+      "status": "blocked_by_default",
+      "allowed_actions": ["none_without_explicit_later_scope"],
+      "blocked_actions": ["product_implementation", "runtime_change", "feature_implementation"],
+      "safe_next_action": "do not create product implementation inventory by default"
+    },
+    "review_governance": {
+      "status": "read_only_monitoring",
+      "allowed_actions": ["read_only_metadata_monitoring"],
+      "blocked_actions": ["comment", "review_request", "writer_self_review_pass", "review_independence_weakening"],
+      "safe_next_action": "monitor review governance metadata read-only without comments or review requests"
+    },
+    "state_change_monitoring": {
+      "status": "only_if_state_delta_detected",
+      "allowed_actions": ["read_only_state_delta_monitoring"],
+      "blocked_actions": ["repeated_monitoring_without_delta", "rerun", "rebase", "merge"],
+      "safe_next_action": "perform read-only monitoring only when a state delta exists"
+    }
+  },
+  "global_blocked_actions": [
+    "runtime_readiness_claim",
+    "production_readiness_claim",
+    "real_tts_readiness_claim",
+    "merge_readiness_claim",
+    "existing_preserve_pr_touch",
+    "runtime_touch",
+    "src_touch",
+    "test_touch",
+    "workflow_touch",
+    "package_touch",
+    "tts_engine_call",
+    "moss_tts_call",
+    "miso_tts_call",
+    "irodori_tts_call",
+    "live2d_renderer_call",
+    "model_download",
+    "api_call",
+    "endpoint_config",
+    "benchmark_execution",
+    "quality_gate_weakening",
+    "review_independence_weakening",
+    "writer_self_review_pass"
+  ]
+}
