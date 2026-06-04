@@ -72,13 +72,13 @@
     "review_governance": {
       "status": "read_only_monitoring",
       "allowed_actions": ["read_only_metadata_monitoring"],
-      "blocked_actions": ["comment", "review_request", "writer_self_review_pass", "review_independence_weakening"],
+      "blocked_actions": ["comment", "review_request", "writer_self_review_pass", "review_independence_weakening", "changed_file_write", "file_change_attempt"],
       "safe_next_action": "monitor review governance metadata read-only without comments or review requests"
     },
     "state_change_monitoring": {
       "status": "only_if_state_delta_detected",
       "allowed_actions": ["read_only_state_delta_monitoring"],
-      "blocked_actions": ["repeated_monitoring_without_delta", "rerun", "rebase", "merge"],
+      "blocked_actions": ["repeated_monitoring_without_delta", "rerun", "rebase", "merge", "changed_file_write", "file_change_attempt"],
       "safe_next_action": "perform read-only monitoring only when a state delta exists"
     }
   },
@@ -91,8 +91,10 @@
     "runtime_touch",
     "src_touch",
     "test_touch",
+    "scripts_touch",
     "workflow_touch",
     "package_touch",
+    "readme_touch",
     "tts_engine_call",
     "moss_tts_call",
     "miso_tts_call",
@@ -104,6 +106,8 @@
     "benchmark_execution",
     "quality_gate_weakening",
     "review_independence_weakening",
-    "writer_self_review_pass"
+    "writer_self_review_pass",
+    "review_governance_write_attempt",
+    "state_change_monitoring_write_attempt"
   ]
 }

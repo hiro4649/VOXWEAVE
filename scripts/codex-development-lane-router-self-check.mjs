@@ -47,11 +47,42 @@ results.push(check("docs-only planning src change blocked", {
   touches_src: true,
 }, { status: "blocked", allowed: false, blocked: true, reasonCode: "src_touch_blocked" }));
 
+results.push(check("docs-only planning scripts touch blocked", {
+  ...docsOnlyBase,
+  lane: "docs_only_planning",
+  touches_scripts: true,
+}, { status: "blocked", allowed: false, blocked: true, reasonCode: "scripts_touch_blocked" }));
+
+results.push(check("docs-only planning readme touch blocked", {
+  ...docsOnlyBase,
+  lane: "docs_only_planning",
+  touches_readme: true,
+}, { status: "blocked", allowed: false, blocked: true, reasonCode: "readme_touch_blocked" }));
+
+results.push(check("docs-only planning scripts path blocked", {
+  ...docsOnlyBase,
+  lane: "docs_only_planning",
+  changed_files: ["scripts/example.mjs"],
+}, { status: "blocked", allowed: false, blocked: true, reasonCode: "scripts_touch_blocked" }));
+
+results.push(check("docs-only planning readme path blocked", {
+  ...docsOnlyBase,
+  lane: "docs_only_planning",
+  changed_files: ["README.md"],
+}, { status: "blocked", allowed: false, blocked: true, reasonCode: "readme_touch_blocked" }));
+
 results.push(check("spec persistence allowed", {
   ...docsOnlyBase,
   explicit_user_scope_change: false,
   lane: "spec_persistence",
 }, { status: "allowed", allowed: true, blocked: false }));
+
+results.push(check("spec persistence non-process docs blocked", {
+  ...docsOnlyBase,
+  explicit_user_scope_change: false,
+  lane: "spec_persistence",
+  changed_files: ["docs/OTHER.md"],
+}, { status: "blocked", allowed: false, blocked: true, reasonCode: "docs_only_scope_required" }));
 
 results.push(check("roadmap recovery allowed", {
   ...docsOnlyBase,
@@ -59,11 +90,25 @@ results.push(check("roadmap recovery allowed", {
   lane: "roadmap_recovery",
 }, { status: "allowed", allowed: true, blocked: false }));
 
+results.push(check("roadmap recovery draft required", {
+  ...docsOnlyBase,
+  explicit_user_scope_change: false,
+  lane: "roadmap_recovery",
+  is_draft: false,
+}, { status: "blocked", allowed: false, blocked: true, reasonCode: "draft_required" }));
+
 results.push(check("common utility planning allowed", {
   ...docsOnlyBase,
   explicit_user_scope_change: false,
   lane: "common_utility_planning",
 }, { status: "allowed", allowed: true, blocked: false }));
+
+results.push(check("common utility planning changed file required", {
+  ...docsOnlyBase,
+  explicit_user_scope_change: false,
+  lane: "common_utility_planning",
+  changed_files: [],
+}, { status: "blocked", allowed: false, blocked: true, reasonCode: "docs_only_scope_required" }));
 
 results.push(check("merge lane blocked", { lane: "merge" }, {
   status: "blocked",
@@ -108,6 +153,16 @@ results.push(check("review governance read-only monitoring", { lane: "review_gov
   blocked: false,
 }));
 
+results.push(check("review governance src path blocked", {
+  lane: "review_governance",
+  changed_files: ["src/example.js"],
+}, { status: "blocked", allowed: false, blocked: true, reasonCode: "src_touch_blocked" }));
+
+results.push(check("review governance write attempt blocked", {
+  lane: "review_governance",
+  changed_files: ["docs/process/CODEX_EXAMPLE.md"],
+}, { status: "blocked", allowed: false, blocked: true, reasonCode: "review_governance_must_be_read_only" }));
+
 results.push(check("state change monitoring without delta blocked", { lane: "state_change_monitoring" }, {
   status: "blocked_repeated_monitoring",
   allowed: false,
@@ -119,6 +174,18 @@ results.push(check("state change monitoring with delta allowed", {
   lane: "state_change_monitoring",
   state_delta_detected: true,
 }, { status: "allowed_monitoring", allowed: true, blocked: false }));
+
+results.push(check("state change monitoring package path blocked", {
+  lane: "state_change_monitoring",
+  state_delta_detected: true,
+  changed_files: ["package.json"],
+}, { status: "blocked", allowed: false, blocked: true, reasonCode: "package_touch_blocked" }));
+
+results.push(check("state change monitoring write attempt blocked", {
+  lane: "state_change_monitoring",
+  state_delta_detected: true,
+  changed_files: ["docs/process/CODEX_EXAMPLE.md"],
+}, { status: "blocked", allowed: false, blocked: true, reasonCode: "state_change_monitoring_must_be_read_only" }));
 
 const blockedCases = [
   ["runtime readiness claim", "runtime_readiness_claimed", "runtime_readiness_claim_blocked"],
@@ -150,7 +217,15 @@ const summary = buildDevelopmentLaneSafeSummary([
   ...results,
   {
     lane: "docs_only_planning",
-    changed_files: ["raw/path/should/not/export.js"],
+    changed_files: [
+      "scripts/example.mjs",
+      "README.md",
+      "src/example.js",
+      "package.json",
+      "docs/process/CODEX_EXAMPLE.md",
+    ],
+    branch_name: "codex/private-branch",
+    pr_body: "raw PR body",
     endpoint: "https://bad.invalid",
     api_key: "bad",
     token: "bad",
@@ -158,12 +233,19 @@ const summary = buildDevelopmentLaneSafeSummary([
     model_path: "C:/private/model",
     dataset_path: "C:/private/dataset",
     raw_payload: "bad",
+    raw_logs: "bad",
   },
 ]);
 
 const serializedSummary = JSON.stringify(summary);
 const forbiddenSummaryFragments = [
-  "raw/path/should/not/export.js",
+  "scripts/example.mjs",
+  "README.md",
+  "src/example.js",
+  "package.json",
+  "docs/process/CODEX_EXAMPLE.md",
+  "codex/private-branch",
+  "raw PR body",
   "endpoint",
   "api_key",
   "token",
@@ -171,6 +253,7 @@ const forbiddenSummaryFragments = [
   "model_path",
   "dataset_path",
   "raw_payload",
+  "raw_logs",
   "https://bad.invalid",
   "C:/private/model",
   "C:/private/dataset",
@@ -184,6 +267,6 @@ assert.equal(summary.safe_summary_only, true, "summary safe_summary_only");
 
 console.log(JSON.stringify({
   status: "pass",
-  checked_cases: 30,
+  checked_cases: results.length,
   safe_summary_only: summary.safe_summary_only,
 }));

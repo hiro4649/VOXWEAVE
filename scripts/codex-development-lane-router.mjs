@@ -29,8 +29,10 @@ const BLOCKED_FIELDS = [
   ["touches_runtime", "runtime_touch_blocked"],
   ["touches_src", "src_touch_blocked"],
   ["touches_test", "test_touch_blocked"],
+  ["touches_scripts", "scripts_touch_blocked"],
   ["touches_github_workflow", "workflow_touch_blocked"],
   ["touches_package", "package_touch_blocked"],
+  ["touches_readme", "readme_touch_blocked"],
   ["calls_tts_engine", "tts_engine_call_blocked"],
   ["calls_moss_tts", "moss_tts_call_blocked"],
   ["calls_miso_tts", "miso_tts_call_blocked"],
@@ -90,6 +92,46 @@ function isDocsProcessOnly(changedFiles) {
     && changedFiles.every((file) => typeof file === "string" && file.startsWith("docs/process/"));
 }
 
+function collectPathDerivedBlockedReasons(changedFiles) {
+  const reasonCodes = [];
+
+  for (const file of changedFiles) {
+    if (typeof file !== "string") {
+      continue;
+    }
+
+    if (file.startsWith("src/")) {
+      reasonCodes.push("src_touch_blocked");
+    }
+
+    if (file.startsWith("test/")) {
+      reasonCodes.push("test_touch_blocked");
+    }
+
+    if (file.startsWith("scripts/")) {
+      reasonCodes.push("scripts_touch_blocked");
+    }
+
+    if (file.startsWith(".github/")) {
+      reasonCodes.push("workflow_touch_blocked");
+    }
+
+    if (file === "package.json" || file === "package-lock.json") {
+      reasonCodes.push("package_touch_blocked");
+    }
+
+    if (file === "README.md") {
+      reasonCodes.push("readme_touch_blocked");
+    }
+
+    if (file.startsWith("runtime/") || file.startsWith("apps/") || file.startsWith("contracts/")) {
+      reasonCodes.push("runtime_touch_blocked");
+    }
+  }
+
+  return reasonCodes;
+}
+
 function buildResult({ lane, status, allowed, blocked, reasonCodes, safeNextAction }) {
   return {
     status,
@@ -103,9 +145,12 @@ function buildResult({ lane, status, allowed, blocked, reasonCodes, safeNextActi
 }
 
 function collectGlobalBlockedReasons(input) {
-  return BLOCKED_FIELDS
+  return [
+    ...BLOCKED_FIELDS
     .filter(([field]) => input[field] === true)
-    .map(([, reasonCode]) => reasonCode);
+    .map(([, reasonCode]) => reasonCode),
+    ...collectPathDerivedBlockedReasons(input.changed_files),
+  ];
 }
 
 function classifyDocsOnlyLane(input, globalReasons) {
@@ -121,10 +166,6 @@ function classifyDocsOnlyLane(input, globalReasons) {
 
   if (input.lane === "docs_only_planning" && !input.explicit_user_scope_change) {
     reasonCodes.push("explicit_scope_required");
-  }
-
-  if (input.touches_readme) {
-    reasonCodes.push("docs_only_scope_required");
   }
 
   const blocked = reasonCodes.length > 0;
@@ -237,6 +278,17 @@ export function classifyDevelopmentLane(rawInput = {}) {
   }
 
   if (input.lane === "review_governance") {
+    if (input.changed_files.length > 0) {
+      return buildResult({
+        lane: input.lane,
+        status: "blocked",
+        allowed: false,
+        blocked: true,
+        reasonCodes: ["review_governance_must_be_read_only"],
+        safeNextAction: "monitor review governance metadata read-only without file changes",
+      });
+    }
+
     return buildResult({
       lane: input.lane,
       status: "read_only_monitoring",
@@ -248,6 +300,17 @@ export function classifyDevelopmentLane(rawInput = {}) {
   }
 
   if (input.lane === "state_change_monitoring") {
+    if (input.changed_files.length > 0) {
+      return buildResult({
+        lane: input.lane,
+        status: "blocked",
+        allowed: false,
+        blocked: true,
+        reasonCodes: ["state_change_monitoring_must_be_read_only"],
+        safeNextAction: "monitor state changes read-only without file changes",
+      });
+    }
+
     if (!input.state_delta_detected) {
       return buildResult({
         lane: input.lane,

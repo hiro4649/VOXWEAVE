@@ -69,8 +69,10 @@
           "runtime_touch_blocked",
           "src_touch_blocked",
           "test_touch_blocked",
+          "scripts_touch_blocked",
           "workflow_touch_blocked",
           "package_touch_blocked",
+          "readme_touch_blocked",
           "tts_engine_call_blocked",
           "moss_tts_call_blocked",
           "miso_tts_call_blocked",
@@ -84,6 +86,8 @@
           "review_independence_weakening_blocked",
           "writer_self_review_pass_blocked",
           "state_delta_required_for_monitoring",
+          "review_governance_must_be_read_only",
+          "state_change_monitoring_must_be_read_only",
           "explicit_scope_required"
         ]
       },
