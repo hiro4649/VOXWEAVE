@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "VOXWEAVE v1.0.6 Release Readiness Status",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "status",
+    "candidate_version",
+    "current_active_harness",
+    "rollout_ready",
+    "main_reflection_ready",
+    "active_harness_ready",
+    "blocked",
+    "reason_codes",
+    "safe_next_action",
+    "safe_summary_only"
+  ],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": [
+        "blocked",
+        "ready_for_final_governance_review"
+      ]
+    },
+    "candidate_version": {
+      "type": "string"
+    },
+    "current_active_harness": {
+      "type": "string"
+    },
+    "rollout_ready": {
+      "type": "boolean"
+    },
+    "main_reflection_ready": {
+      "type": "boolean"
+    },
+    "active_harness_ready": {
+      "type": "boolean"
+    },
+    "blocked": {
+      "type": "boolean"
+    },
+    "reason_codes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "candidate_version_not_v106",
+          "stack_prs_incomplete",
+          "pr33_router_not_complete",
+          "pr36_safe_summary_module_not_complete",
+          "pr37_active_diagnostic_not_complete",
+          "pr39_bounded_runner_not_complete",
+          "full_target_mode_pass_missing",
+          "remote_same_head_quality_gate_missing",
+          "independent_reviewer_metadata_missing",
+          "quality_gate_blockers_unresolved",
+          "explicit_rollout_scope_missing",
+          "stacked_dependency_unresolved",
+          "active_quality_gate_behavior_change_blocked",
+          "pass_fail_semantics_change_blocked",
+          "target_quality_score_change_blocked",
+          "workflow_change_blocked",
+          "package_change_blocked",
+          "runtime_change_blocked",
+          "review_governance_behavior_change_blocked",
+          "runtime_readiness_claim_blocked",
+          "production_readiness_claim_blocked",
+          "real_tts_readiness_claim_blocked",
+          "merge_readiness_claim_blocked"
+        ]
+      },
+      "uniqueItems": true
+    },
+    "safe_next_action": {
+      "type": "string",
+      "enum": [
+        "preserve_v106_candidate_stack_until_full_target_mode_or_remote_same_head_evidence_and_review_governance_are_resolved",
+        "still_require_final_governance_review_before_merge"
+      ]
+    },
+    "safe_summary_only": {
+      "const": true
+    }
+  }
+}
