@@ -13,6 +13,10 @@ function assertCondition(condition, message) {
   }
 }
 
+function countOccurrences(text, pattern) {
+  return (text.match(new RegExp(pattern, 'g')) || []).length;
+}
+
 function assertFixedFalseFlags(summary) {
   assertCondition(summary.active_quality_gate_integration === false, 'active integration flag changed');
   assertCondition(summary.pass_fail_semantics_changed === false, 'pass/fail semantics flag changed');
@@ -35,6 +39,11 @@ function assertDiagnosticBlockIsObservationOnly(text) {
   assertCondition(blocks.length > 0, 'diagnostic-only block missing');
 
   const forbiddenUsages = [
+    'report.status',
+    'report.mergeReady',
+    'report.localGate',
+    'failures',
+    'warnings',
     'process.exit',
     'throw',
     'qualityScore',
@@ -56,6 +65,92 @@ function assertDiagnosticBlockIsObservationOnly(text) {
   }
 }
 
+function assertDiagnosticMarkersPresent(text) {
+  const markers = [
+    'CODEX_DEVELOPMENT_LANE_ROUTER_DIAGNOSTIC_ONLY_NO_PASS_FAIL_SEMANTICS',
+    'CODEX_DEVELOPMENT_LANE_ROUTER_DIAGNOSTIC_ONLY_NO_TARGET_QUALITY_SCORE_CHANGE',
+    'CODEX_DEVELOPMENT_LANE_ROUTER_DIAGNOSTIC_ONLY_NO_REVIEW_GOVERNANCE_CHANGE',
+    'CODEX_DEVELOPMENT_LANE_ROUTER_DIAGNOSTIC_ONLY_NO_MERGE_READINESS_CHANGE',
+    'CODEX_DEVELOPMENT_LANE_ROUTER_DIAGNOSTIC_ONLY_NO_RUNTIME_READINESS_CHANGE',
+  ];
+
+  for (const marker of markers) {
+    assertCondition(text.includes(marker), `diagnostic marker missing: ${marker}`);
+  }
+}
+
+function assertDiagnosticFieldUsageIsAssignmentOnly(text) {
+  const lines = text.split(/\r?\n/);
+  const fieldNames = [
+    'developmentLaneRouterIntegrationStatus',
+    'developmentLaneRouterIntegrationSummary',
+  ];
+  const forbiddenNearFieldUsages = [
+    'if',
+    'else if',
+    'switch',
+    'throw',
+    'process.exit',
+    'failures.push',
+    'warnings.push',
+    'qualityScore',
+    'targetQualityScore',
+    'mergeReady',
+    'reviewIndependence',
+    'runtimeReadiness',
+    'productionGo',
+    'blockers',
+    'blocking',
+  ];
+
+  for (const fieldName of fieldNames) {
+    const occurrenceIndexes = lines
+      .map((line, index) => ({ line, index }))
+      .filter(({ line }) => line.includes(fieldName));
+    assertCondition(occurrenceIndexes.length === 1, `${fieldName} must appear once in local gate`);
+
+    const { line, index } = occurrenceIndexes[0];
+    assertCondition(
+      line.trim() === `report.${fieldName} = ${fieldName === 'developmentLaneRouterIntegrationStatus' ? "'diagnostic_only'" : 'buildDevelopmentLaneRouterDiagnosticSummary()'};`,
+      `${fieldName} must be diagnostic assignment only`,
+    );
+
+    const nearbyText = lines.slice(Math.max(0, index - 3), Math.min(lines.length, index + 4)).join('\n');
+    for (const forbiddenUsage of forbiddenNearFieldUsages) {
+      if (forbiddenUsage === 'mergeReady') {
+        assertCondition(!nearbyText.includes('report.mergeReady'), `${fieldName} is near mergeReady use`);
+      } else {
+        assertCondition(!nearbyText.includes(forbiddenUsage), `${fieldName} is near forbidden use: ${forbiddenUsage}`);
+      }
+    }
+  }
+}
+
+function assertDiagnosticAttachmentShape(text) {
+  assertCondition(text.includes('function buildDevelopmentLaneRouterDiagnosticSummary()'), 'diagnostic summary function missing');
+  assertCondition(text.includes('function attachDevelopmentLaneRouterDiagnostic(report)'), 'diagnostic attachment function missing');
+  assertCondition(
+    text.includes("report.developmentLaneRouterIntegrationStatus = 'diagnostic_only';"),
+    'diagnostic status assignment missing',
+  );
+  assertCondition(
+    text.includes('report.developmentLaneRouterIntegrationSummary = buildDevelopmentLaneRouterDiagnosticSummary();'),
+    'diagnostic summary assignment missing',
+  );
+
+  const blocks = diagnosticOnlyBlocks(text);
+  const combinedBlockText = blocks.join('\n');
+  assertCondition(
+    countOccurrences(combinedBlockText, 'report\\.developmentLaneRouterIntegration') === 2,
+    'diagnostic attachment must add exactly two report fields',
+  );
+}
+
+function assertDiagnosticCoverage(text) {
+  const attachCount = countOccurrences(text, 'attachDevelopmentLaneRouterDiagnostic\\(report\\)');
+  assertCondition(attachCount >= 4, 'diagnostic attachment coverage must cover multiple report paths');
+}
+
 assertCondition(
   localGateText.includes("from './codex-development-lane-router-safe-summary-integration.mjs'"),
   'local quality gate does not import lane router safe summary integration',
@@ -65,7 +160,11 @@ assertCondition(
     && localGateText.includes('developmentLaneRouterIntegrationSummary'),
   'local quality gate does not expose lane router diagnostic fields',
 );
+assertDiagnosticMarkersPresent(localGateText);
 assertDiagnosticBlockIsObservationOnly(localGateText);
+assertDiagnosticFieldUsageIsAssignmentOnly(localGateText);
+assertDiagnosticAttachmentShape(localGateText);
+assertDiagnosticCoverage(localGateText);
 
 const summary = buildDevelopmentLaneIntegrationSafeSummary({
   source: 'future_quality_gate_safe_summary',
@@ -94,6 +193,13 @@ const summary = buildDevelopmentLaneIntegrationSafeSummary({
       raw_payload: 'raw_payload',
       raw_logs: 'raw logs',
       url: 'https://bad.invalid',
+      developmentLaneRouterIntegrationStatus: 'developmentLaneRouterIntegrationStatus_private_suffix',
+      developmentLaneRouterIntegrationSummary: 'developmentLaneRouterIntegrationSummary_private_suffix',
+      qualityScore: 'qualityScore_private_suffix',
+      mergeReady: 'mergeReady_private_suffix',
+      reviewIndependence: 'reviewIndependence_private_suffix',
+      runtimeReadiness: 'runtimeReadiness_private_suffix',
+      productionGo: 'productionGo_private_suffix',
     },
     {
       lane: 'docs_only_planning',
@@ -156,6 +262,13 @@ const forbiddenLeaks = [
   'https://bad.invalid',
   'C:/private/model',
   'C:/private/dataset',
+  'developmentLaneRouterIntegrationStatus_private_suffix',
+  'developmentLaneRouterIntegrationSummary_private_suffix',
+  'qualityScore_private_suffix',
+  'mergeReady_private_suffix',
+  'reviewIndependence_private_suffix',
+  'runtimeReadiness_private_suffix',
+  'productionGo_private_suffix',
 ];
 
 for (const forbiddenLeak of forbiddenLeaks) {
@@ -164,6 +277,14 @@ for (const forbiddenLeak of forbiddenLeaks) {
 
 console.log(JSON.stringify({
   status: 'pass',
+  development_lane_diagnostic_usage_status: 'pass',
+  development_lane_diagnostic_attachment_status: 'pass',
+  development_lane_diagnostic_coverage_status: 'pass',
+  diagnostic_only_no_pass_fail_semantics: true,
+  diagnostic_only_no_target_quality_score_change: true,
+  diagnostic_only_no_review_governance_change: true,
+  diagnostic_only_no_merge_readiness_change: true,
+  diagnostic_only_no_runtime_readiness_change: true,
   active_quality_gate_integration: false,
   pass_fail_semantics_changed: false,
   target_quality_score_changed: false,
