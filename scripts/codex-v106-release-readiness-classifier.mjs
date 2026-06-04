@@ -2,7 +2,7 @@
 
 import { fileURLToPath } from 'node:url';
 
-const REQUIRED_STACK_PRS = ['#32', '#33', '#34', '#35', '#36', '#37', '#38', '#39'];
+const REQUIRED_STACK_PRS = ['#32', '#33', '#34', '#35', '#36', '#37', '#38', '#39', '#40'];
 
 const SAFE_NEXT_ACTION_BLOCKED = 'preserve_v106_candidate_stack_until_full_target_mode_or_remote_same_head_evidence_and_review_governance_are_resolved';
 const SAFE_NEXT_ACTION_READY = 'still_require_final_governance_review_before_merge';
@@ -35,18 +35,27 @@ export function classifyV106ReleaseReadiness(input = {}) {
   const currentActiveHarness = input.current_active_harness || 'unknown';
   const candidateVersion = input.candidate_version || 'unknown';
 
+  if (currentActiveHarness !== 'v1.0.5') reasonCodes.push('active_harness_not_v105');
   if (candidateVersion !== 'v1.0.6') reasonCodes.push('candidate_version_not_v106');
   if (!hasCompleteStack(input.stack_prs)) reasonCodes.push('stack_prs_incomplete');
+  if (input.pr32_design_complete !== true) reasonCodes.push('pr32_design_not_complete');
   if (input.pr33_standalone_router_complete !== true) reasonCodes.push('pr33_router_not_complete');
+  if (input.pr34_integration_plan_complete !== true) reasonCodes.push('pr34_integration_plan_not_complete');
+  if (input.pr35_rehearsal_complete !== true) reasonCodes.push('pr35_rehearsal_not_complete');
   if (input.pr36_safe_summary_module_complete !== true) reasonCodes.push('pr36_safe_summary_module_not_complete');
   if (input.pr37_active_diagnostic_complete !== true) reasonCodes.push('pr37_active_diagnostic_not_complete');
+  if (input.pr38_bounded_strategy_complete !== true) reasonCodes.push('pr38_bounded_strategy_not_complete');
   if (input.pr39_bounded_runner_complete !== true) reasonCodes.push('pr39_bounded_runner_not_complete');
+  if (input.pr40_classifier_complete !== true) reasonCodes.push('pr40_classifier_not_complete');
   if (input.pr37_full_target_mode_pass_confirmed !== true) reasonCodes.push('full_target_mode_pass_missing');
   if (input.remote_same_head_quality_gate_green !== true) reasonCodes.push('remote_same_head_quality_gate_missing');
   if (input.independent_reviewer_metadata_resolved !== true) reasonCodes.push('independent_reviewer_metadata_missing');
   if (input.quality_gate_blockers_resolved !== true) reasonCodes.push('quality_gate_blockers_unresolved');
   if (input.explicit_rollout_scope_granted !== true) reasonCodes.push('explicit_rollout_scope_missing');
-  if (input.stacked_dependency_resolved !== true) reasonCodes.push('stacked_dependency_unresolved');
+  if (input.stacked_dependency_resolved !== true) {
+    reasonCodes.push('stacked_dependency_unresolved');
+    reasonCodes.push('stacked_pr_not_main_independent');
+  }
 
   for (const [field, reasonCode] of BLOCKING_FIELDS) {
     if (input[field] === true) reasonCodes.push(reasonCode);
@@ -61,8 +70,8 @@ export function classifyV106ReleaseReadiness(input = {}) {
     candidate_version: candidateVersion,
     current_active_harness: currentActiveHarness,
     rollout_ready: rolloutReady,
-    main_reflection_ready: rolloutReady,
-    active_harness_ready: rolloutReady,
+    main_reflection_ready: false,
+    active_harness_ready: false,
     blocked,
     reason_codes: uniqueReasonCodes,
     safe_next_action: rolloutReady ? SAFE_NEXT_ACTION_READY : SAFE_NEXT_ACTION_BLOCKED,
