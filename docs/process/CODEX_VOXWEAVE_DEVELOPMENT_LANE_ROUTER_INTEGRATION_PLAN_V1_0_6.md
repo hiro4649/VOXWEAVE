@@ -18,6 +18,14 @@
 - Merge readiness: no
 - Development mode: 5.5-low
 - User manual work avoided: yes
+- Active quality-gate integration: no
+- Pass/fail semantics change: prohibited
+- Target quality score change: prohibited
+- Workflow change: prohibited
+- Package change: prohibited
+- Runtime change: prohibited
+- Review independence weakening: prohibited
+- Quality-gate weakening: prohibited
 
 This document plans a future non-merge, no-pass-fail-change integration path
 for the PR #33 Development Lane Router. It does not connect the router to the
@@ -45,6 +53,28 @@ merge permission. It does not claim runtime, production, or real TTS readiness.
 - Runtime readiness claim: prohibited.
 - Production readiness claim: prohibited.
 - Real TTS readiness claim: prohibited.
+
+## PR #33 Standalone Router Reference
+
+- PR #33 latest SHA: 6d72a6cf5e542477c40b331cd368a424aa3702ec
+- standaloneReadinessStatus: complete_preserve_only
+- self-check status: pass
+- checked_cases: 40
+- safe summary behavior: count-only and non-leaking
+- Active quality-gate integration: no
+- Merge readiness: no
+
+PR #33 completed hardening includes:
+
+- scripts_touch_blocked reason code
+- readme_touch_blocked reason code
+- review_governance_must_be_read_only reason code
+- state_change_monitoring_must_be_read_only reason code
+- path-derived blocking for src, test, scripts, .github, package files, README, runtime, apps, and contracts
+- review_governance lane must remain read-only
+- state_change_monitoring lane must remain read-only
+- state-change monitoring with file changes is blocked
+- safe summary remains count-only and must not expose changed files, branch names, PR body, endpoint, API key, token, secret, model path, dataset path, raw payload, or raw logs
 
 ## Integration Target Candidates
 
@@ -104,9 +134,19 @@ be true or explicitly scoped as non-merge standalone harness work:
 - review independence unchanged
 - safe summary only
 - negative self-check for blocked runtime / merge / review weakening / scripts / README / src / package paths
+- negative self-check for blocked runtime lane
+- negative self-check for blocked merge lane
+- negative self-check for blocked review weakening
+- negative self-check for blocked scripts path
+- negative self-check for blocked README path
+- negative self-check for blocked src path
+- negative self-check for blocked package path
+- negative self-check for review_governance write attempt
+- negative self-check for state_change_monitoring write attempt
 - no runtime readiness claim
 - no production readiness claim
 - no real TTS readiness claim
+- no merge readiness claim
 
 ## Risk If Not Integrated
 
@@ -146,6 +186,8 @@ payloads:
 - negative case: package path blocked
 - negative case: review weakening blocked
 - negative case: quality-gate weakening blocked
+- negative case: review_governance file change blocked
+- negative case: state_change_monitoring file change blocked
 - safe summary does not expose changed files, branch names, PR body, endpoint, API key, token, secret, model path, dataset path, raw payload, raw logs
 
 ## Non Goals
