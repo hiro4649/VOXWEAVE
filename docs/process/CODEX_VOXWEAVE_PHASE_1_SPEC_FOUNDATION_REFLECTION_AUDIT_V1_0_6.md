@@ -10,6 +10,12 @@
 - not real TTS ready
 - not merge ready
 - main reflected: no
+- active harness: v1.0.6
+- runtime readiness claimed: no
+- production readiness claimed: no
+- real TTS readiness claimed: no
+- merge readiness: no
+- development mode: 5.5-low
 - user manual work avoided: yes
 
 ## Scope
@@ -26,13 +32,42 @@ This is not runtime implementation, existing PR modification, main reflection
 execution, merge permission, active quality-gate behavior change, runtime
 readiness, production readiness, real TTS readiness, or merge evidence.
 
+## Runtime Boundary
+
+Runtime lane remains blocked. This audit does not change runtime code, connect
+the orchestrator, connect a runtime adapter path, call TTS engines, call a
+Live2D renderer, download models, perform API calls, add endpoint configuration,
+run benchmarks, change workflows, change packages, or alter `src` / `test` /
+`scripts`.
+
+## Safety Boundary
+
+Existing PRs remain preserve-only. This audit does not modify PR #1, PR #3, PR
+#5 through PR #13, or PR #15 through PR #44. It does not weaken quality gates,
+review independence, writer self-review handling, safe output, Human Review
+Gate, reference voice consent, candidate-only wording, or readiness claim
+boundaries.
+
+## Evidence Boundary
+
+This audit is not main reflection evidence, merge evidence, runtime evidence,
+production evidence, real TTS evidence, benchmark evidence, same-head evidence,
+or remote quality-gate evidence. Future reflection consideration still requires
+same-head evidence, independent review metadata, quality-gate green or a clearly
+separated blocker, and preserved docs-only scope.
+
 ## Required Premises
 
-- v1.0.6 is the active harness.
+- currentActiveHarness: v1.0.6
+- v1.0.6 active harness is main reflected.
 - PR #32 through PR #41 are not treated as merged standalone files.
+- PR #32 through PR #41 remain preserve-only candidate stack.
+- PR #43 is Product Implementation Re-entry Plan, docs-only / planning-only.
 - PR #1 / #3 / #5 through #13 / #15 through #43 remain preserve-only.
 - Runtime lane remains blocked.
 - Merge lane remains blocked.
+- Existing PR lane remains preserve-only.
+- Docs-only planning lane is allowed only when explicitly scoped.
 - This audit does not grant main reflection.
 - This audit does not grant merge readiness.
 - This audit does not grant runtime readiness.
@@ -131,6 +166,9 @@ claim. It is an audit-only ordering proposal.
 - Watermark review remains required where applicable.
 - Vendor latency claim must be separated from verified latency.
 - Benchmark manifest and result must not imply production readiness.
+- Benchmark manifest and result must not imply runtime readiness.
+- Voice Lab approved candidate does not imply runtime adoption.
+- Runtime adoption requires a separate gate.
 
 Reflection order:
 
@@ -139,6 +177,22 @@ Reflection order:
 3. Preserve PR #30 MisoTTS and review-blocked persistence rules.
 4. Trace PR #17 / #19 / #20 / #21 only after the relevant spec foundation is reviewed.
 5. Keep all runtime adoption behind a separate runtime gate.
+
+## Audit Task G: MisoTTS Candidate Boundary
+
+- MisoTTS / Miso TTS 8B is candidate-only.
+- MisoTTS runtime adoption is prohibited.
+- MisoTTS production readiness is prohibited.
+- MisoTTS runtime readiness is prohibited.
+- MisoTTS API call is prohibited.
+- MisoTTS model download is prohibited.
+- MisoTTS endpoint config is prohibited.
+- MisoTTS benchmark execution is prohibited until benchmark lane is explicitly approved.
+- Prompt audio / audio context requires explicit consent.
+- Watermark key must not appear in public summary.
+- Vendor latency claim must not be treated as verified latency.
+- Modified MIT / license review remains required.
+- MisoTTS policy does not authorize public IRIS / VOXWEAVE voice use without Human Review Gate.
 
 ## Audit Task E: Main Reflection Blockers
 
@@ -153,6 +207,7 @@ Reflection order:
 | specs not currently main-reflected | #16 / #18 / #30 / #31 / #43 | medium | no | this audit does not reflect specs to main | future read-only reflection review |
 | stacked v1.0.6 candidate PRs not standalone main-ready | #32-#41 | medium | no | stack remains preserve-only | do not treat stack as merged |
 | no runtime / production / real TTS readiness | all target PRs | high | no | readiness validation absent | maintain readiness claims as no |
+| no merge readiness | all target PRs | high | no | merge lane blocked and evidence missing | maintain merge readiness as no |
 
 ## Audit Task F: Reflection Readiness Checklist
 
@@ -165,6 +220,9 @@ Before any future main reflection consideration, confirm:
 - no runtime code change
 - no src/test/scripts/workflow/package change
 - no TTS engine call
+- no MOSS-TTS call
+- no MisoTTS call
+- no Irodori-TTS call
 - no Live2D renderer call
 - no model download
 - no API call
@@ -178,8 +236,31 @@ Before any future main reflection consideration, confirm:
 - PR #15 normalization overlap not ignored
 - Human Review Gate preserved
 - Reference Voice explicit consent preserved
+- MOSS-TTS / MisoTTS candidate-only boundary preserved
+- Vendor latency and verified latency separated
+- Benchmark-as-readiness misread prevented
 
-## Audit Task G: No-New-Implementation Policy
+## Audit Task J: Decision Matrix
+
+| area | candidate PRs | current status | main reflection dependency | consolidation dependency | runtime dependency | blocked reason | safe next action |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| spec foundation | #16 / #18 / #30 / #31 / #43 | preserve-only spec candidates | same-head evidence, review metadata, QG evidence | phase ordering | none now | not main-reflected, review/QG unresolved | future read-only reflection review |
+| normalization helper | #15 | preserve-only near-runtime helper | PR #1 path clarity | duplicate normalization decision | PR #1 textNormalization path | PR #3 and PR #1 unresolved | preserve until PR #1 path is unblocked |
+| Voice Lab metadata | #17 | downstream validator candidate | PR #16 reflection readiness | Voice Lab metadata consolidation | runtime lane approval after consent gate | Human Review Gate and consent unresolved | preserve and trace to PR #16 |
+| TTS capability profile | #19 | downstream TTS capability candidate | PR #18 and PR #30 reflection readiness | capability profile consolidation | TTS runtime lane approval | MOSS/Miso candidate-only boundaries unresolved | preserve and trace to specs |
+| benchmark manifest/result | #20 / #21 | benchmark unexecuted | PR #18 and PR #30 reflection readiness | benchmark evidence schema alignment | benchmark lane approval | benchmark execution prohibited | future benchmark readiness review only |
+| pause/pronunciation/locale foundation | #22 / #24 / #25 | sync foundation preserve-only | Voice/TTS boundaries accepted | shared sync utility planning | runtime lane approval | no TTS engine connection allowed | future shared utility review |
+| subtitle/lip/Live2D downstream sync | #26 / #27 / #28 | downstream policy preserve-only | sync foundation accepted | shared reference validation | runtime lane approval | renderer and animation calls prohibited | future downstream consolidation review |
+| common utility consolidation | PR #30 / future docs-only candidate | planning-only | spec persistence accepted | utility duplication map | runtime lane approval | new schema/validator PR prohibited now | future docs-only consolidation readiness review |
+| runtime adapter contract | #3 then #1 | blocked preserve-only | PR #3 review/QG evidence | PR #15 overlap rereview | runtime lane approval | reviewer metadata and quality-gate blockers | read-only reevaluation only |
+| v1.0.6 harness candidate stack | #32 through #41 | preserve-only candidates | not required for active v1.0.6 concepts | concepts integrated in active v1.0.6 gate lib | none now | stack not merged as standalone files | preserve-only |
+| MOSS-TTS candidate | #18 / #19 / #20 / #21 | candidate-only | PR #18 reflection readiness | license, consent, watermark, benchmark boundaries | TTS runtime lane approval | no model/API/benchmark approval | future candidate boundary review |
+| MisoTTS candidate | #30 / #19 / #20 / #21 | candidate-only | PR #30 reflection readiness | license, consent, watermark, benchmark boundaries | TTS runtime lane approval | no model/API/benchmark approval | future candidate boundary review |
+| Human Review Gate / reference consent | #16 / #17 / #18 / #30 | required boundary | PR #16 and PR #30 reflection readiness | consent and review guard alignment | runtime lane approval | consent and review evidence unresolved | preserve Human Review Gate |
+| watermark / license review | #18 / #30 / #19 / #20 / #21 | required boundary | PR #18 and PR #30 reflection readiness | license/watermark matrix | runtime lane approval | legal and watermark evidence unresolved | future read-only review |
+| runtime adoption prerequisites | #3 / #1 / #15 / #16 / #18 / #30 / #31 / #43 | blocked | review/QG and spec reflection | utility consolidation accepted | explicit runtime lane approval | runtime lane blocked | no runtime work |
+
+## Audit Task K: No-New-Implementation Policy
 
 - new runtime integration PR: prohibited
 - new product implementation PR: prohibited by default
@@ -198,7 +279,7 @@ Allowed future lane only if explicitly scoped:
 - roadmap recovery
 - common utility planning
 
-## Audit Task H: Risk Register
+## Audit Task L: Risk Register
 
 | risk | severity | status | owner | blocked by | safe next action |
 | --- | --- | --- | --- | --- | --- |
@@ -215,9 +296,13 @@ Allowed future lane only if explicitly scoped:
 | runtime lane blocked | high | open | runtime owner | runtime prerequisites | no runtime work |
 | merge lane blocked | high | open | release owner | review/QG evidence | no merge claim |
 | v1.0.6 candidate stack misread risk | medium-high | open | harness owner | stacked preserve-only PRs | do not treat as standalone main-ready |
+| no-status-reported misread risk | medium | open | release owner | absent commit statuses | do not infer green |
 | manual user work dependency avoided | medium | controlled | Codex | user manual work prohibited | keep work Codex-side only |
+| Voice Lab approved candidate misread as runtime adoption | high | open | Voice Lab owner | runtime lane blocked | preserve separate runtime gate |
+| MOSS-TTS / MisoTTS latency claim misread | medium-high | open | Voice/TTS owner | verified latency absent | separate vendor claim from verified latency |
+| Live2D renderer premature connection risk | high | open | sync owner | runtime lane blocked | no renderer call |
 
-## Audit Task I: Non Goals
+## Audit Task M: Non Goals
 
 - do not merge existing PRs
 - do not reflect specs to main in this PR
