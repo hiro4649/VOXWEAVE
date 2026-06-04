@@ -1,0 +1,178 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "VOXWEAVE v1.0.6 Release Readiness Snapshot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "status",
+    "snapshot_status",
+    "current_active_harness",
+    "candidate_version",
+    "rollout_ready",
+    "main_reflection_ready",
+    "active_harness_ready",
+    "blocked",
+    "reason_codes",
+    "classifier_safe_next_action",
+    "stack_summary",
+    "release_readiness_summary",
+    "full_target_mode_evidence_status",
+    "remote_quality_gate_evidence_status",
+    "review_governance_status",
+    "merge_evidence_status",
+    "safe_next_action",
+    "safe_summary_only"
+  ],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["pass"]
+    },
+    "snapshot_status": {
+      "type": "string",
+      "enum": ["not_ready_preserve_only", "ready_for_final_governance_review_only"]
+    },
+    "current_active_harness": {
+      "type": "string"
+    },
+    "candidate_version": {
+      "type": "string"
+    },
+    "rollout_ready": {
+      "type": "boolean"
+    },
+    "main_reflection_ready": {
+      "type": "boolean"
+    },
+    "active_harness_ready": {
+      "type": "boolean"
+    },
+    "blocked": {
+      "type": "boolean"
+    },
+    "reason_codes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "candidate_version_not_v106",
+          "active_harness_not_v105",
+          "stack_prs_incomplete",
+          "stacked_dependency_unresolved",
+          "stacked_pr_not_main_independent",
+          "pr32_design_not_complete",
+          "pr33_router_not_complete",
+          "pr34_integration_plan_not_complete",
+          "pr35_rehearsal_not_complete",
+          "pr36_safe_summary_module_not_complete",
+          "pr37_active_diagnostic_not_complete",
+          "pr38_bounded_strategy_not_complete",
+          "pr39_bounded_runner_not_complete",
+          "pr40_classifier_not_complete",
+          "full_target_mode_pass_missing",
+          "remote_same_head_quality_gate_missing",
+          "independent_reviewer_metadata_missing",
+          "quality_gate_blockers_unresolved",
+          "explicit_rollout_scope_missing",
+          "active_quality_gate_behavior_change_blocked",
+          "pass_fail_semantics_change_blocked",
+          "target_quality_score_change_blocked",
+          "workflow_change_blocked",
+          "package_change_blocked",
+          "runtime_change_blocked",
+          "review_governance_behavior_change_blocked",
+          "runtime_readiness_claim_blocked",
+          "production_readiness_claim_blocked",
+          "real_tts_readiness_claim_blocked",
+          "merge_readiness_claim_blocked"
+        ]
+      },
+      "uniqueItems": true
+    },
+    "classifier_safe_next_action": {
+      "type": "string",
+      "minLength": 1
+    },
+    "stack_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_pr_count",
+        "design_pr_count",
+        "implementation_pr_count",
+        "planning_pr_count",
+        "validation_pr_count",
+        "readiness_pr_count",
+        "stacked_pr_count",
+        "active_harness_count",
+        "main_reflected_count",
+        "runtime_connected_count",
+        "merge_ready_count",
+        "safe_summary_only"
+      ],
+      "properties": {
+        "candidate_pr_count": { "type": "integer", "minimum": 0 },
+        "design_pr_count": { "type": "integer", "minimum": 0 },
+        "implementation_pr_count": { "type": "integer", "minimum": 0 },
+        "planning_pr_count": { "type": "integer", "minimum": 0 },
+        "validation_pr_count": { "type": "integer", "minimum": 0 },
+        "readiness_pr_count": { "type": "integer", "minimum": 0 },
+        "stacked_pr_count": { "type": "integer", "minimum": 0 },
+        "active_harness_count": { "type": "integer", "minimum": 0 },
+        "main_reflected_count": { "type": "integer", "minimum": 0 },
+        "runtime_connected_count": { "type": "integer", "minimum": 0 },
+        "merge_ready_count": { "type": "integer", "minimum": 0 },
+        "safe_summary_only": { "const": true }
+      }
+    },
+    "release_readiness_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "record_count",
+        "rollout_ready_count",
+        "blocked_count",
+        "missing_full_target_mode_count",
+        "missing_remote_quality_gate_count",
+        "missing_review_metadata_count",
+        "missing_explicit_scope_count",
+        "stacked_dependency_blocked_count",
+        "safe_summary_only"
+      ],
+      "properties": {
+        "record_count": { "type": "integer", "minimum": 0 },
+        "rollout_ready_count": { "type": "integer", "minimum": 0 },
+        "blocked_count": { "type": "integer", "minimum": 0 },
+        "missing_full_target_mode_count": { "type": "integer", "minimum": 0 },
+        "missing_remote_quality_gate_count": { "type": "integer", "minimum": 0 },
+        "missing_review_metadata_count": { "type": "integer", "minimum": 0 },
+        "missing_explicit_scope_count": { "type": "integer", "minimum": 0 },
+        "stacked_dependency_blocked_count": { "type": "integer", "minimum": 0 },
+        "safe_summary_only": { "const": true }
+      }
+    },
+    "full_target_mode_evidence_status": {
+      "type": "string",
+      "enum": ["missing", "present"]
+    },
+    "remote_quality_gate_evidence_status": {
+      "type": "string",
+      "enum": ["missing", "present"]
+    },
+    "review_governance_status": {
+      "type": "string",
+      "enum": ["unresolved", "ready_for_final_governance_review"]
+    },
+    "merge_evidence_status": {
+      "type": "string",
+      "enum": ["not_merge_evidence"]
+    },
+    "safe_next_action": {
+      "type": "string",
+      "minLength": 1
+    },
+    "safe_summary_only": {
+      "const": true
+    }
+  }
+}
