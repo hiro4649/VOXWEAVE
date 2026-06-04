@@ -4,6 +4,7 @@
 
 ## Status
 
+- Title: VOXWEAVE Development Lane Separation Plan v1.0.6
 - Status: design-only
 - Planning status: planning-only
 - Runtime status: not runtime ready
@@ -36,6 +37,66 @@ continue safely.
 This plan does not weaken review independence. It does not weaken quality-gate
 requirements. It does not permit runtime integration. It does not claim
 production readiness.
+
+## Scope
+
+This plan defines VOXWEAVE v1.0.6 development lane separation. It is a
+docs-only design artifact for deciding what kind of work may continue while
+merge, runtime, and existing PR lanes remain blocked or preserve-only.
+
+In scope:
+
+- classify development lanes and their allowed actions
+- keep PR #1 / #3 / #5-#13 / #15-#31 preserve-only
+- define docs-only planning, spec persistence, and roadmap recovery boundaries
+- define state-change monitoring rules that avoid repeating the same monitoring loop
+- preserve future reevaluation order without granting merge or runtime adoption
+
+Out of scope:
+
+- runtime code changes
+- schema or validator implementation
+- shared utility implementation
+- package or workflow changes
+- benchmark execution
+- TTS engine, MOSS-TTS, MisoTTS, Irodori-TTS, Colab, or Live2D renderer calls
+
+## Runtime Boundary
+
+Runtime adoption remains prohibited by this plan. The plan does not connect
+orchestrator paths, runtime adapter paths, subtitle rendering, mouth animation,
+Live2D rendering, TTS engines, benchmark execution, model downloads, API calls,
+or endpoint configuration.
+
+Docs-only planning, spec persistence, roadmap recovery, and common utility
+planning do not imply runtime connection, runtime validation, or runtime
+readiness.
+Common utility planning does not implement shared utilities.
+
+## Safety Boundary
+
+This plan preserves review independence, quality-gate integrity, Human Review
+Gate requirements, Reference Voice explicit consent requirements, safe summary
+boundaries, and candidate-only treatment for MOSS-TTS and MisoTTS.
+
+It must not be used to treat writer comments as independent review, treat a
+non-persistent bot request as independent reviewer metadata, bypass quality-gate,
+or convert candidate policies into runtime adoption.
+
+## Forbidden Claims
+
+This plan forbids the following claims:
+
+- VOXWEAVE v1.0.6 lane separation is merge ready
+- VOXWEAVE v1.0.6 lane separation is runtime ready
+- VOXWEAVE v1.0.6 lane separation is production ready
+- real TTS is production ready
+- runtime integration is allowed by this plan
+- existing frozen PRs are unblocked by this plan
+- PR #3 is unblocked by this plan
+- PR #1 is unblocked by this plan
+- docs-only planning grants merge permission
+- spec persistence grants main reflection or merge permission
 
 ## v1.0.5 Lessons
 
