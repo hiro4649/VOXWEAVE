@@ -6,7 +6,36 @@ Runtime readiness claimed: no
 Production readiness claimed: no
 Real TTS readiness claimed: no
 Merge readiness: no
+Development mode: 5.5-low
 User manual work avoided: yes
+
+## Scope
+
+This document is a validation strategy for the v1.0.6 candidate stack. It is
+docs-only and strategy-only. It does not implement a bounded validator, does not
+change active quality-gate behavior, does not roll out v1.0.6, and does not make
+PR #37 merge-ready.
+
+## Runtime Boundary
+
+Runtime integration remains prohibited. This strategy does not connect
+orchestrator paths, runtime adapter paths, TTS engines, MOSS-TTS, MisoTTS,
+Irodori-TTS, Live2D renderer paths, model downloads, APIs, endpoint config, or
+benchmark execution.
+
+## Safety Boundary
+
+All validation output must remain safe-summary-only. Bounded validation must not
+print raw changed files, raw PR bodies, branch names, endpoints, API keys,
+tokens, secrets, model paths, dataset paths, raw payloads, raw logs, production
+data, or personal data.
+
+## Evidence Boundary
+
+Evidence must be current-head, bounded, complete, and explicitly classified
+before it can inform any future release-readiness discussion. PR #37 full
+target-mode pass is not confirmed. The completed core JSON path is evidence for
+diagnostic JSON compatibility only, not for full target-mode pass.
 
 ## Purpose
 
@@ -38,6 +67,16 @@ PR #37:
 - full target-mode local quality-gate: 600s timeout
 - merge readiness: no
 
+Required judgment:
+
+- 600s timeout is an evidence limitation.
+- There is no evidence of a PR #37 diagnostic exception.
+- There is no evidence of JSON report breakage.
+- There is no evidence of pass/fail semantics change.
+- There is no evidence of targetQualityScore change.
+- There is no evidence of review governance behavior change.
+- Full target-mode pass is unverified, so merge readiness is no.
+
 ## Problem
 
 Full target-mode local quality-gate can exceed the local validation time budget.
@@ -55,21 +94,36 @@ summary leakage.
 
 Purpose: confirm files are syntactically valid and the diff is clean.
 
+Allowed command class: static syntax and diff-boundary checks only.
+
 Required checks:
 
 - `git diff --check`
 - `git diff --cached --check`
 - `node --check` for target files
 
+Required output: pass/fail status from static checks, with no raw logs or raw
+diffs in public summaries.
+
+Timeout policy: bounded by normal local command timeout; do not convert slow
+execution into merge evidence.
+
+Failure classification: syntax or diff-boundary failure.
+
 Result boundary:
 
 - This level does not prove full target-mode quality-gate pass.
 - This level does not grant merge readiness.
 
+Safe next action: fix only the affected syntax or diff-boundary issue inside the
+explicitly scoped files.
+
 ### Level 1: Standalone Diagnostic Self-Check
 
 Purpose: verify the diagnostic integration remains safe-summary-only and does
 not influence active quality-gate decision semantics.
+
+Allowed command class: standalone diagnostic self-check only.
 
 Required check:
 
@@ -86,10 +140,23 @@ Required assertions:
 - no review governance behavior change
 - no runtime, production, real TTS, or merge readiness claim
 
+Required output: safe JSON with diagnostic status and fixed false flags only.
+
+Timeout policy: bounded standalone self-check; do not fall back to unbounded full
+target-mode execution.
+
+Failure classification: PR-specific diagnostic failure if the self-check fails.
+
+Merge readiness impact: no merge readiness even when this level passes.
+
+Safe next action: fix only PR-specific diagnostic code if this level fails.
+
 ### Level 2: Core JSON Report Path Validation
 
 Purpose: validate that a completed JSON report path can include the diagnostic
 field without breaking JSON parse or report shape.
+
+Allowed command class: completed JSON report path extraction and parse checks.
 
 Required assertions:
 
@@ -102,17 +169,31 @@ Required assertions:
   model path, dataset path, raw payload, or raw logs are exposed by the
   diagnostic summary
 
+Required output: parseable JSON with diagnostic fields present and fixed flags
+false.
+
+Timeout policy: bounded JSON path validation; do not repeat the full 600s
+target-mode loop.
+
+Failure classification: PR-specific JSON contract failure if parse, field
+presence, fixed flags, or non-leakage fails.
+
 Result boundary:
 
 - This level confirms a completed JSON path.
 - This level does not prove full target-mode current-head pass.
 - This level does not grant merge readiness.
 
+Safe next action: fix only diagnostic attachment or report contract issues if
+this level fails.
+
 ### Level 3: Bounded Local Quality-Gate Smoke
 
 Purpose: future candidate only. Define a bounded local smoke command that can
 exercise the relevant diagnostic JSON path without repeating the unbounded 600s
 loop.
+
+Allowed command class: explicitly scoped bounded local smoke command only.
 
 Required before use:
 
@@ -123,16 +204,28 @@ Required before use:
 - failure classification
 - safe-summary non-leakage requirement
 
+Required output: captured safe JSON or safe diagnostic summary with explicit
+timeout result and failure classification.
+
+Timeout policy: explicit timeout budget required before execution; repeated
+unbounded runs are prohibited.
+
+Failure classification: use the failure classification matrix in this document.
+
 Result boundary:
 
 - A bounded smoke result is not merge evidence unless it is current-head,
   complete, and explicitly accepted as part of a broader validation plan.
 - Repeating the same unbounded 600s full target-mode command is prohibited.
 
+Safe next action: stop after one bounded result and classify it; do not loop.
+
 ### Level 4: Remote Current-Head Quality-Gate
 
 Purpose: future candidate only. Establish current-head remote quality-gate
 evidence if merge is ever considered.
+
+Allowed command class: future remote current-head quality-gate evidence only.
 
 Required before use:
 
@@ -143,25 +236,61 @@ Required before use:
 - no review governance behavior change
 - no runtime, production, real TTS, or merge readiness claim before validation
 
+Required output: same-head remote quality-gate evidence with safe summaries
+only.
+
+Timeout policy: governed by the future remote validation scope; stale or
+different-head evidence is not merge evidence.
+
+Failure classification: remote quality-gate failure or stale evidence depending
+on result and head match.
+
 Result boundary:
 
 - Required before any future merge consideration.
 - Not authorized by this document.
 
-## Required Classifications
+Merge readiness impact: future merge evidence candidate only; still requires
+governance review.
 
-- `full_target_mode_timeout`: evidence_limitation
-- `diagnostic_exception`: PR-specific failure
-- `json_parse_failure`: PR-specific failure
-- `diagnostic_field_missing`: PR-specific failure
-- `pass_fail_semantics_change_detected`: PR-specific failure
-- `targetQualityScore_change_detected`: PR-specific failure
-- `review_governance_behavior_change_detected`: PR-specific failure
-- `safe_summary_leak_detected`: PR-specific failure
+Safe next action: preserve until explicit remote validation scope exists.
+
+## Failure Classification Matrix
+
+- `full_target_mode_timeout`
+  - classification: evidence_limitation
+  - merge readiness: no
+  - safe next action: do not repeat same unbounded run
+- `diagnostic_exception`
+  - classification: PR-specific failure
+  - safe next action: fix PR-specific diagnostic code only
+- `json_parse_failure`
+  - classification: PR-specific failure
+  - safe next action: fix JSON report contract
+- `diagnostic_field_missing`
+  - classification: PR-specific failure
+  - safe next action: fix diagnostic attachment or report path
+- `pass_fail_semantics_change_detected`
+  - classification: PR-specific failure
+  - safe next action: revert or isolate diagnostic logic
+- `targetQualityScore_change_detected`
+  - classification: PR-specific failure
+  - safe next action: revert or isolate diagnostic logic
+- `review_governance_behavior_change_detected`
+  - classification: PR-specific failure
+  - safe next action: revert or isolate diagnostic logic
+- `safe_summary_leak_detected`
+  - classification: PR-specific failure
+  - safe next action: block and fix non-leakage boundary
+- `full_current_head_remote_quality_gate_green`
+  - classification: future merge evidence candidate
+  - safe next action: still require governance review
 
 ## Timeout Policy
 
 Do not rerun the same 600s full target-mode local command repeatedly.
+Full target-mode timeout is not automatically a PR-specific failure.
+Use bounded validation instead of repeated unbounded execution.
 
 A repeated full target-mode run is allowed only if all of the following are
 defined first:
@@ -172,6 +301,9 @@ defined first:
 - output capture strategy
 - failure classification
 - safe-summary non-leakage requirement
+
+Current-head evidence is required before any result can be considered future
+merge evidence.
 
 ## Required Future Test Candidates
 
@@ -185,6 +317,9 @@ defined first:
 - no runtime readiness claim check
 - no production readiness claim check
 - no real TTS readiness claim check
+- no merge readiness claim check
+- current-head evidence consistency check
+- same-head remote quality-gate check, future only
 
 ## Relationship To v1.0.6 Stack
 
@@ -194,10 +329,13 @@ defined first:
 - PR #35: Integration rehearsal self-check
 - PR #36: Safe-summary diagnostic module
 - PR #37: Active safe-summary diagnostic field, evidence-limited
+- PR #38: Bounded Validation Strategy, docs-only / strategy-only
 
 This strategy does not make v1.0.6 active.
 This strategy does not make PR #37 merge-ready.
 This strategy does not change active quality-gate behavior.
+This strategy does not replace full target-mode pass with merge evidence.
+This strategy defines the next validation strategy only.
 
 ## Blocked Until
 
@@ -224,3 +362,24 @@ This strategy does not change active quality-gate behavior.
 - do not claim production readiness
 - do not claim real TTS readiness
 - do not claim merge readiness
+- do not connect TTS engines
+- do not connect Live2D renderer
+- do not run benchmark
+
+## Forbidden Claims
+
+- PR #38 makes v1.0.6 active
+- PR #38 proves PR #37 full target-mode pass
+- PR #38 grants merge readiness
+- PR #38 grants runtime readiness
+- PR #38 grants production readiness
+- PR #38 replaces independent review
+- PR #38 replaces remote same-head quality-gate
+- PR #38 authorizes v1.0.6 rollout
+
+## Safe Next Action
+
+Preserve PR #38 as docs-only validation strategy. Do not rerun the unbounded
+600s target-mode loop, do not change active quality-gate behavior, and do not
+claim merge readiness until a bounded validation scope and same-head evidence
+strategy are explicitly defined.
