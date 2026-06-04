@@ -40,6 +40,8 @@ import { buildGithubReplayContextAsync } from './codex-ci-replay.mjs';
 
 import { buildCompactReasonSummary } from './codex-reason-summary.mjs';
 
+import { buildDevelopmentLaneIntegrationSafeSummary } from './codex-development-lane-router-safe-summary-integration.mjs';
+
 import * as v101Gates from './codex-v101-gate-lib.mjs';
 import * as v102Gates from './codex-v102-gate-lib.mjs';
 import * as v103Gates from './codex-v103-gate-lib.mjs';
@@ -67,6 +69,26 @@ const MARKER = `CODEX_QUALITY_HARNESS_FILE v${HARNESS_VERSION}`;
 
 
 
+
+function buildDevelopmentLaneRouterDiagnosticSummary() {
+  return buildDevelopmentLaneIntegrationSafeSummary({
+    source: 'future_quality_gate_safe_summary',
+    active_quality_gate_integration: false,
+    records: [
+      {
+        lane: 'state_change_monitoring',
+        state_delta_detected: true,
+      },
+    ],
+  });
+}
+
+function attachDevelopmentLaneRouterDiagnostic(report) {
+  // CODEX_DEVELOPMENT_LANE_ROUTER_DIAGNOSTIC_ONLY_START
+  report.developmentLaneRouterIntegrationStatus = 'diagnostic_only';
+  report.developmentLaneRouterIntegrationSummary = buildDevelopmentLaneRouterDiagnosticSummary();
+  // CODEX_DEVELOPMENT_LANE_ROUTER_DIAGNOSTIC_ONLY_END
+}
 
 const V093_STATUS_KEYS = [
 
@@ -9060,7 +9082,7 @@ async function runSourceHarnessGate() {
 
 
 
-
+  attachDevelopmentLaneRouterDiagnostic(report);
 
 
 
@@ -11107,7 +11129,7 @@ async function runTargetHarnessGate() {
 
 
 
-
+  attachDevelopmentLaneRouterDiagnostic(report);
 
 
 
@@ -11492,6 +11514,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
       localGateSideEffectStatus: { status: 'not_run', safeSummaryOnly: true },
       safeSummaryOnly: true,
     };
+    attachDevelopmentLaneRouterDiagnostic(report);
     if (process.env.CODEX_QUALITY_REPORT === 'json') console.log(JSON.stringify(report, null, 2));
     else console.error('Codex local quality gate failed. Safe reason: local_gate_unknown_report_contract');
     process.exit(1);
@@ -11600,6 +11623,7 @@ async function runSourceHarnessCoreContractGate() {
   report.status = failures.length ? 'fail' : (warnings.length ? 'manual_confirmation_required' : 'pass');
   report.mergeReady = failures.length === 0 && warnings.length === 0;
   report.localGate = { status: report.status };
+  attachDevelopmentLaneRouterDiagnostic(report);
 
   if (jsonReport) console.log(JSON.stringify(report, null, 2));
   else {
