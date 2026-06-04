@@ -20,6 +20,9 @@ const FORBIDDEN_LEAK_VALUES = [
   'PR body',
   'raw artifact',
   'branch name',
+  'changed_files',
+  'head_sha',
+  'base_sha',
   'endpoint',
   'api_key',
   'token',
@@ -31,14 +34,22 @@ const FORBIDDEN_LEAK_VALUES = [
   'private_path',
   'raw_payload',
   'raw logs',
+  'raw_logs',
+  'full_command',
   'https://bad.invalid',
   'C:/private/model',
   'C:/private/dataset',
   'github token',
+  'github_token',
   'npm token',
+  'npm_token',
   'full command',
   'head_sha_private',
   'base_sha_private',
+  'codex/voxweave-v1-0-6-development-lane-separation-design-001',
+  'codex/voxweave-v1-0-6-development-lane-router-001',
+  'codex/voxweave-v1-0-6-release-readiness-classifier-001',
+  'codex/voxweave-v1-0-6-release-readiness-snapshot-001',
 ];
 
 const EXPECTED_SCHEMA_REQUIRED = [
@@ -80,6 +91,10 @@ function assertNoLeaks(value, label) {
   for (const forbidden of FORBIDDEN_LEAK_VALUES) {
     check(!serialized.includes(forbidden), `${label} leaked forbidden value: ${forbidden}`);
   }
+}
+
+function sortedKeys(value) {
+  return Object.keys(value).sort();
 }
 
 const defaultSnapshot = buildV106ReleaseReadinessSnapshot();
@@ -148,9 +163,9 @@ check(positiveLookingSnapshot.safe_summary_only === true, 'positive-looking snap
 const unsafeSnapshot = buildV106ReleaseReadinessSnapshot({
   branch_name: 'branch name',
   pr_body: 'PR body',
-  changed_files: ['raw changed files'],
-  head_sha: 'head_sha_private',
-  base_sha: 'base_sha_private',
+  changed_files: ['changed_files'],
+  head_sha: 'head_sha',
+  base_sha: 'base_sha',
   endpoint: 'endpoint',
   api_key: 'api_key',
   token: 'token',
@@ -161,13 +176,17 @@ const unsafeSnapshot = buildV106ReleaseReadinessSnapshot({
   dataset_path: 'dataset_path',
   private_path: 'private_path',
   raw_payload: 'raw_payload',
-  raw_logs: 'raw logs',
-  full_command: 'full command',
-  github_token: 'github token',
-  npm_token: 'npm token',
+  raw_logs: 'raw_logs',
+  full_command: 'full_command',
+  github_token: 'github_token',
+  npm_token: 'npm_token',
   private_url: 'https://bad.invalid',
   private_model_path: 'C:/private/model',
   private_dataset_path: 'C:/private/dataset',
+  pr32_branch_name: 'codex/voxweave-v1-0-6-development-lane-separation-design-001',
+  pr33_branch_name: 'codex/voxweave-v1-0-6-development-lane-router-001',
+  pr40_branch_name: 'codex/voxweave-v1-0-6-release-readiness-classifier-001',
+  pr41_branch_name: 'codex/voxweave-v1-0-6-release-readiness-snapshot-001',
 });
 assertNoLeaks(unsafeSnapshot, 'snapshot');
 assertNoLeaks(buildV106ReleaseReadinessSnapshotSafeSummary(unsafeSnapshot), 'snapshot safe summary');
@@ -179,8 +198,17 @@ const schema = JSON.parse(readFileSync(schemaPath, 'utf8'));
 for (const requiredField of EXPECTED_SCHEMA_REQUIRED) {
   checkIncludes(schema.required, requiredField, `schema missing required field ${requiredField}`);
 }
+check(
+  JSON.stringify([...schema.required].sort()) === JSON.stringify(sortedKeys(defaultSnapshot)),
+  'schema required fields must match snapshot output keys',
+);
 check(schema.additionalProperties === false, 'schema must disallow additional top-level properties');
 check(schema.properties.safe_summary_only.const === true, 'schema safe_summary_only must be const true');
+check(schema.properties.rollout_ready.type === 'boolean', 'schema rollout_ready must be boolean');
+check(schema.properties.main_reflection_ready.type === 'boolean', 'schema main_reflection_ready must be boolean');
+check(schema.properties.active_harness_ready.type === 'boolean', 'schema active_harness_ready must be boolean');
+check(schema.properties.blocked.type === 'boolean', 'schema blocked must be boolean');
+check(schema.properties.safe_next_action.minLength === 1, 'schema safe_next_action must be non-empty');
 check(schema.properties.stack_summary.additionalProperties === false, 'schema stack_summary should disallow extras');
 check(
   schema.properties.release_readiness_summary.additionalProperties === false,
