@@ -20,22 +20,65 @@ const FIXED_INTEGRATION_FLAGS = {
   safe_summary_only: true,
 };
 
+const BLOCKED_INTEGRATION_FLAGS = [
+  ["active_quality_gate_integration", "active_quality_gate_integration_not_allowed"],
+  ["pass_fail_semantics_changed", "pass_fail_semantics_change_not_allowed"],
+  ["target_quality_score_changed", "target_quality_score_change_not_allowed"],
+  ["workflow_changed", "workflow_change_not_allowed"],
+  ["package_changed", "package_change_not_allowed"],
+  ["runtime_changed", "runtime_change_not_allowed"],
+  ["review_governance_behavior_changed", "review_governance_behavior_change_not_allowed"],
+  ["merge_readiness", "merge_readiness_not_allowed"],
+];
+
 function normalizeSource(source) {
-  return ALLOWED_SOURCES.has(source) ? source : "local_rehearsal";
+  if (source === undefined || source === null || source === "") {
+    return { source: "local_rehearsal", reasonCodes: [] };
+  }
+
+  if (ALLOWED_SOURCES.has(source)) {
+    return { source, reasonCodes: [] };
+  }
+
+  return { source: "unknown", reasonCodes: ["source_not_allowed"] };
+}
+
+function collectIntegrationReasonCodes(input) {
+  return BLOCKED_INTEGRATION_FLAGS
+    .filter(([field]) => input[field] === true)
+    .map(([, reasonCode]) => reasonCode);
+}
+
+function buildBlockedSummary({ source, reasonCodes }) {
+  return {
+    status: "blocked",
+    source,
+    ...FIXED_INTEGRATION_FLAGS,
+    reason_codes: [...new Set(reasonCodes)],
+    lane_summary: buildDevelopmentLaneSafeSummary([]),
+  };
 }
 
 export function buildDevelopmentLaneIntegrationSafeSummary(input = {}) {
   const records = Array.isArray(input.records) ? input.records : null;
-  const source = normalizeSource(input.source);
+  const { source, reasonCodes: sourceReasonCodes } = normalizeSource(input.source);
+  const integrationReasonCodes = [
+    ...sourceReasonCodes,
+    ...collectIntegrationReasonCodes(input),
+  ];
 
   if (!records) {
-    return {
-      status: "blocked",
+    return buildBlockedSummary({
       source,
-      ...FIXED_INTEGRATION_FLAGS,
-      reason_codes: ["records_must_be_array"],
-      lane_summary: buildDevelopmentLaneSafeSummary([]),
-    };
+      reasonCodes: [...integrationReasonCodes, "records_must_be_array"],
+    });
+  }
+
+  if (integrationReasonCodes.length > 0) {
+    return buildBlockedSummary({
+      source,
+      reasonCodes: integrationReasonCodes,
+    });
   }
 
   const classifiedRecords = records.map((record) => classifyDevelopmentLane(record));
