@@ -63,12 +63,14 @@ for (const reason of [
   'raw_audio_detected',
   'endpoint_detected',
   'api_key_detected',
+  'api_key_dash_detected',
   'token_detected',
   'secret_detected',
   'authorization_detected',
   'bearer_detected',
   'model_path_detected',
   'dataset_path_detected',
+  'private_path_detected',
   'raw_payload_detected',
   'raw_logs_detected',
 ]) {
@@ -91,12 +93,14 @@ for (const forbidden of [
   'raw_audio_value',
   'https://bad.invalid',
   'api_key=abc',
+  'api-key=abc',
   'token=def',
   'secret=ghi',
   'authorization=Bearer abc',
   'Bearer abc',
   'C:/private/model',
   'C:/private/dataset',
+  'private/path',
   'raw_payload_value',
   'raw_logs_value',
   'branch name',
@@ -115,12 +119,14 @@ for (const forbidden of [
   'raw_audio',
   'endpoint',
   'api_key',
+  'api-key',
   'token',
   'secret',
   'authorization',
   'Bearer',
   'model_path',
   'dataset_path',
+  'private_path',
   'raw_payload',
   'raw_logs',
 ]) {
@@ -154,8 +160,69 @@ check(!JSON.stringify(probeSafeSummary).includes('endpoint'), 'probe safe summar
 check(!JSON.stringify(probeSafeSummary).includes('token'), 'probe safe summary must not contain token');
 check(!JSON.stringify(probeSafeSummary).includes('secret'), 'probe safe summary must not contain secret');
 check(!JSON.stringify(probeSafeSummary).includes('model_path'), 'probe safe summary must not contain model_path');
+check(!JSON.stringify(probeSafeSummary).includes('dataset_path'), 'probe safe summary must not contain dataset_path');
+check(!JSON.stringify(probeSafeSummary).includes('private_path'), 'probe safe summary must not contain private_path');
 
-check(checkedCases >= 60, 'checked_cases must be at least 60');
+for (const key of [
+  'migration_performed',
+  'existing_validator_modified',
+  'runtime_connected',
+  'active_quality_gate_connected',
+]) {
+  check(result[key] === false, `${key} fixed flag should remain false`);
+}
+
+for (const key of [
+  'runtime_readiness_claimed',
+  'production_readiness_claimed',
+  'real_tts_readiness_claimed',
+  'asr_runtime_readiness_claimed',
+  'merge_readiness',
+]) {
+  check(result.fixed_flags[key] === false, `${key} should remain false`);
+}
+
+for (const allowedField of [
+  'status',
+  'probe_status',
+  'target_area',
+  'uses_safe_summary_builder',
+  'uses_unsafe_field_detector',
+  'migration_performed',
+  'existing_validator_modified',
+  'runtime_connected',
+  'active_quality_gate_connected',
+  'safe_summary_only',
+  'safe_summary',
+  'unsafe_detection_summary',
+  'fixed_flags',
+]) {
+  check(Object.hasOwn(result, allowedField), `result should include allowed field ${allowedField}`);
+}
+
+for (const disallowedField of [
+  'candidate_id',
+  'generated_text',
+  'generated_audio_ref',
+  'prompt_audio',
+  'reference_voice',
+  'raw_audio',
+  'endpoint',
+  'api_key',
+  'api-key',
+  'token',
+  'secret',
+  'authorization',
+  'model_path',
+  'dataset_path',
+  'private_path',
+  'raw_payload',
+  'raw_logs',
+]) {
+  check(!Object.hasOwn(result, disallowedField), `result must not include raw field ${disallowedField}`);
+}
+
+check(checkedCases >= 120, 'checked_cases must be at least 120');
 
 process.stdout.write(`${JSON.stringify({
   status: 'pass',
