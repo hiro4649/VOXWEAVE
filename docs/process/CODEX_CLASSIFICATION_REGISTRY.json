@@ -67,6 +67,15 @@
       "notes": "Codex skills."
     },
     {
+      "pathPattern": ".codex/**",
+      "classification": "harness_managed",
+      "surface": "harness",
+      "risk": "R2",
+      "requiresProductVerification": false,
+      "allowsFastPath": false,
+      "notes": "Codex harness evidence artifacts."
+    },
+    {
       "pathPattern": "AGENTS.md",
       "classification": "harness_managed",
       "surface": "harness",

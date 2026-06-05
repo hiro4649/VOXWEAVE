@@ -174,6 +174,10 @@ jobs:
             export CODEX_HARNESS_MODE=target
             export CODEX_PROFILE_COMPAT_MODE=off
             export CODEX_SKIP_NPM="${CODEX_SKIP_NPM:-1}"
+            export CODEX_TARGET_ORIGINAL_EVENT_NAME="${CODEX_EVENT_NAME:-}"
+            export CODEX_TARGET_ORIGINAL_PR_NUMBER="${CODEX_PR_NUMBER:-}"
+            export CODEX_EVENT_NAME=target_rollout
+            export CODEX_PR_NUMBER=
           fi
           node scripts/codex-workflow-preflight.mjs > "$RUNNER_TEMP/codex-workflow-preflight.json"
           gate_exit=0
