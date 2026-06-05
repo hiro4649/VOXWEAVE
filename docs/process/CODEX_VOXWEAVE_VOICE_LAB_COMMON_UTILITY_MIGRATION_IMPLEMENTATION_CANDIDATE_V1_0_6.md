@@ -79,27 +79,33 @@ This is not merge evidence.
 
 ## Before / After Contract
 
-| behavior area | before expected behavior | after expected behavior | allowed to change yes/no | required evidence | safe next action |
-|---|---|---|---|---|---|
-| candidate validation | PR #17 metadata validation semantics | same semantics | no | schema self-check and migration self-check | block if changed |
-| Human Review Gate | missing or blocked review status blocks promotion | same behavior | no | blocked fixture | preserve |
-| reference consent | missing or blocked consent blocks voice use | same behavior | no | consent fixture | preserve |
-| prohibited use cases | prohibited_use_cases blocks promotion and runtime eligibility | same behavior | no | prohibited fixture | preserve |
-| approved candidate promotion | approved metadata does not auto connect runtime | same behavior | no | approved fixture | preserve |
-| runtime eligibility | eligible metadata does not imply runtime connection | same behavior | no | runtime boundary fixture | preserve |
-| runtime connection | runtime_connected remains false | same behavior | no | fixed flags | preserve |
-| safe summary shape | count-only safe_summary_only output | count-only safe_summary_only output using PR #53 builder internally | no for output contract; yes only for internal mechanism | non-leakage self-check | preserve |
-| unsafe field detection | unsafe Voice Lab fields blocked without raw output | reason-code and count-only output using PR #53 detector internally | no for output contract; yes only for internal mechanism | detector self-check | preserve |
-| reason code count | count-only reason_counts | count-only reason_counts | no | reason_counts self-check | preserve |
-| candidate_id leakage | no candidate_id raw value in safe summary | no candidate_id raw value in safe summary | no | non-leakage check | preserve |
-| generated_text leakage | no generated_text raw value in safe summary | no generated_text raw value in safe summary | no | non-leakage check | preserve |
-| generated_audio_ref leakage | no generated_audio_ref raw value in safe summary | no generated_audio_ref raw value in safe summary | no | non-leakage check | preserve |
-| reference_voice leakage | no reference_voice raw details in safe summary | no reference_voice raw details in safe summary | no | non-leakage check | preserve |
-| raw_audio leakage | no raw_audio in safe summary | no raw_audio in safe summary | no | non-leakage check | preserve |
-| endpoint / token leakage | no endpoint, token, secret, or API key in safe summary | no endpoint, token, secret, or API key in safe summary | no | non-leakage check | preserve |
-| self-check output | JSON only, safe fixed flags | JSON only, safe fixed flags | no | self-check output | preserve |
-| runtime readiness claim | no runtime readiness claim | no runtime readiness claim | no | claim scan | preserve |
-| merge readiness claim | no merge readiness claim | no merge readiness claim | no | claim scan | preserve |
+PR #61 is candidate branch behavior evidence only. PR #61 is not PR #17 branch
+evidence. PR #61 is not main evidence. PR #61 is not runtime evidence. PR #61 is
+not active quality-gate evidence. PR #61 is not Voice Lab approval evidence. PR
+#61 is not TTS readiness evidence. PR #61 is not production evidence. PR #61 is
+not merge evidence.
+
+| behavior area | before expected behavior | after expected behavior | allowed to change yes/no | observed status | required evidence | safe next action |
+|---|---|---|---|---|---|---|
+| candidate validation | PR #17 metadata validation semantics | same semantics | no | pass in candidate branch | schema self-check and migration self-check | block if changed |
+| Human Review Gate | missing or blocked review status blocks promotion | same behavior | no | pass in candidate branch | blocked fixture | preserve |
+| reference consent | missing or blocked consent blocks voice use | same behavior | no | pass in candidate branch | consent fixture | preserve |
+| prohibited use cases | prohibited_use_cases blocks promotion and runtime eligibility | same behavior | no | pass in candidate branch | prohibited fixture | preserve |
+| approved candidate promotion | approved metadata does not auto connect runtime | same behavior | no | pass in candidate branch | approved fixture | preserve |
+| runtime eligibility | eligible metadata does not imply runtime connection | same behavior | no | pass in candidate branch | runtime boundary fixture | preserve |
+| runtime connection | runtime_connected remains false | same behavior | no | pass in candidate branch | fixed flags | preserve |
+| safe summary shape | count-only safe_summary_only output | count-only safe_summary_only output using PR #53 builder internally | no for output contract; yes only for internal mechanism | pass in candidate branch | non-leakage self-check | preserve |
+| unsafe field detection | unsafe Voice Lab fields blocked without raw output | reason-code and count-only output using PR #53 detector internally | no for output contract; yes only for internal mechanism | pass in candidate branch | detector self-check | preserve |
+| reason code count | count-only reason_counts | count-only reason_counts | no | pass in candidate branch | reason_counts self-check | preserve |
+| candidate_id leakage | no candidate_id raw value in safe summary | no candidate_id raw value in safe summary | no | pass in candidate branch | non-leakage check | preserve |
+| generated_text leakage | no generated_text raw value in safe summary | no generated_text raw value in safe summary | no | pass in candidate branch | non-leakage check | preserve |
+| generated_audio_ref leakage | no generated_audio_ref raw value in safe summary | no generated_audio_ref raw value in safe summary | no | pass in candidate branch | non-leakage check | preserve |
+| reference_voice leakage | no reference_voice raw details in safe summary | no reference_voice raw details in safe summary | no | pass in candidate branch | non-leakage check | preserve |
+| raw_audio leakage | no raw_audio in safe summary | no raw_audio in safe summary | no | pass in candidate branch | non-leakage check | preserve |
+| endpoint / token leakage | no endpoint, token, secret, or API key in safe summary | no endpoint, token, secret, or API key in safe summary | no | pass in candidate branch | non-leakage check | preserve |
+| self-check output | JSON only, safe fixed flags | JSON only, safe fixed flags | no | pass in candidate branch | self-check output | preserve |
+| runtime readiness claim | no runtime readiness claim | no runtime readiness claim | no | pass in candidate branch | claim scan | preserve |
+| merge readiness claim | no merge readiness claim | no merge readiness claim | no | pass in candidate branch | claim scan | preserve |
 
 ## Rollback / Preserve Strategy
 

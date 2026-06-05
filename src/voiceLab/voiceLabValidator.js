@@ -2,6 +2,7 @@ import {
   REFERENCE_VOICE_CONSENT_STATUSES,
   REQUIRED_CANDIDATE_METADATA,
   REVIEW_STATUSES,
+  UNSAFE_VOICE_LAB_FIELDS,
   VOICE_LAB_SAFE_SUMMARY_SCHEMA,
 } from "./voiceLabSchema.js";
 import {
@@ -59,6 +60,9 @@ export function validateVoiceLabCandidate(candidate = {}) {
   const unsafeFindings = detectUnsafeFields(record);
   const unsafeDetected = hasUnsafeFields(record);
   const unsafe_field_reason_counts = reasonCountsFromUnsafeFindings(unsafeFindings);
+  const unsafe_fields_present = UNSAFE_VOICE_LAB_FIELDS.filter(
+    (field) => record[field] !== undefined,
+  );
   const review_status = REVIEW_STATUSES.includes(record.review_status)
     ? record.review_status
     : "blocked";
@@ -71,7 +75,7 @@ export function validateVoiceLabCandidate(candidate = {}) {
   const explicitConsent = reference_voice_consent_status === "explicit_consent";
   const approvedReview = review_status === "approved";
   const metadataComplete = missing_metadata.length === 0;
-  const unsafeClean = !unsafeDetected;
+  const unsafeClean = unsafe_fields_present.length === 0;
   const prohibitedUseCasesClean = !hasProhibitedUseCases(record);
   const approved_for_runtime = record.approved_for_runtime === true;
   const runtimeRequested = record.runtime_connected === true;
@@ -97,13 +101,15 @@ export function validateVoiceLabCandidate(candidate = {}) {
     !realTtsReadyClaimed;
 
   return {
+    candidate_id: String(record.candidate_id ?? ""),
     review_status,
     reference_voice_consent_status,
     can_promote_to_approved,
     runtime_eligible,
     runtime_connected: false,
     missing_metadata,
-    unsafe_fields_present: Object.keys(unsafe_field_reason_counts),
+    unsafe_fields_present,
+    unsafe_detected_by_shared_utility: unsafeDetected,
     unsafe_field_reason_counts,
     reason_codes: buildReasonCodes({
       approvedReview,

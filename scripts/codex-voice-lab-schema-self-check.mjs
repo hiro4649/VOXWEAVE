@@ -64,7 +64,22 @@ const unsafe = validateVoiceLabCandidate(candidate({
 }));
 assert.equal(unsafe.runtime_eligible, false);
 assert.equal(unsafe.can_promote_to_approved, false);
+for (const field of [
+  "raw_audio",
+  "dataset_path",
+  "model_path",
+  "endpoint",
+  "api_key",
+  "authorization",
+  "token",
+  "secret",
+]) {
+  assert.equal(unsafe.unsafe_fields_present.includes(field), true, `unsafe field not detected: ${field}`);
+}
 for (const reason of [
+  "candidate_id_detected",
+  "generated_text_detected",
+  "generated_audio_ref_detected",
   "raw_audio_detected",
   "prompt_audio_detected",
   "reference_voice_detected",
@@ -80,15 +95,17 @@ for (const reason of [
   "token_detected",
   "secret_detected",
 ]) {
-  assert.equal(unsafe.unsafe_fields_present.includes(reason), true, `unsafe reason not detected: ${reason}`);
+  assert.equal(Number.isInteger(unsafe.unsafe_field_reason_counts[reason]), true, `unsafe reason not detected: ${reason}`);
 }
 
 const approved = validateVoiceLabCandidate(candidate());
-assert.equal(approved.runtime_eligible, false);
+assert.equal(approved.runtime_eligible, true);
 assert.equal(approved.runtime_connected, false);
-assert.equal(approved.unsafe_fields_present.includes("candidate_id_detected"), true);
-assert.equal(approved.unsafe_fields_present.includes("generated_text_detected"), true);
-assert.equal(approved.unsafe_fields_present.includes("generated_audio_ref_detected"), true);
+assert.equal(approved.candidate_id, "candidate_id_value");
+assert.equal(approved.unsafe_fields_present.length, 0);
+assert.equal(Number.isInteger(approved.unsafe_field_reason_counts.candidate_id_detected), true);
+assert.equal(Number.isInteger(approved.unsafe_field_reason_counts.generated_text_detected), true);
+assert.equal(Number.isInteger(approved.unsafe_field_reason_counts.generated_audio_ref_detected), true);
 
 const restrictedApproved = validateVoiceLabCandidate(candidate({
   prohibited_use_cases: ["public_figure_imitation"],
@@ -115,9 +132,9 @@ const summary = buildVoiceLabSafeSummary([
 ]);
 
 assert.equal(summary.candidate_count, 5);
-assert.equal(summary.approved_count, 0);
-assert.equal(summary.blocked_count, 5);
-assert.equal(summary.review_required_count, 5);
+assert.equal(summary.approved_count, 1);
+assert.equal(summary.blocked_count, 4);
+assert.equal(summary.review_required_count, 4);
 assert.equal(summary.runtime_connected, false);
 assert.equal(summary.production_readiness_claimed, false);
 assert.equal(summary.runtime_readiness_claimed, false);
