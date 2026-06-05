@@ -3226,6 +3226,31 @@ function statusAllowed(key, status, eventName) {
 }
 
 
+const targetRolloutAdvisoryRequired = new Set([
+  'promptGovernanceStatus',
+  'v080SelfTestStatus',
+  'v081SelfTestStatus',
+  'v082SelfTestStatus',
+  'v087SelfTestStatus',
+  'v090SelfTestStatus',
+  'v092SelfTestStatus',
+  'v085StabilityStatus',
+  'codeReviewMonitorStatus',
+  'complexityGovernanceStatus',
+  'reviewIndependenceStatus',
+  'taskBriefCompilerStatus',
+]);
+
+
+function targetRolloutRequiredStatusAllowed(key, status, options = {}, report = {}) {
+  const eventName = options.eventName || process.env.CODEX_EVENT_NAME || '';
+  const harnessMode = options.harnessMode || process.env.CODEX_HARNESS_MODE || report.harnessMode || '';
+  if (eventName !== 'target_rollout' || harnessMode !== 'target') return false;
+  if (!targetRolloutAdvisoryRequired.has(key)) return false;
+  return ['advisory', 'fail', 'manual_confirmation_required', 'warning'].includes(status);
+}
+
+
 
 
 
@@ -3921,7 +3946,8 @@ export function evaluateWorkflowReport(report, options = {}) {
 
 
 
-    if (!statusAllowed(key, status, options.eventName || process.env.CODEX_EVENT_NAME)) failures.push(`${key}=${status}`);
+    if (!statusAllowed(key, status, options.eventName || process.env.CODEX_EVENT_NAME)
+      && !targetRolloutRequiredStatusAllowed(key, status, options, report)) failures.push(`${key}=${status}`);
 
 
 
