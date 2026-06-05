@@ -3234,11 +3234,16 @@ const targetRolloutAdvisoryRequired = new Set([
   'v087SelfTestStatus',
   'v090SelfTestStatus',
   'v092SelfTestStatus',
+  'sameHeadArtifactEvidenceStatus',
   'v085StabilityStatus',
   'codeReviewMonitorStatus',
   'complexityGovernanceStatus',
   'reviewIndependenceStatus',
   'taskBriefCompilerStatus',
+  'requiredHeadingHintStatus',
+  'prProfileStatus',
+  'bestOfNEvidenceStatus',
+  'testCoverageEvidenceStatus',
 ]);
 
 
