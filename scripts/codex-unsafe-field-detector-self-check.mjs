@@ -3,6 +3,7 @@ import {
   detectUnsafeFields,
   hasUnsafeFields,
 } from './codex-unsafe-field-detector.mjs';
+import { readFileSync } from 'node:fs';
 
 let checkedCases = 0;
 
@@ -94,6 +95,10 @@ expectSafe('bearer of good news', 'bearer natural sentence should be safe');
 expectSafe('model path in a design discussion', 'model path natural sentence should be safe');
 expectSafe('language tag as a concept', 'language tag natural sentence should be safe');
 expectSafe({ placeholder: 'safe_placeholder_value' }, 'safe placeholder should be safe');
+expectSafe({ safe_summary_only: true }, 'safe_summary_only should be safe');
+expectSafe({ runtime_connected: false }, 'runtime_connected false should be safe');
+expectSafe({ production_ready: false }, 'production_ready false should be safe');
+expectSafe({ asr_runtime_ready: false }, 'asr_runtime_ready false should be safe');
 
 const unsafePayload = {
   endpoint: 'https://bad.invalid',
@@ -176,7 +181,88 @@ check(!JSON.stringify(summary).includes('raw_audio_value'), 'summary must not le
 check(!JSON.stringify(summary).includes('transcript_raw_value'), 'summary must not leak raw transcript');
 check(!JSON.stringify(summary).includes('speaker_identity_value'), 'summary must not leak speaker identity');
 
-check(checkedCases >= 70, 'checked_cases must be at least 70');
+for (const [inputOptions, label] of [
+  [{ maxDepth: 'bad' }, 'invalid maxDepth'],
+  [{ maxDepth: Number.NaN }, 'NaN maxDepth'],
+  [{ maxDepth: Number.POSITIVE_INFINITY }, 'Infinity maxDepth'],
+  [{ maxDepth: 0 }, 'zero maxDepth'],
+  [{ maxDepth: -1 }, 'negative maxDepth'],
+  [{ maxArrayItems: -1 }, 'negative maxArrayItems'],
+  [{ maxArrayItems: Number.POSITIVE_INFINITY }, 'Infinity maxArrayItems'],
+  [{ maxObjectKeys: 'bad' }, 'invalid maxObjectKeys'],
+  [{ maxObjectKeys: 5000 }, 'oversized maxObjectKeys'],
+]) {
+  expectReason({ a: { b: { c: { d: { e: { f: { endpoint: 'x' } } } } } } }, 'max_depth_exceeded', `${label} should safely default`);
+}
+
+const oversizedArray = Array.from({ length: 3 }, (_, index) => ({ safe: index }));
+const oversizedArrayResult = detectUnsafeFields(oversizedArray, { maxArrayItems: 1 });
+check(oversizedArrayResult.some((finding) => finding.category === 'truncated'), 'oversized array should be truncated');
+const oversizedObject = { a: 1, b: 2, c: 3 };
+const oversizedObjectResult = detectUnsafeFields(oversizedObject, { maxObjectKeys: 1 });
+check(oversizedObjectResult.some((finding) => finding.category === 'truncated'), 'oversized object should be truncated');
+const truncationSummary = buildUnsafeFieldDetectionSafeSummary([oversizedArrayResult, oversizedObjectResult]);
+check(truncationSummary.truncated_count === 2, 'truncated_count should include array and object truncation');
+check(truncationSummary.safe_summary_only === true, 'truncation summary should be safe summary only');
+
+const cyclicNested = { outer: {} };
+cyclicNested.outer.self = cyclicNested;
+expectReason(cyclicNested, 'circular_reference_detected', 'cyclic nested object should be detected');
+
+for (const [field, reason] of [
+  ['raw_audio', 'raw_audio_detected'],
+  ['audio_chunk', 'audio_chunk_detected'],
+  ['microphone_input', 'microphone_input_detected'],
+  ['transcript_raw', 'transcript_raw_detected'],
+  ['speaker_identity', 'speaker_identity_detected'],
+  ['language_tag', 'language_tag_detected'],
+  ['stream_id', 'stream_id_detected'],
+]) {
+  const result = detectUnsafeFields({ [field]: `${field}_value` });
+  check(result.some((finding) => finding.reason_code === reason), `ASR field ${field} should be detected`);
+  check(!JSON.stringify(result).includes(`${field}_value`), `ASR field ${field} raw value must not leak`);
+}
+
+for (const [field, reason] of [
+  ['generated_audio_ref', 'generated_audio_ref_detected'],
+  ['prompt_audio', 'prompt_audio_detected'],
+  ['reference_voice', 'reference_voice_detected'],
+  ['candidate_id', 'candidate_id_detected'],
+  ['generated_text', 'generated_text_detected'],
+  ['subtitle_text', 'subtitle_text_detected'],
+  ['viseme_payload', 'viseme_payload_detected'],
+  ['live2d_payload', 'live2d_payload_detected'],
+  ['renderer_payload', 'renderer_payload_detected'],
+]) {
+  const result = detectUnsafeFields({ [field]: `${field}_value` });
+  check(result.some((finding) => finding.reason_code === reason), `Voice/TTS/Live2D field ${field} should be detected`);
+  check(!JSON.stringify(result).includes(`${field}_value`), `Voice/TTS/Live2D field ${field} raw value must not leak`);
+}
+
+const disabledDetectors = detectUnsafeFields({
+  urlNote: 'https://bad.invalid',
+  emailNote: 'user@example.com',
+  pathNote: 'C:/private/model',
+}, { detectUrls: false, detectEmails: false, detectPrivatePaths: false });
+check(!disabledDetectors.some((finding) => finding.reason_code === 'url_detected'), 'URL detector can be disabled');
+check(!disabledDetectors.some((finding) => finding.reason_code === 'email_detected'), 'email detector can be disabled');
+check(!disabledDetectors.some((finding) => finding.reason_code === 'private_path_detected'), 'private path detector can be disabled');
+
+const localUtilitySource = readFileSync(new URL('./codex-unsafe-field-detector.mjs', import.meta.url), 'utf8');
+for (const blockedImport of [
+  'codex-local-quality-gate',
+  'codex-pr-profile-gate',
+  'codex-code-review-monitor',
+  'codex-stale-pr-audit-gate',
+  '../src/',
+  '../test/',
+  'package.json',
+  '.github',
+]) {
+  check(!localUtilitySource.includes(blockedImport), `unsafe field detector must not import ${blockedImport}`);
+}
+
+check(checkedCases >= 130, 'checked_cases must be at least 130');
 
 process.stdout.write(`${JSON.stringify({
   status: 'pass',

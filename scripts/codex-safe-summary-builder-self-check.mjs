@@ -1,7 +1,10 @@
 import {
   assertSafeSummaryDoesNotLeak,
   buildCountOnlySafeSummary,
+  isPlainRecord,
+  sanitizeReasonCode,
 } from './codex-safe-summary-builder.mjs';
+import { readFileSync } from 'node:fs';
 
 let checkedCases = 0;
 
@@ -152,6 +155,109 @@ check(mixedSummary.allowed_count === 1, 'plain pass record should be allowed');
 check(mixedSummary.reason_counts.record_not_plain_object === 3, 'non-plain reason should be counted');
 check(assertSafeSummaryDoesNotLeak(mixedSummary, forbiddenFragments), 'mixed summary must not leak');
 
+check(isPlainRecord({}), 'plain object should be plain record');
+check(isPlainRecord(Object.create(null)), 'null-prototype object should be plain record');
+check(!isPlainRecord(null), 'null should not be plain record');
+check(!isPlainRecord([]), 'array should not be plain record');
+check(!isPlainRecord(new Date()), 'Date should not be plain record');
+check(!isPlainRecord(/x/u), 'RegExp should not be plain record');
+check(!isPlainRecord(new Map()), 'Map should not be plain record');
+check(!isPlainRecord(new Set()), 'Set should not be plain record');
+check(!isPlainRecord(() => true), 'function should not be plain record');
+class ExampleRecord {}
+check(!isPlainRecord(new ExampleRecord()), 'class instance should not be plain record');
+
+for (const unsafeReason of [
+  '',
+  'a'.repeat(100),
+  'https://bad.invalid',
+  'user@example.com',
+  'C:/private/model',
+  'Bearer abc',
+  'api_key=abc',
+  '{"token":"abc"}',
+  '__proto__',
+  'constructor',
+  'prototype',
+]) {
+  check(sanitizeReasonCode(unsafeReason) === 'unsafe_reason_redacted', `unsafe reason should be redacted: ${unsafeReason}`);
+}
+
+const unsafeOptionSummary = buildCountOnlySafeSummary(
+  [{ status: 'approved', approved: true, endpoint: 'https://bad.invalid' }],
+  {
+    statusField: 'endpoint',
+    reviewRequiredField: 'token',
+    approvedField: 'constructor',
+    blockedField: '__proto__',
+    runtimeConnectedField: 'prototype',
+    productionReadyField: 'C:/private/model',
+    runtimeReadyField: 'https://bad.invalid',
+    asrRuntimeReadyField: 'api_key=abc',
+    reasonCodesField: 'reason_codes',
+  },
+);
+check(unsafeOptionSummary.safe_summary_only === true, 'unsafe option summary should remain safe_summary_only');
+check(unsafeOptionSummary.allowed_count === 1, 'unsafe option fields should fall back to defaults');
+check(unsafeOptionSummary.reason_counts.unsafe_option_redacted >= 1, 'unsafe option fields should be counted');
+check(assertSafeSummaryDoesNotLeak(unsafeOptionSummary, forbiddenFragments), 'unsafe option summary should not leak');
+
+const emptySummary = buildCountOnlySafeSummary([]);
+check(emptySummary.status === 'pass', 'empty array should pass');
+check(emptySummary.record_count === 0, 'empty array record count should be zero');
+check(emptySummary.safe_summary_only === true, 'empty summary should be safe_summary_only');
+
+const nestedUnsafeSummary = buildCountOnlySafeSummary([
+  {
+    status: 'pass',
+    nested: {
+      endpoint: 'https://bad.invalid',
+      raw_audio: 'raw_audio_value',
+      transcript_raw: 'transcript_raw_value',
+    },
+  },
+]);
+check(nestedUnsafeSummary.allowed_count === 1, 'nested unsafe values should not affect count output');
+check(assertSafeSummaryDoesNotLeak(nestedUnsafeSummary, forbiddenFragments), 'nested unsafe values should not leak');
+
+check(assertSafeSummaryDoesNotLeak({ safe_summary_only: true }, 'https://bad.invalid'), 'non-array forbidden fragments should be ignored safely');
+let genericLeakError = false;
+try {
+  assertSafeSummaryDoesNotLeak({ safe_summary_only: true, note: 'blocked_value' }, ['blocked_value']);
+} catch (error) {
+  genericLeakError = true;
+  check(!String(error.message).includes('blocked_value'), 'leak error must not include raw fragment');
+}
+check(genericLeakError, 'leak assertion should throw generic error');
+
+const mixedStatusSummary = buildCountOnlySafeSummary([
+  { status: 'blocked', approved: true, review_required: true },
+  { blocked: false, approved: true, runtime_connected: false, production_ready: false, runtime_ready: false, asr_runtime_ready: false },
+  { blocked: true, runtime_connected: true, production_ready: true, runtime_ready: true, asr_runtime_ready: true },
+]);
+check(mixedStatusSummary.blocked_count === 2, 'mixed status blocked count should be correct');
+check(mixedStatusSummary.allowed_count === 1, 'mixed status allowed count should be correct');
+check(mixedStatusSummary.approved_count === 2, 'mixed status approved count should be correct');
+check(mixedStatusSummary.review_required_count === 1, 'mixed status review count should be correct');
+check(mixedStatusSummary.runtime_connected_count === 1, 'mixed status runtime_connected true count should be correct');
+check(mixedStatusSummary.production_ready_count === 1, 'mixed status production_ready true count should be correct');
+check(mixedStatusSummary.runtime_ready_count === 1, 'mixed status runtime_ready true count should be correct');
+check(mixedStatusSummary.asr_runtime_ready_count === 1, 'mixed status asr_runtime_ready true count should be correct');
+
+const localUtilitySource = readFileSync(new URL('./codex-safe-summary-builder.mjs', import.meta.url), 'utf8');
+for (const blockedImport of [
+  'codex-local-quality-gate',
+  'codex-pr-profile-gate',
+  'codex-code-review-monitor',
+  'codex-stale-pr-audit-gate',
+  '../src/',
+  '../test/',
+  'package.json',
+  '.github',
+]) {
+  check(!localUtilitySource.includes(blockedImport), `safe summary builder must not import ${blockedImport}`);
+}
+
 for (const field of [
   'raw changed files',
   'branch name',
@@ -175,7 +281,7 @@ for (const field of [
   check(!JSON.stringify(localSummary).includes(field), `unsafe reason value not emitted for ${field}`);
 }
 
-check(checkedCases >= 45, 'checked_cases must be at least 45');
+check(checkedCases >= 90, 'checked_cases must be at least 90');
 
 process.stdout.write(`${JSON.stringify({
   status: 'pass',

@@ -30,6 +30,14 @@ const UNSAFE_REASON_FRAGMENTS = [
   'speaker_identity',
   'language_tag',
   'stream_id',
+  'url',
+  'email',
+  'http',
+  'https',
+  'json',
+  '__proto__',
+  'constructor',
+  'prototype',
 ];
 
 const SAFE_OPTION_FIELDS = new Set([
@@ -86,7 +94,9 @@ function safeFieldName(value, fallback) {
   }
 
   const normalized = value.trim();
+  const lowered = normalized.toLowerCase();
   return /^[a-zA-Z][a-zA-Z0-9_]{0,79}$/u.test(normalized)
+    && !UNSAFE_REASON_FRAGMENTS.some((fragment) => lowered.includes(fragment))
     ? normalized
     : fallback;
 }
@@ -214,9 +224,10 @@ export function buildCountOnlySafeSummary(records, options = {}) {
 
 export function assertSafeSummaryDoesNotLeak(summary, forbiddenFragments = []) {
   const serialized = JSON.stringify(summary);
+  const fragments = Array.isArray(forbiddenFragments) ? forbiddenFragments : [];
   const leaked = [];
 
-  for (const fragment of forbiddenFragments) {
+  for (const fragment of fragments) {
     if (typeof fragment === 'string' && fragment !== '' && serialized.includes(fragment)) {
       leaked.push(fragment);
     }

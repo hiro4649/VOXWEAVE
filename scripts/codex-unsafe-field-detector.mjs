@@ -74,7 +74,7 @@ function normalizeOptions(options = {}) {
 
   if (options && typeof options === 'object') {
     for (const key of ['maxDepth', 'maxArrayItems', 'maxObjectKeys']) {
-      if (Number.isInteger(options[key]) && options[key] >= 0 && options[key] <= 1000) {
+      if (Number.isFinite(options[key]) && Number.isInteger(options[key]) && options[key] > 0 && options[key] <= 1000) {
         safeOptions[key] = options[key];
       }
     }
