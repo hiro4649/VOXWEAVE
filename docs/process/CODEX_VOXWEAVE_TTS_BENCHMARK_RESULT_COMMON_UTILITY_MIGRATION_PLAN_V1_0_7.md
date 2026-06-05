@@ -259,6 +259,9 @@ Candidate files:
 
 ## Required Future Self-check Cases
 
+- PR #21 behavior reference still current before implementation
+- same-head evidence remains current before implementation
+- before/after self-check comparison remains preserved
 - result_id does not appear in safe summary
 - engine_id does not appear in safe summary
 - raw_logs does not appear in safe summary
