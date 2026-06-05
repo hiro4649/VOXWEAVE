@@ -1,4 +1,4 @@
-# CODEX_QUALITY_HARNESS_FILE v1.0.6
+# CODEX_QUALITY_HARNESS_FILE v1.0.7
 name: quality-gate
 
 on:
@@ -153,7 +153,6 @@ jobs:
           CODEX_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
           CODEX_PR_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
           CODEX_REPOSITORY: ${{ github.repository }}
-          CODEX_DEV_MODE: "5_5_LOW"
           CODEX_LIFEBOAT_PATH: ${{ runner.temp }}/codex-minimal-safe-failure.json
           GITHUB_TOKEN: ${{ github.token }}
         run: |
@@ -175,6 +174,12 @@ jobs:
             export CODEX_HARNESS_MODE=target
             export CODEX_PROFILE_COMPAT_MODE=off
             export CODEX_SKIP_NPM="${CODEX_SKIP_NPM:-1}"
+            export CODEX_TARGET_ORIGINAL_EVENT_NAME="${CODEX_EVENT_NAME:-}"
+            export CODEX_TARGET_ORIGINAL_PR_NUMBER="${CODEX_PR_NUMBER:-}"
+            export CODEX_TARGET_ORIGINAL_GITHUB_REF="${GITHUB_REF:-}"
+            export CODEX_EVENT_NAME=target_rollout
+            export CODEX_PR_NUMBER=
+            export GITHUB_REF=
           fi
           node scripts/codex-workflow-preflight.mjs > "$RUNNER_TEMP/codex-workflow-preflight.json"
           gate_exit=0

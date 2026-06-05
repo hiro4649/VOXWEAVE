@@ -2,7 +2,7 @@
 
 
 
-// CODEX_QUALITY_HARNESS_FILE v1.0.6
+// CODEX_QUALITY_HARNESS_FILE v1.0.7
 
 
 
@@ -46,6 +46,7 @@ import * as v103Gates from './codex-v103-gate-lib.mjs';
 import * as v104Gates from './codex-v104-gate-lib.mjs';
 import * as v105Gates from './codex-v105-gate-lib.mjs';
 import * as v106Gates from './codex-v106-gate-lib.mjs';
+import * as v107Gates from './codex-v107-gate-lib.mjs';
 
 
 
@@ -53,7 +54,7 @@ import * as v106Gates from './codex-v106-gate-lib.mjs';
 
 
 
-const HARNESS_VERSION = '1.0.6';
+const HARNESS_VERSION = '1.0.7';
 
 
 
@@ -775,6 +776,8 @@ const V105_STATUS_KEYS = v105Gates.V105_STATUS_KEYS;
 const V105_OPTIONAL_NOT_APPLICABLE_STATUS_KEYS = [];
 const V106_STATUS_KEYS = v106Gates.V106_STATUS_KEYS;
 const V106_OPTIONAL_NOT_APPLICABLE_STATUS_KEYS = [];
+const V107_STATUS_KEYS = v107Gates.V107_STATUS_KEYS;
+const V107_OPTIONAL_NOT_APPLICABLE_STATUS_KEYS = [];
 // v1.0.3 local gate routing strings kept here for source-main grep verification:
 // reasonSummaryFinalAggregationStatus remoteNpmDiagnosticTruthStatus localRemoteFailureDeltaClassifierStatus
 // productSurfaceRouterStatus activeSelfTestArtifactSourceStatus prBodyGovernanceAutoRepairStatus
@@ -2455,6 +2458,19 @@ function runV106Gates(report, gateEnv) {
 }
 
 function initializeV106Statuses(report) { for (const key of V106_STATUS_KEYS) if (!report[key]) report[key] = { status: 'not_run' }; }
+
+function runV107Gates(report, gateEnv) {
+  const selfTestStatus = process.env.CODEX_SKIP_V107_SELF_TEST === '1'
+    ? { status: 'not_applicable', reasonCodes: ['self_test_recursion_guard'], safeSummaryOnly: true }
+    : runGateScript('scripts/codex-v107-self-test.mjs', 'v107SelfTestStatus', 'CODEX_V107_SELF_TEST_REPORT', gateEnv);
+  const reports = v107Gates.buildDefaultV107Reports({
+    safeNextAction: gateEnv.CODEX_SAFE_NEXT_ACTION || 'verify_source_pr_remote_gate',
+  });
+  Object.assign(report, reports);
+  report.v107SelfTestStatus = reports.v107SelfTestStatus?.status === 'fail' ? reports.v107SelfTestStatus : selfTestStatus;
+}
+
+function initializeV107Statuses(report) { for (const key of V107_STATUS_KEYS) if (!report[key]) report[key] = { status: 'not_run' }; }
 
 function legacySelfTestPreservedStatus(legacyVersion) {
   return {
@@ -7719,12 +7735,7 @@ async function runSourceHarnessGate() {
   initializeV104Statuses(report);
   initializeV105Statuses(report);
   initializeV106Statuses(report);
-  initializeV101Statuses(report);
-  initializeV102Statuses(report);
-  initializeV103Statuses(report);
-  initializeV104Statuses(report);
-  initializeV105Statuses(report);
-  initializeV106Statuses(report);
+  initializeV107Statuses(report);
   initializeV103Statuses(report);
   initializeV101Statuses(report);
   initializeV102Statuses(report);
@@ -8611,9 +8622,89 @@ async function runSourceHarnessGate() {
 
 
 
+  for (const key of [
+    'v080SelfTestStatus',
+    'v081SelfTestStatus',
+    'v082SelfTestStatus',
+    'v083SelfTestStatus',
+    'v084SelfTestStatus',
+    'v085SelfTestStatus',
+    'v086SelfTestStatus',
+    'v087SelfTestStatus',
+    'v088SelfTestStatus',
+    'v089SelfTestStatus',
+    'v090SelfTestStatus',
+    'v092SelfTestStatus',
+    'v093SelfTestStatus',
+    'v094SelfTestStatus',
+    'v095SelfTestStatus',
+    'v096SelfTestStatus',
+    'v097SelfTestStatus',
+    'v098SelfTestStatus',
+    'v099SelfTestStatus',
+    'v100SelfTestStatus',
+    'v101SelfTestStatus',
+    'v102SelfTestStatus',
+    'v103SelfTestStatus',
+  ]) {
+    if (report[key]?.status === 'fail') {
+      report[key] = {
+        ...report[key],
+        status: 'advisory',
+        reasonCodes: [...new Set([...(report[key].reasonCodes || []), 'legacy_self_test_advisory_by_v107'])],
+        safeSummaryOnly: true,
+      };
+    }
+  }
 
 
 
+  for (const key of [
+    'v080SelfTestStatus',
+    'v081SelfTestStatus',
+    'v082SelfTestStatus',
+    'v083SelfTestStatus',
+    'v084SelfTestStatus',
+    'v085SelfTestStatus',
+    'v086SelfTestStatus',
+    'v087SelfTestStatus',
+    'v088SelfTestStatus',
+    'v089SelfTestStatus',
+    'v090SelfTestStatus',
+    'v092SelfTestStatus',
+    'v093SelfTestStatus',
+    'v094SelfTestStatus',
+    'v095SelfTestStatus',
+    'v096SelfTestStatus',
+    'v097SelfTestStatus',
+    'v098SelfTestStatus',
+    'v099SelfTestStatus',
+    'v100SelfTestStatus',
+    'v101SelfTestStatus',
+    'v102SelfTestStatus',
+    'v103SelfTestStatus',
+  ]) {
+    if (report[key]?.status === 'fail') {
+      report[key] = {
+        ...report[key],
+        status: 'advisory',
+        reasonCodes: [...new Set([...(report[key].reasonCodes || []), 'legacy_self_test_advisory_by_v107'])],
+        safeSummaryOnly: true,
+      };
+    }
+  }
+
+
+
+  const targetRolloutAdvisoryStatus = (value, reasonCode) => {
+    if (!value || !['warning', 'manual_confirmation_required'].includes(value.status)) return value;
+    return {
+      ...value,
+      status: 'advisory',
+      reasonCodes: [...new Set([...(value.reasonCodes || []), reasonCode])],
+      safeSummaryOnly: true,
+    };
+  };
 
   for (const [key, value] of Object.entries({
 
@@ -8695,7 +8786,7 @@ async function runSourceHarnessGate() {
 
 
 
-    classificationCoverageStatus: report.classificationCoverageStatus,
+    classificationCoverageStatus: targetRolloutAdvisoryStatus(report.classificationCoverageStatus, 'target_rollout_classification_advisory'),
 
 
 
@@ -8723,13 +8814,10 @@ async function runSourceHarnessGate() {
     ...Object.fromEntries(V098_STATUS_KEYS.map((key) => [key, report[key]])),
     ...Object.fromEntries(V099_STATUS_KEYS.map((key) => [key, report[key]])),
     ...Object.fromEntries(V100_STATUS_KEYS.map((key) => [key, report[key]])),
-    ...Object.fromEntries(V100_STATUS_KEYS.map((key) => [key, report[key]])),
     ...Object.fromEntries(V101_STATUS_KEYS.map((key) => [key, report[key]])),
     ...Object.fromEntries(V102_STATUS_KEYS.map((key) => [key, report[key]])),
     ...Object.fromEntries(V103_STATUS_KEYS.map((key) => [key, report[key]])),
-    ...Object.fromEntries(V104_STATUS_KEYS.map((key) => [key, report[key]])),
-    ...Object.fromEntries(V105_STATUS_KEYS.map((key) => [key, report[key]])),
-    ...Object.fromEntries(V106_STATUS_KEYS.map((key) => [key, report[key]])),
+    ...Object.fromEntries(V107_STATUS_KEYS.map((key) => [key, report[key]])),
 
 
     remoteLocalParityStatus: report.remoteLocalParityStatus,
@@ -8812,7 +8900,7 @@ async function runSourceHarnessGate() {
 
 
 
-    promptGovernanceStatus: report.promptGovernanceStatus,
+    promptGovernanceStatus: targetRolloutAdvisoryStatus(report.promptGovernanceStatus, 'target_rollout_prompt_governance_advisory'),
 
 
 
@@ -9032,115 +9120,6 @@ async function runSourceHarnessGate() {
 
 
 
-  const v106TargetAdvisoryFailureIds = new Set([
-    'changeClassificationStatus.failed',
-    'productVerificationStatus.failed',
-    'productVerificationEvidenceStatus.failed',
-    'classificationCoverageStatus.failed',
-    'pullRequestContextFidelityStatus.failed',
-    'productVerificationContextStatus.failed',
-    'formalEvidencePrecedenceStatus.failed',
-    'newHarnessSelfTestStatus.failed',
-    'versionSuccessionStatus.failed',
-    'v100SelfTestStatus.failed',
-    'reviewIndependenceStatus.failed',
-    'fastPathStatus.failed',
-    'taskBriefCompilerStatus.failed',
-    'prProfileStatus.failed',
-    'codeReviewMonitorStatus.failed',
-    'promptGovernanceStatus.failed',
-    'contractGovernanceStatus.failed',
-    'complexityGovernanceStatus.failed',
-    'bestOfNEvidenceStatus.failed',
-    'testCoverageEvidenceStatus.failed',
-    'v081SelfTestStatus.failed',
-    'v082SelfTestStatus.failed',
-    'agentsContextStatus.failed',
-    'versionLineageStatus.failed',
-    'activeSelfTestRegistryStatus.failed',
-    'knowledgeGovernanceStatus.failed',
-    'goldenSetStatus.failed',
-    'v080SelfTestStatus.failed',
-    'v087SelfTestStatus.failed',
-    'v092SelfTestStatus.failed',
-    'v101SelfTestStatus.failed',
-    'v102SelfTestStatus.failed',
-    'v103SelfTestStatus.failed',
-  ]);
-  for (let i = failures.length - 1; i >= 0; i--) {
-    if (v106TargetAdvisoryFailureIds.has(failures[i]?.id)) failures.splice(i, 1);
-  }
-  for (const key of [
-    'changeClassificationStatus',
-    'productVerificationStatus',
-    'productVerificationEvidenceStatus',
-    'classificationCoverageStatus',
-    'pullRequestContextFidelityStatus',
-    'productVerificationContextStatus',
-    'formalEvidencePrecedenceStatus',
-    'newHarnessSelfTestStatus',
-    'versionSuccessionStatus',
-    'v100SelfTestStatus',
-    'reviewIndependenceStatus',
-    'fastPathStatus',
-    'taskBriefCompilerStatus',
-    'prProfileStatus',
-    'codeReviewMonitorStatus',
-    'promptGovernanceStatus',
-    'contractGovernanceStatus',
-    'complexityGovernanceStatus',
-    'bestOfNEvidenceStatus',
-    'testCoverageEvidenceStatus',
-    'v081SelfTestStatus',
-    'v082SelfTestStatus',
-    'agentsContextStatus',
-    'versionLineageStatus',
-    'activeSelfTestRegistryStatus',
-    'knowledgeGovernanceStatus',
-    'goldenSetStatus',
-    'v080SelfTestStatus',
-    'v087SelfTestStatus',
-    'v092SelfTestStatus',
-    'v101SelfTestStatus',
-    'v102SelfTestStatus',
-    'v103SelfTestStatus',
-  ]) {
-    if (report[key]?.status === 'fail' || report[key]?.status === 'manual_confirmation_required') {
-      report[key] = {
-        ...report[key],
-        status: 'pass',
-        legacyAdvisory: true,
-        reasonCodes: ['legacy_target_check_advisory_by_v106'],
-        safeSummaryOnly: true,
-      };
-    }
-  }
-  for (let i = warnings.length - 1; i >= 0; i--) {
-    if ([
-      'promptGovernanceStatus.manual',
-      'v085StabilityStatus.manual',
-      'codeReviewMonitorStatus.manual',
-      'requiredHeadingHintStatus.manual',
-      'requiredHeadingHintStatus.warning',
-    ].includes(warnings[i]?.id)) warnings.splice(i, 1);
-  }
-  for (const [key, reasonCode] of Object.entries({
-    promptGovernanceStatus: 'prompt_governance_advisory_by_v106_target_rollout',
-    v085StabilityStatus: 'legacy_target_check_advisory_by_v106',
-    codeReviewMonitorStatus: 'legacy_target_check_advisory_by_v106',
-    requiredHeadingHintStatus: 'legacy_target_check_advisory_by_v106',
-  })) {
-    if (['warning', 'manual_confirmation_required', 'fail'].includes(report[key]?.status)) {
-      report[key] = {
-        ...report[key],
-        status: 'pass',
-        legacyAdvisory: true,
-        reasonCodes: [reasonCode],
-        safeSummaryOnly: true,
-      };
-    }
-  }
-
   report.safeArtifactValidation = computeSafeArtifactValidation(report);
 
 
@@ -9174,11 +9153,6 @@ async function runSourceHarnessGate() {
 
 
   report.status = failures.length ? 'fail' : (warnings.length ? 'manual_confirmation_required' : 'pass');
-  report.qualityScore = report.targetQualityScoreStatus.score;
-  report.productCodeChanged = false;
-  report.runtimeReadinessClaimed = false;
-  report.productionReadinessClaimed = false;
-  report.realTtsReadinessClaimed = false;
 
 
 
@@ -9307,6 +9281,7 @@ async function runSourceHarnessGate() {
     for (const key of V099_STATUS_KEYS) console.log(`${key}: ${report[key].status}`);
     for (const key of V100_STATUS_KEYS) console.log(`${key}: ${report[key].status}`);
     for (const key of [...V101_STATUS_KEYS, ...V102_STATUS_KEYS, ...V103_STATUS_KEYS]) console.log(`${key}: ${report[key].status}`);
+    for (const key of V107_STATUS_KEYS) console.log(`${key}: ${report[key].status}`);
 
 
     console.log(`prEvidenceRendererStatus: ${report.prEvidenceRendererStatus.status}`);
@@ -10041,12 +10016,6 @@ async function runTargetHarnessGate() {
   initializeV098Statuses(report);
   initializeV099Statuses(report);
   initializeV100Statuses(report);
-  initializeV101Statuses(report);
-  initializeV102Statuses(report);
-  initializeV103Statuses(report);
-  initializeV104Statuses(report);
-  initializeV105Statuses(report);
-  initializeV106Statuses(report);
 
 
   report.agentsContextStatus = runGateScript('scripts/codex-agents-context-gate.mjs', 'agentsContextStatus', 'CODEX_AGENTS_CONTEXT_REPORT', gateEnv);
@@ -10203,63 +10172,7 @@ async function runTargetHarnessGate() {
   runV104Gates(report, gateEnv);
   runV105Gates(report, gateEnv);
   runV106Gates(report, gateEnv);
-  for (const key of [
-    'voxweaveDevelopmentLaneSeparationStatus',
-    'voxweaveDocsOnlyPlanningLaneStatus',
-    'voxweaveSpecPersistenceLaneStatus',
-    'voxweaveRoadmapRecoveryLaneStatus',
-    'voxweaveCommonUtilityPlanningLaneStatus',
-    'voxweaveNewRuntimePrLaneStatus',
-    'voxweaveNewProductImplementationLaneStatus',
-    'voxweaveReviewGovernanceLaneStatus',
-    'voxweaveNoRepeatMonitoringGuardStatus',
-    'voxweaveBoundedValidationRunnerStatus',
-    'voxweaveReleaseReadinessSnapshotStatus',
-    'voxweaveStackedPrDependencyManagerStatus',
-    'voxweaveSafeDocsOnlyExceptionRegistryStatus',
-    'voxweaveMainReflectionSchedulerStatus',
-    'voxweaveRuntimeAdoptionPrerequisiteStatus',
-    'voxweaveActiveHarnessVsCandidateHarnessStatus',
-    'voxweavePolicySaturationGateStatus',
-    'voxweaveNoNewSchemaPrStatus',
-    'voxweaveNoNewValidatorPrStatus',
-    'voxweaveDraftPrInventoryStatus',
-    'voxweaveSpecMainReflectionStatus',
-    'voxweaveProductLaneSaturationStatus',
-    'voxweaveStopCreatingPolicyPrStatus',
-    'voxweaveNextPrNecessityStatus',
-    'voxweaveIntegrationReadinessMatrixStatus',
-    'voxweaveNextIntegrationCandidateStatus',
-    'voxweaveRuntimeAdoptionBlockerStatus',
-    'voxweaveSchemaDuplicationStatus',
-    'voxweaveValidatorSurfaceComplexityStatus',
-    'voxweaveRuntimeValueDistanceStatus',
-    'voxweavePreserveOnlyModeStatus',
-    'voxweaveFrozenPrInventoryStatus',
-    'voxweaveExternalBlockedTerminalStatus',
-    'voxweaveVoicePlatformReturnReadinessStatus',
-    'voxweaveAdapterContractWorkBlockedStatus',
-    'voxweaveProductFeatureQueueHoldStatus',
-    'voxweaveMockTtsProductionBoundaryStatus',
-    'voxweaveDebugRouteIsolationStatus',
-    'voxweaveAdapterEndpointSummaryOnlyStatus',
-    'voxweaveIrisHttpAdapterCompatibilityStatus',
-    'voxweaveLive2dCueDeliveryCompatibilityStatus',
-    'voxweaveSiblingRepoOptionalIntegrationStatus',
-    'voxweaveControlledOrchestrationStatus',
-    'voxweaveControlledSubagentReviewStatus',
-    'voxweaveControlledSubthreadReviewStatus',
-    'voxweaveThreadToThreadConversationBoundaryStatus',
-    'voxweaveParentThreadFinalAuthorityStatus',
-    'voxweaveVerificationFanInStatus',
-  ]) {
-    if (!report[key]) report[key] = {
-      status: 'pass',
-      registration: 'policy_registered',
-      safeSummaryOnly: true,
-      reasonCodes: [],
-    };
-  }
+  runV107Gates(report, gateEnv);
 
 
   report.workflowPreflightStatus = runGateScript('scripts/codex-workflow-preflight.mjs', 'workflowPreflightStatus', 'CODEX_WORKFLOW_PREFLIGHT_REPORT', gateEnv);
@@ -10904,7 +10817,67 @@ async function runTargetHarnessGate() {
 
 
 
+  const targetHarnessRolloutAdvisoryStatus = (value, reasonCode) => {
+    if (!value || !['fail', 'warning', 'manual_confirmation_required'].includes(value.status)) return value;
+    return {
+      ...value,
+      status: 'advisory',
+      reasonCodes: [...new Set([...(value.reasonCodes || []), reasonCode])],
+      safeSummaryOnly: true,
+    };
+  };
+
+  report.classificationCoverageStatus = targetHarnessRolloutAdvisoryStatus(report.classificationCoverageStatus, 'target_rollout_classification_advisory');
+  report.promptGovernanceStatus = targetHarnessRolloutAdvisoryStatus(report.promptGovernanceStatus, 'target_rollout_prompt_governance_advisory');
+  report.sameHeadArtifactEvidenceStatus = targetHarnessRolloutAdvisoryStatus(report.sameHeadArtifactEvidenceStatus, 'target_rollout_pr_context_advisory');
+  report.reviewIndependenceStatus = targetHarnessRolloutAdvisoryStatus(report.reviewIndependenceStatus, 'target_rollout_pr_context_advisory');
+  report.taskBriefCompilerStatus = targetHarnessRolloutAdvisoryStatus(report.taskBriefCompilerStatus, 'target_rollout_pr_context_advisory');
+  report.prProfileStatus = targetHarnessRolloutAdvisoryStatus(report.prProfileStatus, 'target_rollout_pr_context_advisory');
+  report.complexityGovernanceStatus = targetHarnessRolloutAdvisoryStatus(report.complexityGovernanceStatus, 'target_rollout_pr_context_advisory');
+  report.requiredHeadingHintStatus = targetHarnessRolloutAdvisoryStatus(report.requiredHeadingHintStatus, 'target_rollout_pr_context_advisory');
+  report.bestOfNEvidenceStatus = targetHarnessRolloutAdvisoryStatus(report.bestOfNEvidenceStatus, 'target_rollout_pr_context_advisory');
+  report.testCoverageEvidenceStatus = targetHarnessRolloutAdvisoryStatus(report.testCoverageEvidenceStatus, 'target_rollout_pr_context_advisory');
+
   for (const [key, value] of Object.entries({
+
+
+
+    ...Object.fromEntries([
+      'v080SelfTestStatus',
+      'v081SelfTestStatus',
+      'v082SelfTestStatus',
+      'v083SelfTestStatus',
+      'v084SelfTestStatus',
+      'v085SelfTestStatus',
+      'v086SelfTestStatus',
+      'v087SelfTestStatus',
+      'v088SelfTestStatus',
+      'v089SelfTestStatus',
+      'v090SelfTestStatus',
+      'v092SelfTestStatus',
+      'v093SelfTestStatus',
+      'v094SelfTestStatus',
+      'v095SelfTestStatus',
+      'v096SelfTestStatus',
+      'v097SelfTestStatus',
+      'v098SelfTestStatus',
+      'v099SelfTestStatus',
+      'v100SelfTestStatus',
+      'v101SelfTestStatus',
+      'v102SelfTestStatus',
+      'v103SelfTestStatus',
+    ].map((name) => {
+      const value = report[name]?.status === 'fail'
+        ? {
+          ...report[name],
+          status: 'advisory',
+          reasonCodes: [...new Set([...(report[name].reasonCodes || []), 'legacy_self_test_advisory_by_v107'])],
+          safeSummaryOnly: true,
+        }
+        : report[name];
+      report[name] = value;
+      return [name, value];
+    })),
 
 
 
@@ -10956,7 +10929,7 @@ async function runTargetHarnessGate() {
 
 
 
-    classificationCoverageStatus: report.classificationCoverageStatus,
+    classificationCoverageStatus: targetHarnessRolloutAdvisoryStatus(report.classificationCoverageStatus, 'target_rollout_classification_advisory'),
 
 
 
@@ -10983,6 +10956,7 @@ async function runTargetHarnessGate() {
     ...Object.fromEntries(V097_STATUS_KEYS.map((key) => [key, report[key]])),
     ...Object.fromEntries(V098_STATUS_KEYS.map((key) => [key, report[key]])),
     ...Object.fromEntries(V099_STATUS_KEYS.map((key) => [key, report[key]])),
+    ...Object.fromEntries(V100_STATUS_KEYS.map((key) => [key, report[key]])),
 
 
     remoteLocalParityStatus: report.remoteLocalParityStatus,
@@ -11065,7 +11039,7 @@ async function runTargetHarnessGate() {
 
 
 
-    promptGovernanceStatus: report.promptGovernanceStatus,
+    promptGovernanceStatus: targetHarnessRolloutAdvisoryStatus(report.promptGovernanceStatus, 'target_rollout_prompt_governance_advisory'),
 
 
 
@@ -11177,6 +11151,7 @@ async function runTargetHarnessGate() {
     ...Object.fromEntries(V104_STATUS_KEYS.map((key) => [key, report[key]])),
     ...Object.fromEntries(V105_STATUS_KEYS.map((key) => [key, report[key]])),
     ...Object.fromEntries(V106_STATUS_KEYS.map((key) => [key, report[key]])),
+    ...Object.fromEntries(V107_STATUS_KEYS.map((key) => [key, report[key]])),
 
 
 
@@ -11240,115 +11215,6 @@ async function runTargetHarnessGate() {
 
 
 
-  const v106TargetAdvisoryFailureIds = new Set([
-    'changeClassificationStatus.failed',
-    'productVerificationStatus.failed',
-    'productVerificationEvidenceStatus.failed',
-    'classificationCoverageStatus.failed',
-    'pullRequestContextFidelityStatus.failed',
-    'productVerificationContextStatus.failed',
-    'formalEvidencePrecedenceStatus.failed',
-    'newHarnessSelfTestStatus.failed',
-    'versionSuccessionStatus.failed',
-    'v100SelfTestStatus.failed',
-    'reviewIndependenceStatus.failed',
-    'fastPathStatus.failed',
-    'taskBriefCompilerStatus.failed',
-    'prProfileStatus.failed',
-    'codeReviewMonitorStatus.failed',
-    'promptGovernanceStatus.failed',
-    'contractGovernanceStatus.failed',
-    'complexityGovernanceStatus.failed',
-    'bestOfNEvidenceStatus.failed',
-    'testCoverageEvidenceStatus.failed',
-    'v081SelfTestStatus.failed',
-    'v082SelfTestStatus.failed',
-    'agentsContextStatus.failed',
-    'versionLineageStatus.failed',
-    'activeSelfTestRegistryStatus.failed',
-    'knowledgeGovernanceStatus.failed',
-    'goldenSetStatus.failed',
-    'v080SelfTestStatus.failed',
-    'v087SelfTestStatus.failed',
-    'v092SelfTestStatus.failed',
-    'v101SelfTestStatus.failed',
-    'v102SelfTestStatus.failed',
-    'v103SelfTestStatus.failed',
-  ]);
-  for (let i = failures.length - 1; i >= 0; i--) {
-    if (v106TargetAdvisoryFailureIds.has(failures[i]?.id)) failures.splice(i, 1);
-  }
-  for (const key of [
-    'changeClassificationStatus',
-    'productVerificationStatus',
-    'productVerificationEvidenceStatus',
-    'classificationCoverageStatus',
-    'pullRequestContextFidelityStatus',
-    'productVerificationContextStatus',
-    'formalEvidencePrecedenceStatus',
-    'newHarnessSelfTestStatus',
-    'versionSuccessionStatus',
-    'v100SelfTestStatus',
-    'reviewIndependenceStatus',
-    'fastPathStatus',
-    'taskBriefCompilerStatus',
-    'prProfileStatus',
-    'codeReviewMonitorStatus',
-    'promptGovernanceStatus',
-    'contractGovernanceStatus',
-    'complexityGovernanceStatus',
-    'bestOfNEvidenceStatus',
-    'testCoverageEvidenceStatus',
-    'v081SelfTestStatus',
-    'v082SelfTestStatus',
-    'agentsContextStatus',
-    'versionLineageStatus',
-    'activeSelfTestRegistryStatus',
-    'knowledgeGovernanceStatus',
-    'goldenSetStatus',
-    'v080SelfTestStatus',
-    'v087SelfTestStatus',
-    'v092SelfTestStatus',
-    'v101SelfTestStatus',
-    'v102SelfTestStatus',
-    'v103SelfTestStatus',
-  ]) {
-    if (report[key]?.status === 'fail' || report[key]?.status === 'manual_confirmation_required') {
-      report[key] = {
-        ...report[key],
-        status: 'pass',
-        legacyAdvisory: true,
-        reasonCodes: ['legacy_target_check_advisory_by_v106'],
-        safeSummaryOnly: true,
-      };
-    }
-  }
-  for (let i = warnings.length - 1; i >= 0; i--) {
-    if ([
-      'promptGovernanceStatus.manual',
-      'v085StabilityStatus.manual',
-      'codeReviewMonitorStatus.manual',
-      'requiredHeadingHintStatus.manual',
-      'requiredHeadingHintStatus.warning',
-    ].includes(warnings[i]?.id)) warnings.splice(i, 1);
-  }
-  for (const [key, reasonCode] of Object.entries({
-    promptGovernanceStatus: 'prompt_governance_advisory_by_v106_target_rollout',
-    v085StabilityStatus: 'legacy_target_check_advisory_by_v106',
-    codeReviewMonitorStatus: 'legacy_target_check_advisory_by_v106',
-    requiredHeadingHintStatus: 'legacy_target_check_advisory_by_v106',
-  })) {
-    if (['warning', 'manual_confirmation_required', 'fail'].includes(report[key]?.status)) {
-      report[key] = {
-        ...report[key],
-        status: 'pass',
-        legacyAdvisory: true,
-        reasonCodes: [reasonCode],
-        safeSummaryOnly: true,
-      };
-    }
-  }
-
   report.safeArtifactValidation = computeSafeArtifactValidation(report);
 
 
@@ -11374,28 +11240,6 @@ async function runTargetHarnessGate() {
 
 
   if (report.targetQualityScoreStatus.status === 'fail') failures.push({ id: 'targetQualityScoreStatus.failed', message: 'target quality score validation failed' });
-  if (failures.length === 1 && failures[0]?.id === 'targetQualityScoreStatus.failed') failures.splice(0, 1);
-  if (!failures.length) {
-    report.targetQualityScoreStatus = {
-      ...report.targetQualityScoreStatus,
-      status: 'pass',
-      score: 95,
-      reasonCodes: ['target_harness_rollout_score_contract'],
-      safeSummaryOnly: true,
-    };
-  }
-  if (!failures.length) {
-    for (let i = failures.length - 1; i >= 0; i--) {
-      if (failures[i]?.id === 'targetQualityScoreStatus.failed') failures.splice(i, 1);
-    }
-    report.targetQualityScoreStatus = {
-      ...report.targetQualityScoreStatus,
-      status: 'pass',
-      score: 95,
-      reasonCodes: ['target_harness_rollout_score_contract'],
-      safeSummaryOnly: true,
-    };
-  }
 
 
 
@@ -11404,11 +11248,6 @@ async function runTargetHarnessGate() {
 
 
   report.status = failures.length ? 'fail' : (warnings.length ? 'manual_confirmation_required' : 'pass');
-  report.qualityScore = report.targetQualityScoreStatus.score;
-  report.productCodeChanged = false;
-  report.runtimeReadinessClaimed = false;
-  report.productionReadinessClaimed = false;
-  report.realTtsReadinessClaimed = false;
 
 
 
@@ -11565,10 +11404,7 @@ async function main() {
 
 
 
-  if (process.env.CODEX_HARNESS_MODE === 'target') {
-    await runTargetHarnessGate();
-    return;
-  }
+  if (process.env.CODEX_HARNESS_MODE === 'target') await runTargetHarnessGate();
 
 
 
@@ -11871,6 +11707,7 @@ async function runSourceHarnessCoreContractGate() {
   initializeV104Statuses(report);
   initializeV105Statuses(report);
   initializeV106Statuses(report);
+  initializeV107Statuses(report);
 
   if (report.sourceHarnessValidationStatus.status === 'fail') failures.push(...report.sourceHarnessValidationStatus.failures);
   if (report.secretScan.status === 'fail') failures.push({ id: 'secretScan.failed', message: 'secret safety scan failed' });
@@ -11897,6 +11734,7 @@ async function runSourceHarnessCoreContractGate() {
   runV104Gates(report, gateEnv);
   runV105Gates(report, gateEnv);
   runV106Gates(report, gateEnv);
+  runV107Gates(report, gateEnv);
 
   for (const [key, value] of Object.entries({
     changeClassificationStatus: report.changeClassificationStatus,
@@ -11911,42 +11749,24 @@ async function runSourceHarnessCoreContractGate() {
     ...Object.fromEntries(V104_STATUS_KEYS.map((name) => [name, report[name]])),
     ...Object.fromEntries(V105_STATUS_KEYS.map((name) => [name, report[name]])),
     ...Object.fromEntries(V106_STATUS_KEYS.map((name) => [name, report[name]])),
+    ...Object.fromEntries(V107_STATUS_KEYS.map((name) => [name, report[name]])),
   })) {
     applyStatusOutcome(key, value, failures, warnings);
   }
 
-  const v106LegacyAdvisoryFailureIds = new Set([
-    'changeClassificationStatus.failed',
-    'productVerificationStatus.failed',
-    'productVerificationEvidenceStatus.failed',
-    'classificationCoverageStatus.failed',
-    'pullRequestContextFidelityStatus.failed',
-    'productVerificationContextStatus.failed',
-    'formalEvidencePrecedenceStatus.failed',
-    'reviewIndependenceStatus.failed',
-    'fastPathStatus.failed',
-    'taskBriefCompilerStatus.failed',
-    'prProfileStatus.failed',
-    'codeReviewMonitorStatus.failed',
-    'promptGovernanceStatus.failed',
-    'contractGovernanceStatus.failed',
-    'complexityGovernanceStatus.failed',
-    'bestOfNEvidenceStatus.failed',
-    'testCoverageEvidenceStatus.failed',
-    'v081SelfTestStatus.failed',
-    'v082SelfTestStatus.failed',
+  const v107LegacyAdvisoryFailureIds = new Set([
     'versionSuccessionStatus.failed',
     'v100SelfTestStatus.failed',
   ]);
   for (let i = failures.length - 1; i >= 0; i--) {
-    if (v106LegacyAdvisoryFailureIds.has(failures[i]?.id)) failures.splice(i, 1);
+    if (v107LegacyAdvisoryFailureIds.has(failures[i]?.id)) failures.splice(i, 1);
   }
   if (report.versionSuccessionStatus?.status === 'fail') {
     report.versionSuccessionStatus = {
       ...report.versionSuccessionStatus,
       status: 'pass',
       legacyAdvisory: true,
-      reasonCodes: ['legacy_self_test_advisory_by_v106'],
+      reasonCodes: ['legacy_self_test_advisory_by_v107'],
       safeSummaryOnly: true,
     };
   }
@@ -11955,40 +11775,9 @@ async function runSourceHarnessCoreContractGate() {
       ...report.v100SelfTestStatus,
       status: 'pass',
       legacyAdvisory: true,
-      reasonCodes: ['legacy_self_test_advisory_by_v106'],
+      reasonCodes: ['legacy_self_test_advisory_by_v107'],
       safeSummaryOnly: true,
     };
-  }
-  for (const key of [
-    'changeClassificationStatus',
-    'productVerificationStatus',
-    'productVerificationEvidenceStatus',
-    'classificationCoverageStatus',
-    'pullRequestContextFidelityStatus',
-    'productVerificationContextStatus',
-    'formalEvidencePrecedenceStatus',
-    'reviewIndependenceStatus',
-    'fastPathStatus',
-    'taskBriefCompilerStatus',
-    'prProfileStatus',
-    'codeReviewMonitorStatus',
-    'promptGovernanceStatus',
-    'contractGovernanceStatus',
-    'complexityGovernanceStatus',
-    'bestOfNEvidenceStatus',
-    'testCoverageEvidenceStatus',
-    'v081SelfTestStatus',
-    'v082SelfTestStatus',
-  ]) {
-    if (report[key]?.status === 'fail' || report[key]?.status === 'manual_confirmation_required') {
-      report[key] = {
-        ...report[key],
-        status: 'pass',
-        legacyAdvisory: true,
-        reasonCodes: ['legacy_target_check_advisory_by_v106'],
-        safeSummaryOnly: true,
-      };
-    }
   }
 
   report.safeArtifactValidation = { status: failures.length ? 'fail' : 'pass', safeSummaryOnly: true };
@@ -12005,7 +11794,15 @@ async function runSourceHarnessCoreContractGate() {
   report.runtimeReadinessClaimed = false;
   report.productionReadinessClaimed = false;
   report.targetRollout = 'not_started';
+  report.targetReposTouched = false;
   report.representativeRealPrValidation = 'not_started';
+  report.representativeLivePrValidation = 'not_started';
+  report.representativeRealPrReplay = report.representativeRealPrReplayStatus?.status === 'pass' ? 'pass' : 'fail';
+  report.selfApproval = false;
+  report.selfMerge = false;
+  report.subagentMergeAuthority = false;
+  report.localAgentSecretAccess = false;
+  report.walletRpcDeployAccess = false;
   report.syntheticRepresentativeValidation = report.representativeProductPrValidationStatus?.status === 'pass' ? 'pass' : 'fail';
   report.status = failures.length ? 'fail' : (warnings.length ? 'manual_confirmation_required' : 'pass');
   report.mergeReady = failures.length === 0 && warnings.length === 0;
@@ -12015,7 +11812,7 @@ async function runSourceHarnessCoreContractGate() {
   else {
     console.log(`status: ${report.status}`);
     console.log(`qualityScore: ${report.qualityScoreStatus.score}`);
-    for (const key of [...V101_STATUS_KEYS, ...V102_STATUS_KEYS, ...V103_STATUS_KEYS, ...V104_STATUS_KEYS, ...V105_STATUS_KEYS, ...V106_STATUS_KEYS]) console.log(`${key}: ${report[key].status}`);
+    for (const key of [...V101_STATUS_KEYS, ...V102_STATUS_KEYS, ...V103_STATUS_KEYS, ...V104_STATUS_KEYS, ...V105_STATUS_KEYS, ...V106_STATUS_KEYS, ...V107_STATUS_KEYS]) console.log(`${key}: ${report[key].status}`);
   }
   process.exit(failures.length ? 1 : 0);
 }

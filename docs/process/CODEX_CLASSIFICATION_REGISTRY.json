@@ -1,6 +1,6 @@
 {
   "schemaVersion": "1.0.2",
-  "marker": "CODEX_QUALITY_HARNESS_FILE v1.0.6",
+  "marker": "CODEX_QUALITY_HARNESS_FILE v1.0.7",
   "harnessVersion": "1.0.2",
   "entries": [
     {
@@ -65,6 +65,15 @@
       "requiresProductVerification": false,
       "allowsFastPath": false,
       "notes": "Codex skills."
+    },
+    {
+      "pathPattern": ".codex/**",
+      "classification": "harness_managed",
+      "surface": "harness",
+      "risk": "R2",
+      "requiresProductVerification": false,
+      "allowsFastPath": false,
+      "notes": "Codex harness evidence artifacts."
     },
     {
       "pathPattern": "AGENTS.md",
