@@ -1,4 +1,4 @@
-# CODEX_QUALITY_HARNESS_FILE v1.0.6
+# CODEX_QUALITY_HARNESS_FILE v1.0.7
 name: quality-gate
 
 on:
@@ -153,7 +153,6 @@ jobs:
           CODEX_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
           CODEX_PR_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
           CODEX_REPOSITORY: ${{ github.repository }}
-          CODEX_DEV_MODE: "5_5_LOW"
           CODEX_LIFEBOAT_PATH: ${{ runner.temp }}/codex-minimal-safe-failure.json
           GITHUB_TOKEN: ${{ github.token }}
         run: |
