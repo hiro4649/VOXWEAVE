@@ -113,10 +113,35 @@ This policy adds NVIDIA Nemotron-3.5-ASR-Streaming as a VOXWEAVE ASR engine cand
 - API key must not appear
 - token must not appear
 - secret must not appear
+- authorization must not appear
+- Bearer must not appear
 - model path must not appear
 - dataset path must not appear
 - private path must not appear
 - raw logs must not appear
+- stream id must not appear
+
+## ASR-Specific Unsafe Summary Requirements
+
+The public safe summary must be count-only and must not expose these ASR-specific or credential-like fields:
+
+- raw_audio
+- audio_chunk
+- microphone_input
+- transcript_raw
+- speaker_identity
+- language_tag
+- stream_id
+- endpoint
+- api_key
+- token
+- secret
+- authorization
+- Bearer
+- model_path
+- dataset_path
+- private_path
+- raw_logs
 
 ## Safe Summary
 
