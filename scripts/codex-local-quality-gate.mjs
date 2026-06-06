@@ -2567,6 +2567,7 @@ function normalizeTargetHarnessOnlyRolloutCompatibility(report) {
     'productVerificationContextStatus',
     'prEvidenceRendererStatus',
     'reviewIndependenceStatus',
+    'taskBriefCompilerStatus',
     'fastPathStatus',
     'prProfileStatus',
     'codeReviewMonitorStatus',
