@@ -40,6 +40,14 @@ import { buildGithubReplayContextAsync } from './codex-ci-replay.mjs';
 
 import { buildCompactReasonSummary } from './codex-reason-summary.mjs';
 
+import {
+  buildReviewEvidenceSafeSummary,
+  classifyGovernanceUnblockState,
+  classifyQualityGateEvidence,
+  classifyReviewEvidence,
+  classifyTerminalNoActionGate,
+} from './codex-review-evidence-classifier.mjs';
+
 import * as v101Gates from './codex-v101-gate-lib.mjs';
 import * as v102Gates from './codex-v102-gate-lib.mjs';
 import * as v103Gates from './codex-v103-gate-lib.mjs';
@@ -9105,6 +9113,11 @@ async function runSourceHarnessGate() {
 
 
 
+  report.reviewEvidenceClassifierDiagnosticStatus = buildReviewEvidenceClassifierDiagnostic(report, remoteContext, gateEnv);
+  report.reviewEvidenceClassifierDiagnosticSummary = report.reviewEvidenceClassifierDiagnosticStatus.summary;
+
+
+
 
 
 
@@ -11250,6 +11263,73 @@ async function runTargetHarnessGate() {
 
 
 
+function buildReviewEvidenceClassifierDiagnostic(report = {}, remoteContext = {}, env = process.env) {
+  const headSha = String(env.CODEX_PR_HEAD_SHA || env.GITHUB_SHA || '').trim();
+  const reviewEvidence = classifyReviewEvidence({
+    headSha,
+    reviews: [],
+    comments: [],
+    requestedReviewers: [],
+    requestedTeamReviewers: [],
+  });
+  const qualityGateEvidence = classifyQualityGateEvidence({
+    headSha,
+    checks: [
+      {
+        status: report.status === 'running' ? 'in_progress' : 'completed',
+        conclusion: report.status === 'pass' ? 'success' : report.status === 'fail' ? 'failure' : 'neutral',
+        sha: headSha,
+      },
+    ],
+  });
+  const governanceUnblockState = classifyGovernanceUnblockState({
+    qualityGate: qualityGateEvidence.status,
+    reviewEvidence: reviewEvidence.status,
+  });
+  const terminalNoActionGate = classifyTerminalNoActionGate({
+    triggerStatus: 'none',
+    qualityGate: qualityGateEvidence.status,
+    reviewEvidence: reviewEvidence.status,
+  });
+  const diagnosticResult = {
+    reviewEvidenceStatus: reviewEvidence.status,
+    qualityGateEvidenceStatus: qualityGateEvidence.status,
+    governanceUnblockStatus: governanceUnblockState.status,
+    terminalNoActionStatus: terminalNoActionGate.status,
+    remoteContextStatus: remoteContext.status || 'not_applicable',
+    activeQGIntegrationStatus: 'diagnostic_only',
+    diagnostic_only: true,
+    safe_summary_only: true,
+    pass_fail_semantics_changed: false,
+    target_quality_score_changed: false,
+    workflow_changed: false,
+    package_changed: false,
+    runtime_changed: false,
+    merge_readiness_changed: false,
+    review_request_performed: false,
+    rerun_performed: false,
+    comment_created: false,
+    merge_readiness: false,
+  };
+  return {
+    status: 'attached',
+    diagnostic_only: true,
+    safe_summary_only: true,
+    activeQGIntegrationStatus: 'diagnostic_only',
+    pass_fail_semantics_changed: false,
+    target_quality_score_changed: false,
+    workflow_changed: false,
+    package_changed: false,
+    runtime_changed: false,
+    merge_readiness_changed: false,
+    review_request_performed: false,
+    rerun_performed: false,
+    comment_created: false,
+    summary: buildReviewEvidenceSafeSummary(diagnosticResult),
+  };
+}
+
+
 async function main() {
 
 
@@ -11553,6 +11633,8 @@ async function runV108TargetCompatibilityGate() {
   report.localGate = { status: report.status };
   report.mergeReady = false;
   report.targetMergeReady = false;
+  report.reviewEvidenceClassifierDiagnosticStatus = buildReviewEvidenceClassifierDiagnostic(report, {}, process.env);
+  report.reviewEvidenceClassifierDiagnosticSummary = report.reviewEvidenceClassifierDiagnosticStatus.summary;
 
   if (jsonReport) console.log(JSON.stringify(report, null, 2));
   else {
@@ -11751,6 +11833,8 @@ async function runSourceHarnessCoreContractGate() {
   report.status = failures.length ? 'fail' : (warnings.length ? 'manual_confirmation_required' : 'pass');
   report.mergeReady = failures.length === 0 && warnings.length === 0;
   report.localGate = { status: report.status };
+  report.reviewEvidenceClassifierDiagnosticStatus = buildReviewEvidenceClassifierDiagnostic(report, {}, process.env);
+  report.reviewEvidenceClassifierDiagnosticSummary = report.reviewEvidenceClassifierDiagnosticStatus.summary;
 
   if (jsonReport) console.log(JSON.stringify(report, null, 2));
   else {
