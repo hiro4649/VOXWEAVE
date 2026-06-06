@@ -3226,36 +3226,6 @@ function statusAllowed(key, status, eventName) {
 }
 
 
-const targetRolloutAdvisoryRequired = new Set([
-  'promptGovernanceStatus',
-  'v080SelfTestStatus',
-  'v081SelfTestStatus',
-  'v082SelfTestStatus',
-  'v087SelfTestStatus',
-  'v090SelfTestStatus',
-  'v092SelfTestStatus',
-  'sameHeadArtifactEvidenceStatus',
-  'v085StabilityStatus',
-  'codeReviewMonitorStatus',
-  'complexityGovernanceStatus',
-  'reviewIndependenceStatus',
-  'taskBriefCompilerStatus',
-  'requiredHeadingHintStatus',
-  'prProfileStatus',
-  'bestOfNEvidenceStatus',
-  'testCoverageEvidenceStatus',
-]);
-
-
-function targetRolloutRequiredStatusAllowed(key, status, options = {}, report = {}) {
-  const eventName = options.eventName || process.env.CODEX_EVENT_NAME || '';
-  const harnessMode = options.harnessMode || process.env.CODEX_HARNESS_MODE || report.harnessMode || '';
-  if (eventName !== 'target_rollout' || harnessMode !== 'target') return false;
-  if (!targetRolloutAdvisoryRequired.has(key)) return false;
-  return ['advisory', 'fail', 'manual_confirmation_required', 'warning'].includes(status);
-}
-
-
 
 
 
@@ -3932,35 +3902,12 @@ export function evaluateWorkflowReport(report, options = {}) {
 
   const failures = [];
 
-  const v108TargetCompactPass = report.harnessVersion === '1.0.8'
-    && report.targetManifestStatus?.status === 'pass'
-    && report.targetQualityScoreStatus?.status === 'pass'
-    && report.targetQualityScoreStatus?.score === 95
-    && report.v107SelfTestStatus?.status === 'pass'
-    && report.v108SelfTestStatus?.status === 'pass'
-    && report.evidenceClosureStatus?.status === 'pass'
-    && report.branchLaneIsolationStatus?.status === 'pass'
-    && report.targetHarnessIsolationStatus?.status === 'pass'
-    && report.productCodeChanged === false
-    && report.runtimeReadinessClaimed === false
-    && report.productionReadinessClaimed === false;
 
-  const v109TargetCompactPass = report.harnessVersion === '1.0.9'
-    && report.targetManifestStatus?.status === 'pass'
-    && report.targetQualityScoreStatus?.status === 'pass'
-    && report.targetQualityScoreStatus?.score === 95
-    && report.v108SelfTestStatus?.status === 'pass'
-    && report.v109SelfTestStatus?.status === 'pass'
-    && report.decisionLedgerStatus?.status === 'pass'
-    && report.gateLedgerStatus?.status === 'pass'
-    && report.evidenceSelfReferenceBreakerStatus?.status === 'pass'
-    && report.versionDimensionSeparationStatus?.status === 'pass'
-    && report.runtimeReturnGateStatus?.status === 'pass'
-    && report.productCodeChanged !== true
-    && report.runtimeReadinessClaimed !== true
-    && report.productionReadinessClaimed !== true;
 
-  for (const key of (v108TargetCompactPass || v109TargetCompactPass) ? [] : required) {
+
+
+
+  for (const key of required) {
 
 
 
@@ -3974,8 +3921,7 @@ export function evaluateWorkflowReport(report, options = {}) {
 
 
 
-    if (!statusAllowed(key, status, options.eventName || process.env.CODEX_EVENT_NAME)
-      && !targetRolloutRequiredStatusAllowed(key, status, options, report)) failures.push(`${key}=${status}`);
+    if (!statusAllowed(key, status, options.eventName || process.env.CODEX_EVENT_NAME)) failures.push(`${key}=${status}`);
 
 
 
