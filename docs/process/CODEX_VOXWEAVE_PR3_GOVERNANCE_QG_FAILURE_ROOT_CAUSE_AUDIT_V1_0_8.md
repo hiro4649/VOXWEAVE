@@ -100,8 +100,8 @@ categories only.
 
 ## PR #3 Quality-Gate Failure Root-Cause Classification
 
-pr3FailureRootCauseStatus: quality_gate_failure_plus_independent_review_missing_with_internal_reason_insufficiently_exposed
-pr3FailureEvidenceClass: same_head_check_run_failure_and_review_governance_failure
+pr3FailureRootCauseStatus: quality_gate_failure_plus_review_independence_and_target_quality_score_failures
+pr3FailureEvidenceClass: same_head_check_run_failure_and_safe_artifact_reason_code_evidence
 pr3FailureSameHeadStatus: same_head_failure
 pr3FailureBlockingStatus: blocking
 pr3LogLeakageBoundaryStatus: pass
@@ -125,10 +125,33 @@ pr3LogLeakageBoundaryStatus: pass
 | package_workflow_boundary_failure | not_proven | no package/workflow file in PR #3 changed files | do not infer |
 | unknown_or_insufficient_evidence | yes_for_internal_reason | check metadata lacks stable safe reason code | future safe artifact review only |
 
-pr3FailureSafeSummary: PR #3 has same-head quality-gate failure and missing
-independent review metadata. The specific internal quality-gate reason is not
-formalized here because the queried check metadata did not expose a stable safe
-reason code and raw logs must not be persisted.
+pr3FailureSafeSummary: PR #3 has same-head quality-gate failure with safe
+artifact reason codes for review independence failure and target quality score
+failure. Independent review metadata remains missing. Raw logs are not
+persisted.
+
+## Safe Reason Extraction Addendum
+
+checkedAt: 2026-06-06
+pr3HeadSha: 48016e4e0c7e69fd2ab1d25ea50e7b45a38a0e33
+extractionStatus: stable_safe_reason_code_found
+stableReasonCode: reviewIndependenceStatus.failed; targetQualityScoreStatus.failed
+safeReasonSummary: PR #3 quality-gate failure is attributable to review
+independence failure and target quality score failure, with workflow-required
+status failures reflecting those failed gate statuses. This is same-head
+blocking QG evidence for PR #3 only.
+sameHeadStatus: same_head_failure
+blockingStatus: blocking
+logSafetyBoundary: pass
+rawLogPersistence: prohibited / not persisted
+secretLikePersistence: prohibited / not persisted
+effectOnPR1: remains_blocked_by_PR_3
+effectOnPR15: remains_blocked_by_PR_1_reevaluation
+runtimeReadiness: no
+mergeReadiness: no
+safeNextAction: preserve PR #97 with safe reason addendum; only proceed to an
+explicitly scoped PR #3 blocker fix candidate if the governance scope allows a
+non-runtime fix.
 
 ## PR #3 Review Governance Classification
 
