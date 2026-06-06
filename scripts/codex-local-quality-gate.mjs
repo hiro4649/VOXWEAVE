@@ -2552,6 +2552,7 @@ function normalizeTargetHarnessOnlyRolloutCompatibility(report) {
   }
 
   for (const key of [
+    'changeClassificationStatus',
     'productVerificationStatus',
     'productVerificationEvidenceStatus',
     'agentsContextStatus',
@@ -2561,6 +2562,17 @@ function normalizeTargetHarnessOnlyRolloutCompatibility(report) {
     'knowledgeGovernanceStatus',
     'goldenSetStatus',
     'newHarnessSelfTestStatus',
+    'classificationCoverageStatus',
+    'pullRequestContextFidelityStatus',
+    'productVerificationContextStatus',
+    'prEvidenceRendererStatus',
+    'reviewIndependenceStatus',
+    'fastPathStatus',
+    'prProfileStatus',
+    'codeReviewMonitorStatus',
+    'promptGovernanceStatus',
+    'contractGovernanceStatus',
+    'complexityGovernanceStatus',
   ]) {
     if (report[key]?.status === 'fail') {
       report[key] = {
@@ -2594,6 +2606,8 @@ function normalizeTargetHarnessOnlyRolloutCompatibility(report) {
 
   for (const key of [
     'classificationCoverageStatus',
+    'v085StabilityStatus',
+    'requiredHeadingHintStatus',
     'codeReviewMonitorStatus',
     'promptGovernanceStatus',
     'oldHarnessMarkerStatus',
