@@ -7119,6 +7119,13 @@ const V110_TARGET_LEGACY_ADVISORY_STATUS_KEYS = new Set([
   'versionLineageStatus',
   'promptGovernanceStatus',
   'oldHarnessMarkerStatus',
+  'pullRequestContextFidelityStatus',
+  'productVerificationContextStatus',
+  'reviewIndependenceStatus',
+  'taskBriefCompilerStatus',
+  'prProfileStatus',
+  'contractGovernanceStatus',
+  'complexityGovernanceStatus',
 ]);
 
 function isV110TargetLegacyAdvisoryStatus(key) {
