@@ -1,0 +1,82 @@
+{
+  "schemaVersion": "1.0.8",
+  "activeHarness": "v1.0.8",
+  "reviewEvidenceStatuses": [
+    "none",
+    "writer_only",
+    "bot_only",
+    "requested_only",
+    "team_requested_only",
+    "independent_comment_present",
+    "independent_review_submitted",
+    "independent_approval_same_head",
+    "independent_approval_stale",
+    "changes_requested",
+    "dismissed",
+    "ambiguous"
+  ],
+  "qualityGateStatuses": [
+    "none",
+    "pending",
+    "success_same_head",
+    "success_stale",
+    "failure_same_head",
+    "failure_stale",
+    "cancelled",
+    "timed_out",
+    "ambiguous"
+  ],
+  "governanceUnblockStatuses": [
+    "blocked",
+    "recheck_candidate",
+    "unblock_candidate",
+    "not_ready",
+    "ambiguous"
+  ],
+  "terminalNoActionStatuses": [
+    "terminal_no_action",
+    "trigger_found",
+    "pending_terminal_status",
+    "blocked_by_failure",
+    "ambiguous"
+  ],
+  "forbiddenClaims": [
+    "writer self-review satisfies independent review",
+    "bot review satisfies independent review",
+    "review request satisfies independent review",
+    "QG success alone grants merge readiness",
+    "QG success alone grants runtime readiness",
+    "docs-only review grants main reflection",
+    "terminal_no_action creates new PR",
+    "recheck_candidate means merge-ready",
+    "unblock_candidate means merge without governance"
+  ],
+  "safeSummaryBoundary": {
+    "safeSummaryOnly": true,
+    "rawReviewerNames": false,
+    "rawComments": false,
+    "rawPrBody": false,
+    "rawChangedFiles": false,
+    "rawBranchNames": false,
+    "rawEmails": false,
+    "tokensSecretsEndpoints": false
+  },
+  "runtimeBoundary": {
+    "runtimeConnected": false,
+    "runtimeReadinessClaimed": false,
+    "productionReadinessClaimed": false,
+    "realTtsReadinessClaimed": false,
+    "asrRuntimeReadinessClaimed": false,
+    "benchmarkExecutionClaimed": false
+  },
+  "mergeBoundary": {
+    "mergeReadiness": false,
+    "selfMerge": false,
+    "unblockCandidateIsMergePermission": false
+  },
+  "activeQGBoundary": {
+    "activeQualityGateConnected": false,
+    "activeQualityGateImportsAllowed": false,
+    "passFailSemanticsChanged": false
+  }
+}
