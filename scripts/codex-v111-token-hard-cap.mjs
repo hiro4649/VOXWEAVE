@@ -159,12 +159,13 @@ export const TARGET_MODE_LEGACY_ADVISORY_STATUSES = new Set([
   'v108SelfTestStatus',
   'v109SelfTestStatus',
   'v110SelfTestStatus',
-  'versionSuccessionStatus',
+  'agentsContextStatus',
   'versionLineageStatus',
-  'promptGovernanceStatus',
-  'oldHarnessMarkerStatus',
+  'versionSuccessionStatus',
   'knowledgeGovernanceStatus',
   'goldenSetStatus',
+  'promptGovernanceStatus',
+  'oldHarnessMarkerStatus',
 ]);
 
 export const TARGET_MODE_TRUE_BLOCKER_REASON_CODES = new Set([
