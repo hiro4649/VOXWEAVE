@@ -2366,6 +2366,64 @@ export function buildRemoteProductEvidenceExecutionInput(report = {}, env = proc
   };
 }
 
+export function buildSafeArtifactIndexInputForQualityGate(env = process.env) {
+  const remoteNpmDiagnosticPath = env.CODEX_NPM_TEST_SAFE_SUMMARY_PATH || '';
+  const productEvidencePath = env.CODEX_PRODUCT_VERIFICATION_EVIDENCE_PATH || '';
+  const remoteBaselinePath = env.CODEX_REMOTE_PRODUCT_BASELINE_PATH || '';
+  const remoteProductChecksPath = env.CODEX_REMOTE_PRODUCT_CHECKS_PATH || '';
+  const remoteNpmFailurePath = env.CODEX_REMOTE_NPM_FAILURE_PATH || '';
+  const productEvidence = readJsonFileIfPresent(productEvidencePath);
+  const npmExecuted = productEvidence?.npmExecuted === true || env.CODEX_REMOTE_NPM_EXECUTED === '1';
+  const npmExitCode = Number(productEvidence?.npmExitCode ?? env.CODEX_NPM_EXIT_CODE ?? 0);
+  const remoteNpmFailureExists = Boolean(remoteNpmFailurePath && fs.existsSync(remoteNpmFailurePath));
+  const remoteNpmFailureRequired = npmExecuted && npmExitCode !== 0;
+  const names = [
+    ['codex-diagnostic-consolidated-summary.json', 'codex-diagnostic-consolidated-summary.json'],
+    ['codex-quality-gate-safe-summary.json', 'codex-quality-gate-safe-summary.json'],
+    ['codex-failure-reasons.json', 'codex-failure-reasons.json'],
+    ['codex-safe-artifact-index.json', 'codex-safe-artifact-index.json'],
+    ['codex-target-quality-summary.json', 'codex-target-quality-summary.json'],
+    ['codex-target-final-summary.json', 'codex-target-final-summary.json'],
+    ['codex-remote-npm-diagnostic.safe.json', remoteNpmDiagnosticPath],
+    ['codex-product-verification-evidence.remote.json', productEvidencePath],
+    ['codex-remote-product-baseline.json', remoteBaselinePath],
+    ['codex-remote-product-checks.safe.json', remoteProductChecksPath],
+  ];
+  const entries = names
+    .filter(([, artifactPath]) => artifactPath !== undefined)
+    .map(([artifactName, artifactPath, key]) => ({
+      key,
+      artifactName,
+      path: artifactName,
+      status: fs.existsSync(artifactPath || artifactName) ? 'present' : 'missing',
+      reasonCodes: fs.existsSync(artifactPath || artifactName) ? [] : ['safe_artifact_missing'],
+      nextAction: fs.existsSync(artifactPath || artifactName) ? '' : 'Artifact was not generated in this run.',
+      safeSummaryOnly: true,
+    }));
+  if (remoteNpmFailureRequired || remoteNpmFailureExists) {
+    entries.push({
+      key: 'remoteNpmFailure',
+      artifactName: 'codex-remote-npm-failure.safe.json',
+      path: 'codex-remote-npm-failure.safe.json',
+      status: remoteNpmFailureExists ? 'present' : 'missing',
+      reasonCodes: remoteNpmFailureExists ? [] : ['safe_npm_failure_artifact_required_missing'],
+      nextAction: remoteNpmFailureExists ? '' : 'harness_safe_artifact_upload_contract_repair',
+      safeSummaryOnly: true,
+    });
+  } else if (remoteNpmFailurePath) {
+    entries.push({
+      key: 'remoteNpmFailure',
+      artifactName: 'codex-remote-npm-failure.safe.json',
+      path: 'codex-remote-npm-failure.safe.json',
+      status: 'not_applicable',
+      reasonCodes: ['remote_npm_failure_artifact_not_applicable'],
+      nextAction: '',
+      safeSummaryOnly: true,
+    });
+  }
+  return entries;
+}
+
 function readJsonFileIfPresent(file) {
   if (!file || !fs.existsSync(file)) return null;
   try {
@@ -8411,7 +8469,11 @@ async function runSourceHarnessGate() {
 
 
 
-  report.safeArtifactIndexStatus = runGateScript('scripts/codex-safe-artifact-index.mjs', 'safeArtifactIndexStatus', 'CODEX_SAFE_ARTIFACT_INDEX_REPORT', gateEnv);
+  const safeArtifactIndexEnv = {
+    ...gateEnv,
+    CODEX_SAFE_ARTIFACT_INDEX_INPUT: JSON.stringify(buildSafeArtifactIndexInputForQualityGate(gateEnv)),
+  };
+  report.safeArtifactIndexStatus = runGateScript('scripts/codex-safe-artifact-index.mjs', 'safeArtifactIndexStatus', 'CODEX_SAFE_ARTIFACT_INDEX_REPORT', safeArtifactIndexEnv);
 
 
 
@@ -10566,7 +10628,11 @@ async function runTargetHarnessGate() {
 
 
 
-  report.safeArtifactIndexStatus = runGateScript('scripts/codex-safe-artifact-index.mjs', 'safeArtifactIndexStatus', 'CODEX_SAFE_ARTIFACT_INDEX_REPORT', gateEnv);
+  const safeArtifactIndexEnv = {
+    ...gateEnv,
+    CODEX_SAFE_ARTIFACT_INDEX_INPUT: JSON.stringify(buildSafeArtifactIndexInputForQualityGate(gateEnv)),
+  };
+  report.safeArtifactIndexStatus = runGateScript('scripts/codex-safe-artifact-index.mjs', 'safeArtifactIndexStatus', 'CODEX_SAFE_ARTIFACT_INDEX_REPORT', safeArtifactIndexEnv);
 
 
 

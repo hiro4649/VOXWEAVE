@@ -114,6 +114,7 @@ jobs:
           echo "CODEX_PRODUCT_VERIFICATION_EVIDENCE_PATH=$RUNNER_TEMP/codex-product-verification-evidence.remote.json" >> "$GITHUB_ENV"
           echo "CODEX_REMOTE_PRODUCT_BASELINE_PATH=$RUNNER_TEMP/codex-remote-product-baseline.json" >> "$GITHUB_ENV"
           echo "CODEX_NPM_TEST_SAFE_SUMMARY_PATH=$RUNNER_TEMP/codex-remote-npm-diagnostic.safe.json" >> "$GITHUB_ENV"
+          echo "CODEX_REMOTE_NPM_FAILURE_PATH=$RUNNER_TEMP/codex-remote-npm-failure.safe.json" >> "$GITHUB_ENV"
           if [ "${GITHUB_REPOSITORY:-}" = "hiro4649/codex-development-harness" ] && [ -f CODEX_SOURCE_HARNESS_MANIFEST.json ]; then
             is_pr=false
             if [ "${CODEX_EVENT_NAME:-}" = "pull_request" ]; then is_pr=true; fi
@@ -376,6 +377,7 @@ jobs:
             codex-skill-evidence-link.safe.json
             codex-workflow-preflight.safe.json
             codex-test-metrics.safe.json
+            ${{ runner.temp }}/codex-remote-npm-failure.safe.json
             ${{ runner.temp }}/codex-remote-npm-diagnostic.safe.json
             ${{ runner.temp }}/codex-product-verification-evidence.remote.json
             ${{ runner.temp }}/codex-remote-product-baseline.json
