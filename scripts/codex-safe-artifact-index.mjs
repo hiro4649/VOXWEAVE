@@ -98,6 +98,8 @@ export function buildSafeArtifactIndex(artifacts = [], mode = process.env.CODEX_
 
   const unsafe = unsafePath || entries.some((item) => scanObjectForUnsafe(item).length || !item.safeSummaryOnly || item.rawLogIncluded || item.containsSecrets || item.containsEndpointValues);
 
+  const requiredNpmFailureMissing = entries.some((item) => (item.reasonCodes || []).includes('safe_npm_failure_artifact_required_missing'));
+
   const requiredMissing = missingArtifacts.length > 0;
 
   return {
@@ -124,13 +126,15 @@ export function buildSafeArtifactIndex(artifacts = [], mode = process.env.CODEX_
 
     machineArtifacts,
 
-    status: unsafe || requiredMissing ? 'fail' : artifactBudget.budgetExceeded ? 'warning' : 'pass',
+    status: unsafe || requiredMissing || requiredNpmFailureMissing ? 'fail' : artifactBudget.budgetExceeded ? 'warning' : 'pass',
 
     reasonCodes: [
 
       ...(unsafe ? ['safe_artifact_index_invalid'] : []),
 
       ...(requiredMissing ? ['artifact_required_missing'] : []),
+
+      ...(requiredNpmFailureMissing ? ['safe_npm_failure_artifact_required_missing'] : []),
 
       ...(artifactBudget.budgetExceeded ? ['artifact_budget_exceeded'] : []),
 

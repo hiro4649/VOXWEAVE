@@ -178,10 +178,47 @@ export function writeRemoteNpmFailureSafeArtifact(input = parseJson(process.env.
   return artifact;
 }
 
+export function buildRemoteNpmFailureArtifactContractSummary(input = {}) {
+  const artifact = input.artifact || null;
+  const index = input.index || {};
+  const artifacts = Array.isArray(index.artifacts) ? index.artifacts : [];
+  const indexed = artifacts.some((item) =>
+    (item.artifactName === 'codex-remote-npm-failure.safe.json' || item.key === 'remoteNpmFailure') &&
+    item.status === 'present'
+  );
+  if (!artifact) {
+    return {
+      generated: false,
+      indexed: false,
+      consumed: false,
+      primaryClass: 'product_test_failure_safe_summary_missing',
+      safeNextAction: 'harness_safe_artifact_upload_contract_repair',
+      safeSummaryOnly: true,
+    };
+  }
+  const safeDetailUnavailable = artifact.safeDetailUnavailable === true ||
+    ((artifact.failingTestFiles || []).length === 0 && (artifact.failingTestNames || []).length === 0);
+  return {
+    generated: true,
+    indexed,
+    consumed: indexed,
+    primaryClass: safeDetailUnavailable ? 'product_test_failure_safe_summary_missing' : 'product_test_failure_safe_summary_available',
+    safeNextAction: safeDetailUnavailable
+      ? 'owner_authorized_product_check_triage_or_harness_failure_summarizer_repair'
+      : 'owner_authorized_product_check_triage',
+    safeSummaryOnly: true,
+  };
+}
+
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   if (process.argv.includes('--write-artifacts') || process.env.CODEX_REMOTE_PRODUCT_EVIDENCE_WRITE === '1') {
-    writeRemoteProductSafeArtifacts();
-    writeRemoteNpmFailureSafeArtifact();
+    const runnerInput = parseJson(process.env.CODEX_REMOTE_PRODUCT_EVIDENCE_RUNNER_JSON) || {};
+    const failureArtifact = buildRemoteNpmFailureSafeArtifact(runnerInput);
+    const enrichedInput = failureArtifact && failureArtifact.failureClass !== 'unknown'
+      ? { ...runnerInput, failureClass: failureArtifact.failureClass }
+      : runnerInput;
+    writeRemoteProductSafeArtifacts(enrichedInput);
+    writeRemoteNpmFailureSafeArtifact(enrichedInput);
   }
   const report = buildRemoteProductEvidenceRunnerReport();
   writeJsonReport(report, 'CODEX_REMOTE_PRODUCT_EVIDENCE_RUNNER_REPORT');
