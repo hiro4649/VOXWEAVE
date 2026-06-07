@@ -2,11 +2,15 @@
 // CODEX_QUALITY_HARNESS_FILE v1.1.3
 
 import { writeJsonReport, exitFor } from './codex-v080-lib.mjs';
-import { buildRemoteProductEvidenceExecutionInput } from './codex-local-quality-gate.mjs';
+import {
+  buildRemoteProductEvidenceExecutionInput,
+  buildSafeArtifactIndexInputForQualityGate,
+} from './codex-local-quality-gate.mjs';
 import {
   buildRemoteNpmFailureArtifactContractSummary,
   buildRemoteNpmFailureSafeArtifact,
 } from './codex-remote-product-evidence-runner.mjs';
+import { buildSafeArtifactIndex as buildWorkflowSafeArtifactIndex } from './codex-safe-artifact-index.mjs';
 import { buildRemoteProductEvidenceExecutionReport } from './codex-v098-gate-lib.mjs';
 import {
   BOUNDARY_PROFILES,
@@ -152,6 +156,34 @@ const npmFailureContractAbsent = buildRemoteNpmFailureArtifactContractSummary({
   artifact: null,
   index: remoteNpmFailureIndex,
 });
+const remoteNpmFailureIndexMissing = {
+  artifacts: [
+    { key: 'remoteNpmFailure', artifactName: 'codex-remote-npm-failure.safe.json', status: 'missing', safeSummaryOnly: true },
+  ],
+  safeSummaryOnly: true,
+};
+const npmFailureContractMissingIndex = buildRemoteNpmFailureArtifactContractSummary({
+  artifact: npmFailureArtifactWithSafeDetails,
+  index: remoteNpmFailureIndexMissing,
+});
+const remoteNpmOptionalNotExecutedInput = buildSafeArtifactIndexInputForQualityGate({
+  CODEX_REMOTE_NPM_EXECUTED: '0',
+  CODEX_NPM_EXIT_CODE: '0',
+  CODEX_REMOTE_NPM_FAILURE_PATH: 'codex-remote-npm-failure.safe.json',
+});
+const remoteNpmOptionalZeroExitInput = buildSafeArtifactIndexInputForQualityGate({
+  CODEX_REMOTE_NPM_EXECUTED: '1',
+  CODEX_NPM_EXIT_CODE: '0',
+  CODEX_REMOTE_NPM_FAILURE_PATH: 'codex-remote-npm-failure.safe.json',
+});
+const remoteNpmRequiredAbsentInput = buildSafeArtifactIndexInputForQualityGate({
+  CODEX_REMOTE_NPM_EXECUTED: '1',
+  CODEX_NPM_EXIT_CODE: '1',
+  CODEX_REMOTE_NPM_FAILURE_PATH: 'codex-remote-npm-failure.safe.json',
+});
+const remoteNpmOptionalNotExecutedIndex = buildWorkflowSafeArtifactIndex(remoteNpmOptionalNotExecutedInput, 'target');
+const remoteNpmOptionalZeroExitIndex = buildWorkflowSafeArtifactIndex(remoteNpmOptionalZeroExitInput, 'target');
+const remoteNpmRequiredAbsentIndex = buildWorkflowSafeArtifactIndex(remoteNpmRequiredAbsentInput, 'target');
 
 const cases = [
   test('all_v113_status_keys_default_pass', () => V113_STATUS_KEYS.every((key) => statuses[key]?.status === 'pass')),
@@ -203,6 +235,10 @@ const cases = [
   test('remote_npm_failure_artifact_index_contract_available', () => npmFailureContractAvailable.generated === true && npmFailureContractAvailable.indexed === true && npmFailureContractAvailable.consumed === true && npmFailureContractAvailable.primaryClass === 'product_test_failure_safe_summary_available'),
   test('remote_npm_failure_artifact_index_contract_missing_detail', () => npmFailureContractMissingDetail.generated === true && npmFailureContractMissingDetail.indexed === true && npmFailureContractMissingDetail.primaryClass === 'product_test_failure_safe_summary_missing'),
   test('remote_npm_failure_artifact_absent_remains_blocking', () => npmFailureContractAbsent.generated === false && npmFailureContractAbsent.primaryClass === 'product_test_failure_safe_summary_missing' && npmFailureContractAbsent.safeNextAction === 'harness_safe_artifact_upload_contract_repair'),
+  test('remote_npm_failure_optional_when_not_executed', () => remoteNpmOptionalNotExecutedInput.some((item) => item.key === 'remoteNpmFailure' && item.status === 'not_applicable') && remoteNpmOptionalNotExecutedIndex.status === 'pass'),
+  test('remote_npm_failure_optional_when_exit_zero', () => remoteNpmOptionalZeroExitInput.some((item) => item.key === 'remoteNpmFailure' && item.status === 'not_applicable') && remoteNpmOptionalZeroExitIndex.status === 'pass'),
+  test('remote_npm_failure_required_missing_blocks', () => remoteNpmRequiredAbsentInput.some((item) => item.key === 'remoteNpmFailure' && item.status === 'missing' && item.reasonCodes.includes('safe_npm_failure_artifact_required_missing')) && remoteNpmRequiredAbsentIndex.status === 'fail'),
+  test('remote_npm_failure_missing_index_not_consumed', () => npmFailureContractMissingIndex.indexed === false && npmFailureContractMissingIndex.consumed === false),
   test('remote_product_evidence_missing_still_fails', () => remoteExecutionStatus(missingEvidenceReport).status === 'fail' && (remoteExecutionStatus(missingEvidenceReport).reasonCodes || []).includes('remote_product_evidence_execution_missing')),
   test('remote_product_evidence_head_mismatch_still_fails', () => remoteExecutionStatus(headMismatchReport).status === 'fail' && (remoteExecutionStatus(headMismatchReport).reasonCodes || []).includes('same_head_artifact_missing')),
   test('remote_product_evidence_npm_not_executed_still_fails', () => remoteExecutionStatus(npmNotExecutedReport).status === 'fail' && (remoteExecutionStatus(npmNotExecutedReport).reasonCodes || []).includes('remote_npm_not_executed_for_product_pr')),

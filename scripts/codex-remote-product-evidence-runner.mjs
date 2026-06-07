@@ -182,7 +182,10 @@ export function buildRemoteNpmFailureArtifactContractSummary(input = {}) {
   const artifact = input.artifact || null;
   const index = input.index || {};
   const artifacts = Array.isArray(index.artifacts) ? index.artifacts : [];
-  const indexed = artifacts.some((item) => item.artifactName === 'codex-remote-npm-failure.safe.json' || item.key === 'remoteNpmFailure');
+  const indexed = artifacts.some((item) =>
+    (item.artifactName === 'codex-remote-npm-failure.safe.json' || item.key === 'remoteNpmFailure') &&
+    item.status === 'present'
+  );
   if (!artifact) {
     return {
       generated: false,
