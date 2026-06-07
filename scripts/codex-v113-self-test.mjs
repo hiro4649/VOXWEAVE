@@ -115,6 +115,12 @@ const npmFailureArtifactUnknown = buildRemoteNpmFailureSafeArtifact({
   headSha: 'same-head',
   npmOutput: 'npm failed without a structured test marker',
 });
+const npmFailureArtifactNoOutput = buildRemoteNpmFailureSafeArtifact({
+  productRelevant: true,
+  npmExecuted: true,
+  npmExitCode: 1,
+  headSha: 'same-head',
+});
 const npmFailureArtifactUnsafe = buildRemoteNpmFailureSafeArtifact({
   productRelevant: true,
   npmExecuted: true,
@@ -168,8 +174,10 @@ const cases = [
   test('pr114_remote_product_evidence_is_consumed_when_authoritative_file_exists', () => remoteExecutionStatus(pr114ExecutionReport).status === 'pass' && pr114ExecutionInput.remoteEvidencePhase === 'evidence_consumed'),
   test('pr114_remote_product_evidence_does_not_report_execution_missing', () => !(remoteExecutionStatus(pr114ExecutionReport).reasonCodes || []).includes('remote_product_evidence_execution_missing')),
   test('remote_npm_failure_safe_artifact_extracts_test_detail', () => npmFailureArtifactWithSafeDetails.primaryClass === 'product_test_failure_safe_summary_available' && ['assertion', 'timeout'].includes(npmFailureArtifactWithSafeDetails.failureClass) && npmFailureArtifactWithSafeDetails.failingTestFiles.includes('test/safe-normalization.test.js') && npmFailureArtifactWithSafeDetails.failingTestNames.includes('safe normalization rejects unsafe replacement')),
-  test('remote_npm_failure_safe_artifact_omits_raw_output', () => npmFailureArtifactWithSafeDetails.rawOutputPrinted === false && npmFailureArtifactWithSafeDetails.rawStackOmitted === true && npmFailureArtifactWithSafeDetails.rawLogsRead === false),
-  test('remote_npm_failure_unknown_output_stays_safe', () => npmFailureArtifactUnknown.failureClass === 'unknown' && npmFailureArtifactUnknown.safeDetailUnavailable === true && npmFailureArtifactUnknown.rawOutputPrinted === false && npmFailureArtifactUnknown.rawStackOmitted === true && npmFailureArtifactUnknown.safeNextAction === 'owner_authorized_product_check_triage_or_harness_failure_summarizer_repair'),
+  test('remote_npm_failure_safe_artifact_omits_raw_output', () => npmFailureArtifactWithSafeDetails.rawOutputPrinted === false && npmFailureArtifactWithSafeDetails.rawOutputStored === false && npmFailureArtifactWithSafeDetails.rawStackOmitted === true && npmFailureArtifactWithSafeDetails.rawLogsRead === false),
+  test('remote_npm_failure_safe_artifact_separates_raw_output_semantics', () => npmFailureArtifactWithSafeDetails.operatorRawLogsRead === false && npmFailureArtifactWithSafeDetails.githubJobLogsRead === false && npmFailureArtifactWithSafeDetails.rawOutputIngestedForSafeSummary === true && npmFailureArtifactWithSafeDetails.safeSummaryOnly === true),
+  test('remote_npm_failure_unknown_output_stays_safe', () => npmFailureArtifactUnknown.failureClass === 'unknown' && npmFailureArtifactUnknown.safeDetailUnavailable === true && npmFailureArtifactUnknown.rawOutputIngestedForSafeSummary === true && npmFailureArtifactUnknown.rawOutputPrinted === false && npmFailureArtifactUnknown.rawStackOmitted === true && npmFailureArtifactUnknown.safeNextAction === 'owner_authorized_product_check_triage_or_harness_failure_summarizer_repair'),
+  test('remote_npm_failure_no_output_marks_not_ingested', () => npmFailureArtifactNoOutput.failureClass === 'unknown' && npmFailureArtifactNoOutput.safeDetailUnavailable === true && npmFailureArtifactNoOutput.rawOutputIngestedForSafeSummary === false && npmFailureArtifactNoOutput.rawOutputPrinted === false),
   test('remote_npm_failure_unsafe_output_not_echoed', () => npmFailureArtifactUnsafe.safeSummaryOnly === true && npmFailureArtifactUnsafe.failingTestNames.length === 0 && !JSON.stringify(npmFailureArtifactUnsafe).includes('https://example.invalid')),
   test('remote_product_evidence_missing_still_fails', () => remoteExecutionStatus(missingEvidenceReport).status === 'fail' && (remoteExecutionStatus(missingEvidenceReport).reasonCodes || []).includes('remote_product_evidence_execution_missing')),
   test('remote_product_evidence_head_mismatch_still_fails', () => remoteExecutionStatus(headMismatchReport).status === 'fail' && (remoteExecutionStatus(headMismatchReport).reasonCodes || []).includes('same_head_artifact_missing')),

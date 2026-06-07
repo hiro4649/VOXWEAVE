@@ -51,15 +51,22 @@ function safeRelativeTestFile(value) {
 }
 
 function readCapturedNpmOutput(input = {}, env = process.env) {
-  if (input.npmOutput !== undefined) return String(input.npmOutput).slice(0, MAX_CAPTURE_BYTES);
-  if (input.safeNpmOutput !== undefined) return String(input.safeNpmOutput).slice(0, MAX_CAPTURE_BYTES);
+  if (input.npmOutput !== undefined) return { output: String(input.npmOutput).slice(0, MAX_CAPTURE_BYTES), ingested: true };
+  if (input.safeNpmOutput !== undefined) return { output: String(input.safeNpmOutput).slice(0, MAX_CAPTURE_BYTES), ingested: true };
   const outDir = env.CODEX_REMOTE_PRODUCT_EVIDENCE_OUT_DIR || env.RUNNER_TEMP || process.cwd();
-  const candidate = input.npmOutputPath || env.CODEX_NPM_TEST_RAW_LOG_PATH || path.join(outDir, 'codex-npm-test.raw.log');
-  if (!candidate || !fs.existsSync(candidate)) return '';
+  const candidate =
+    input.npmOutputPath ||
+    input.npmCapturePath ||
+    input.safeNpmCapturePath ||
+    env.CODEX_NPM_TEST_CAPTURE_PATH ||
+    env.CODEX_NPM_TEST_SAFE_CAPTURE_PATH ||
+    env.CODEX_NPM_TEST_RAW_LOG_PATH ||
+    path.join(outDir, 'codex-npm-test.raw.log');
+  if (!candidate || !fs.existsSync(candidate)) return { output: '', ingested: false };
   try {
-    return fs.readFileSync(candidate, 'utf8').slice(0, MAX_CAPTURE_BYTES);
+    return { output: fs.readFileSync(candidate, 'utf8').slice(0, MAX_CAPTURE_BYTES), ingested: true };
   } catch {
-    return '';
+    return { output: '', ingested: false };
   }
 }
 
@@ -104,8 +111,8 @@ export function buildRemoteNpmFailureSafeArtifact(input = parseJson(process.env.
   const npmExitCode = Number(input.npmExitCode ?? env.CODEX_NPM_EXIT_CODE ?? 0);
   const headSha = String(input.headSha || env.CODEX_PR_HEAD_SHA || env.GITHUB_SHA || '').slice(0, 80);
   if (!productRelevant || !npmExecuted || npmExitCode === 0) return null;
-  const output = readCapturedNpmOutput(input, env);
-  const summary = classifySafeNpmFailureOutput(output);
+  const capture = readCapturedNpmOutput(input, env);
+  const summary = classifySafeNpmFailureOutput(capture.output);
   const failureClass = FAILURE_CLASSES.has(summary.failureClass) ? summary.failureClass : 'unknown';
   const artifact = {
     schemaVersion: '1.1.3',
@@ -119,6 +126,10 @@ export function buildRemoteNpmFailureSafeArtifact(input = parseJson(process.env.
     failingTestFiles: summary.failingTestFiles,
     failingTestNames: summary.failingTestNames,
     rawStackOmitted: true,
+    operatorRawLogsRead: false,
+    githubJobLogsRead: false,
+    rawOutputIngestedForSafeSummary: capture.ingested,
+    rawOutputStored: false,
     rawOutputPrinted: false,
     rawLogsRead: false,
     safeSummaryOnly: true,
@@ -143,6 +154,10 @@ export function buildRemoteNpmFailureSafeArtifact(input = parseJson(process.env.
       failingTestFiles: [],
       failingTestNames: [],
       rawStackOmitted: true,
+      operatorRawLogsRead: false,
+      githubJobLogsRead: false,
+      rawOutputIngestedForSafeSummary: capture.ingested,
+      rawOutputStored: false,
       rawOutputPrinted: false,
       rawLogsRead: false,
       safeSummaryOnly: true,
