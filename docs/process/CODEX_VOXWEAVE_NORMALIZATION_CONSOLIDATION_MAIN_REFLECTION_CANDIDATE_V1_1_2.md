@@ -258,3 +258,74 @@ After this candidate PR is created, preserve it as a draft non-runtime
 main-reflection candidate. If terminal QG succeeds, the next safe action is a
 separate explicit acceptance audit or review scope. Do not merge, do not connect
 active QG, do not open runtime, and do not modify PR #1 or PR #15 in this task.
+
+## Safe Failure / Fix Addendum
+
+checkedAt: 2026-06-07
+pr112HeadShaBefore: 8ebf0576972dbad6c2d178b9cee7a8b1a41367a7
+failureReasonExtractionStatus: completed_safe_summary_only
+stableReasonCode: quality_gate_policy_classification_failure
+safeReasonSummary:
+- PR #112 terminal quality-gate result was failure on the same head.
+- Safe artifacts reported product verification, formal evidence precedence,
+  remote diagnostic normalization, target quality score, PR profile, review
+  independence, and code review monitor blockers.
+- The local normalization self-check passed with 124 checked cases.
+- The three candidate JavaScript files passed syntax checks.
+- The failure was not classified as a normalization self-check failure.
+- The failure was not classified as a JavaScript syntax failure.
+- The failure was not classified as a runtime import failure in the candidate
+  helper files.
+- The failure was not classified as a workflow or package file change.
+
+fixApplied: no
+fixedFiles: none
+
+The safe minimal fix candidate is rejected for this task because the observed
+blockers are policy/evidence/profile/product-verification classification
+blockers rather than a defect isolated to the candidate helper, dictionary, or
+self-check behavior. Repair would require changing PR body/profile evidence,
+quality-gate policy, product verification evidence, workflow/package behavior,
+or governance scope, all of which are outside this task.
+
+runtimeBoundaryStatus: preserved_no_runtime_connection
+adapterBoundaryStatus: preserved_not_connected
+debugRouteBoundaryStatus: preserved_not_connected
+activeQGBoundaryStatus: preserved_not_connected
+workflowPackageBoundaryStatus: preserved_no_change
+readinessClaimStatus: no_runtime_no_production_no_real_tts_no_asr_no_benchmark
+mergeReadiness: no
+
+Full codebase static audit safe summary:
+- fullCodebaseStaticAuditStatus: bounded_static_audit_completed_with_timeout_on_full_js_syntax_sweep
+- nodeSyntaxCheckStatus: changed_candidate_files_pass
+- selfCheckAuditStatus: pass_124_cases
+- secretLeakRiskStatus: synthetic_fixture_only_in_self_check_no_raw_value_persisted_in_this_spec
+- endpointLeakRiskStatus: synthetic_fixture_only_in_self_check_no_raw_endpoint_persisted_in_this_spec
+- privatePathLeakRiskStatus: synthetic_fixture_only_in_self_check_no_raw_path_persisted_in_this_spec
+- runtimeBoundaryAuditStatus: no_candidate_runtime_connection_detected
+- apiModelDownloadBoundaryAuditStatus: no_candidate_api_or_model_download_path_detected
+- benchmarkBoundaryAuditStatus: no_candidate_benchmark_execution_path_detected
+- readinessClaimAuditStatus: no_affirmative_candidate_readiness_claim_detected
+- safeSummaryAuditStatus: pass_for_candidate_self_check_contract
+- reviewGovernanceAuditStatus: PR #112 remains non-merge evidence
+- activeQGDiagnosticAuditStatus: no active QG behavior change in this PR
+- normalizationBoundaryAuditStatus: candidate branch evidence only
+- ttsAsrLive2dBoundaryAuditStatus: no TTS, ASR, or Live2D runtime connection
+- suspiciousAreaStatus: policy classification mismatch and evidence blockers remain
+
+remainingRisks:
+- PR #112 failure can be misread as normalization helper failure.
+- PR #112 failure can be misread as requiring runtime, workflow, package, or
+  active QG changes.
+- Synthetic self-check fixtures can be misread as real secrets or endpoints if
+  copied outside safe-summary context.
+- Product-verification and PR-profile blockers remain unresolved.
+- PR #112 remains candidate branch evidence only and is not merge evidence.
+
+safeNextAction:
+Preserve PR #112 and report blocker. Do not create an acceptance audit until a
+separate explicit scope resolves the quality-gate policy/evidence blockers or a
+new terminal same-head QG result is available. Do not rerun, rebase, merge,
+request review, connect active QG, open runtime, run benchmarks, download
+models, call APIs, or modify PR #1 or PR #15 in this task.
