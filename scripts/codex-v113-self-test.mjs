@@ -2,6 +2,8 @@
 // CODEX_QUALITY_HARNESS_FILE v1.1.3
 
 import { writeJsonReport, exitFor } from './codex-v080-lib.mjs';
+import { buildRemoteProductEvidenceExecutionInput } from './codex-local-quality-gate.mjs';
+import { buildRemoteProductEvidenceExecutionReport } from './codex-v098-gate-lib.mjs';
 import {
   BOUNDARY_PROFILES,
   V113_STATUS_KEYS,
@@ -60,6 +62,39 @@ const decisionAllowed = buildDecisionObject();
 const decisionBlocked = buildDecisionObject({ requiredCheckFailed: true });
 const artifactIndex = buildSafeArtifactIndex();
 const costLedger = buildConversationCostLedger();
+const pr114ExecutionInput = buildRemoteProductEvidenceExecutionInput(
+  { changeClassificationStatus: { productRelevantChanged: true } },
+  { CODEX_HARNESS_MODE: 'target', CODEX_EVENT_NAME: 'pull_request', CODEX_PR_HEAD_SHA: 'same-head' },
+  {
+    evidence: { status: 'fail', headSha: 'same-head', productRelevant: true, npmExecuted: true, npmExitCode: 1 },
+    baseline: { status: 'fail' },
+    diagnostic: { npmExitCode: 1 },
+  },
+);
+const pr114ExecutionReport = buildRemoteProductEvidenceExecutionReport(pr114ExecutionInput);
+const missingEvidenceReport = buildRemoteProductEvidenceExecutionReport(buildRemoteProductEvidenceExecutionInput(
+  { changeClassificationStatus: { productRelevantChanged: true } },
+  { CODEX_HARNESS_MODE: 'target', CODEX_EVENT_NAME: 'pull_request', CODEX_PR_HEAD_SHA: 'same-head' },
+));
+const headMismatchReport = buildRemoteProductEvidenceExecutionReport(buildRemoteProductEvidenceExecutionInput(
+  { changeClassificationStatus: { productRelevantChanged: true } },
+  { CODEX_HARNESS_MODE: 'target', CODEX_EVENT_NAME: 'pull_request', CODEX_PR_HEAD_SHA: 'same-head' },
+  {
+    evidence: { status: 'pass', headSha: 'other-head', productRelevant: true, npmExecuted: true, npmExitCode: 0 },
+    baseline: { status: 'pass' },
+    diagnostic: { npmExitCode: 0 },
+  },
+));
+const npmNotExecutedReport = buildRemoteProductEvidenceExecutionReport(buildRemoteProductEvidenceExecutionInput(
+  { changeClassificationStatus: { productRelevantChanged: true } },
+  { CODEX_HARNESS_MODE: 'target', CODEX_EVENT_NAME: 'pull_request', CODEX_PR_HEAD_SHA: 'same-head' },
+  {
+    evidence: { status: 'pass', headSha: 'same-head', productRelevant: true, npmExecuted: false, npmExitCode: 0 },
+    baseline: { status: 'pass' },
+    diagnostic: { npmExitCode: 0 },
+  },
+));
+const remoteExecutionStatus = (report) => report.remoteProductEvidenceExecutionStatus || report;
 
 const cases = [
   test('all_v113_status_keys_default_pass', () => V113_STATUS_KEYS.every((key) => statuses[key]?.status === 'pass')),
@@ -100,6 +135,11 @@ const cases = [
   test('repair_loop_prevention_blocks_third_repair', () => buildRepairLoopReport({ repairPrCount: 3 }).status === 'fail'),
   test('remote_evidence_state_split_not_required', () => splitRemoteEvidenceState({ required: false }) === 'not_required'),
   test('remote_evidence_state_split_failed_execution', () => splitRemoteEvidenceState({ required: true, executed: true, artifactPresent: true, pass: false }) === 'executed_fail'),
+  test('pr114_remote_product_evidence_is_consumed_when_authoritative_file_exists', () => remoteExecutionStatus(pr114ExecutionReport).status === 'pass' && pr114ExecutionInput.remoteEvidencePhase === 'evidence_consumed'),
+  test('pr114_remote_product_evidence_does_not_report_execution_missing', () => !(remoteExecutionStatus(pr114ExecutionReport).reasonCodes || []).includes('remote_product_evidence_execution_missing')),
+  test('remote_product_evidence_missing_still_fails', () => remoteExecutionStatus(missingEvidenceReport).status === 'fail' && (remoteExecutionStatus(missingEvidenceReport).reasonCodes || []).includes('remote_product_evidence_execution_missing')),
+  test('remote_product_evidence_head_mismatch_still_fails', () => remoteExecutionStatus(headMismatchReport).status === 'fail' && (remoteExecutionStatus(headMismatchReport).reasonCodes || []).includes('same_head_artifact_missing')),
+  test('remote_product_evidence_npm_not_executed_still_fails', () => remoteExecutionStatus(npmNotExecutedReport).status === 'fail' && (remoteExecutionStatus(npmNotExecutedReport).reasonCodes || []).includes('remote_npm_not_executed_for_product_pr')),
   test('non_runtime_shared_utility_profile_passes_safe_common_path', () => buildNonRuntimeSharedUtilityProfile({ files: ['src/common/safe-helper.ts'] }).status === 'pass'),
   test('non_runtime_shared_utility_profile_blocks_runtime_import', () => buildNonRuntimeSharedUtilityProfile({ runtimeImport: true }).status === 'fail'),
   test('artifact_payloads_are_safe_summary_only', () => report.artifacts.safeArtifactIndex.safeSummaryOnly === true && report.artifacts.minimalBlockers.safeSummaryOnly === true && report.artifacts.decisionObject.safeSummaryOnly === true),
