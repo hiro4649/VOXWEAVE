@@ -53,6 +53,30 @@ const ENTRIES = [
     reading: "くちぱく",
     reason: "japanese_term_reading",
   },
+  {
+    pattern: /\bHiro\b/gu,
+    replacement: "Hiro",
+    reading: "ヒロ",
+    reason: "name_reading",
+  },
+  {
+    pattern: /\bSora\b/gu,
+    replacement: "Sora",
+    reading: "ソラ",
+    reason: "name_reading",
+  },
+  {
+    pattern: /\bAiri\b/gu,
+    replacement: "Airi",
+    reading: "アイリ",
+    reason: "name_reading",
+  },
+  {
+    pattern: /読み補正/gu,
+    replacement: "読み補正",
+    reading: "よみほせい",
+    reason: "japanese_term_reading",
+  },
 ];
 
 export function repairPronunciationText(text) {
