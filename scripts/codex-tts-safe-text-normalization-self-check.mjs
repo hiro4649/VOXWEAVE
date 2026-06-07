@@ -29,6 +29,30 @@ check(
     !/authorization|Bearer/iu.test(markers.normalized_text),
 );
 
+const authorizationToken = normalizeTtsSafeText("authorization=abc");
+check(
+  "authorization_equals_value_non_disclosure",
+  authorizationToken.safe_output_only && !/authorization|abc/iu.test(authorizationToken.normalized_text),
+);
+
+const authorizationColon = normalizeTtsSafeText("authorization: abc");
+check(
+  "authorization_colon_value_non_disclosure",
+  authorizationColon.safe_output_only && !/authorization|abc/iu.test(authorizationColon.normalized_text),
+);
+
+const authorizationBasic = normalizeTtsSafeText("authorization: Basic abc");
+check(
+  "authorization_basic_value_non_disclosure",
+  authorizationBasic.safe_output_only && !/authorization|Basic|abc/iu.test(authorizationBasic.normalized_text),
+);
+
+const authorizationBearer = normalizeTtsSafeText("authorization=Bearer abc");
+check(
+  "authorization_bearer_value_non_disclosure",
+  authorizationBearer.safe_output_only && !/authorization|Bearer|abc/iu.test(authorizationBearer.normalized_text),
+);
+
 const customSafe = normalizeTtsSafeText("Visit https://example.invalid", { urlReplacement: "[safe link]" });
 check("custom_safe_url_replacement", customSafe.normalized_text.includes("[safe link]"));
 
@@ -54,11 +78,12 @@ check(
 );
 
 const naturalText = normalizeTtsSafeText(
-  "endpoint security is important. token economy is not authentication. secret base in a game story.",
+  "endpoint security is important. token economy is not authentication. secret base in a game story. authorization policy is important.",
 );
 check("natural_false_positives_preserved", naturalText.normalized_text.includes("endpoint security is important"));
 check("natural_token_text_preserved", naturalText.normalized_text.includes("token economy is not authentication"));
 check("natural_secret_text_preserved", naturalText.normalized_text.includes("secret base in a game story"));
+check("natural_authorization_text_preserved", naturalText.normalized_text.includes("authorization policy is important"));
 
 const mockBoundary = {
   mock_tts_provider_connected: false,

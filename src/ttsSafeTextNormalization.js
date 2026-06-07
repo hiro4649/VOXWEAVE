@@ -3,6 +3,8 @@ const DEFAULT_URL_REPLACEMENT = "[URL removed]";
 const URL_PATTERN = /\b(?:https?:\/\/|www\.)[^\s<>"']+/giu;
 const CONFIG_VALUE_PATTERN =
   /\b(?:api_key|api-key|token|secret|endpoint)\b\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;]+)/giu;
+const AUTHORIZATION_KEY_VALUE_PATTERN =
+  /\bauthorization\b\s*[:=]\s*(?:"[^"]*"|'[^']*'|(?:Bearer|Basic)\s+[^\s,;]+|[^\s,;]+)/giu;
 const AUTHORIZATION_VALUE_PATTERN =
   /\bauthorization\b\s*(?::|=)?\s*Bearer\s+[A-Za-z0-9._~+/=-]+/giu;
 const UNSAFE_REPLACEMENT_PATTERN =
@@ -20,6 +22,11 @@ export function normalizeTtsSafeText(text, options = {}) {
   });
 
   normalized = normalized.replace(AUTHORIZATION_VALUE_PATTERN, () => {
+    configurationMarkerCount += 1;
+    return "";
+  });
+
+  normalized = normalized.replace(AUTHORIZATION_KEY_VALUE_PATTERN, () => {
     configurationMarkerCount += 1;
     return "";
   });
@@ -53,6 +60,7 @@ export function isSafeTtsOutput(value) {
   return (
     !hasPattern(URL_PATTERN, value) &&
     !hasPattern(CONFIG_VALUE_PATTERN, value) &&
+    !hasPattern(AUTHORIZATION_KEY_VALUE_PATTERN, value) &&
     !hasPattern(AUTHORIZATION_VALUE_PATTERN, value)
   );
 }
