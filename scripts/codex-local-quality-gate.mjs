@@ -2366,6 +2366,38 @@ export function buildRemoteProductEvidenceExecutionInput(report = {}, env = proc
   };
 }
 
+export function buildSafeArtifactIndexInputForQualityGate(env = process.env) {
+  const remoteNpmDiagnosticPath = env.CODEX_NPM_TEST_SAFE_SUMMARY_PATH || '';
+  const productEvidencePath = env.CODEX_PRODUCT_VERIFICATION_EVIDENCE_PATH || '';
+  const remoteBaselinePath = env.CODEX_REMOTE_PRODUCT_BASELINE_PATH || '';
+  const remoteProductChecksPath = env.CODEX_REMOTE_PRODUCT_CHECKS_PATH || '';
+  const remoteNpmFailurePath = env.CODEX_REMOTE_NPM_FAILURE_PATH || '';
+  const names = [
+    ['codex-diagnostic-consolidated-summary.json', 'codex-diagnostic-consolidated-summary.json'],
+    ['codex-quality-gate-safe-summary.json', 'codex-quality-gate-safe-summary.json'],
+    ['codex-failure-reasons.json', 'codex-failure-reasons.json'],
+    ['codex-safe-artifact-index.json', 'codex-safe-artifact-index.json'],
+    ['codex-target-quality-summary.json', 'codex-target-quality-summary.json'],
+    ['codex-target-final-summary.json', 'codex-target-final-summary.json'],
+    ['codex-remote-npm-diagnostic.safe.json', remoteNpmDiagnosticPath],
+    ['codex-product-verification-evidence.remote.json', productEvidencePath],
+    ['codex-remote-product-baseline.json', remoteBaselinePath],
+    ['codex-remote-product-checks.safe.json', remoteProductChecksPath],
+    ['codex-remote-npm-failure.safe.json', remoteNpmFailurePath, 'remoteNpmFailure'],
+  ];
+  return names
+    .filter(([, artifactPath]) => artifactPath !== undefined)
+    .map(([artifactName, artifactPath, key]) => ({
+      key,
+      artifactName,
+      path: artifactPath || artifactName,
+      status: fs.existsSync(artifactPath || artifactName) ? 'present' : 'missing',
+      reasonCodes: fs.existsSync(artifactPath || artifactName) ? [] : ['safe_artifact_missing'],
+      nextAction: fs.existsSync(artifactPath || artifactName) ? '' : 'Artifact was not generated in this run.',
+      safeSummaryOnly: true,
+    }));
+}
+
 function readJsonFileIfPresent(file) {
   if (!file || !fs.existsSync(file)) return null;
   try {
@@ -8411,7 +8443,11 @@ async function runSourceHarnessGate() {
 
 
 
-  report.safeArtifactIndexStatus = runGateScript('scripts/codex-safe-artifact-index.mjs', 'safeArtifactIndexStatus', 'CODEX_SAFE_ARTIFACT_INDEX_REPORT', gateEnv);
+  const safeArtifactIndexEnv = {
+    ...gateEnv,
+    CODEX_SAFE_ARTIFACT_INDEX_INPUT: JSON.stringify(buildSafeArtifactIndexInputForQualityGate(gateEnv)),
+  };
+  report.safeArtifactIndexStatus = runGateScript('scripts/codex-safe-artifact-index.mjs', 'safeArtifactIndexStatus', 'CODEX_SAFE_ARTIFACT_INDEX_REPORT', safeArtifactIndexEnv);
 
 
 
@@ -10566,7 +10602,11 @@ async function runTargetHarnessGate() {
 
 
 
-  report.safeArtifactIndexStatus = runGateScript('scripts/codex-safe-artifact-index.mjs', 'safeArtifactIndexStatus', 'CODEX_SAFE_ARTIFACT_INDEX_REPORT', gateEnv);
+  const safeArtifactIndexEnv = {
+    ...gateEnv,
+    CODEX_SAFE_ARTIFACT_INDEX_INPUT: JSON.stringify(buildSafeArtifactIndexInputForQualityGate(gateEnv)),
+  };
+  report.safeArtifactIndexStatus = runGateScript('scripts/codex-safe-artifact-index.mjs', 'safeArtifactIndexStatus', 'CODEX_SAFE_ARTIFACT_INDEX_REPORT', safeArtifactIndexEnv);
 
 
 
