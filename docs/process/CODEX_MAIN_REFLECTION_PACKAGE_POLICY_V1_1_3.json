@@ -1,0 +1,80 @@
+{
+  "schemaVersion": "1.1.3",
+  "activeHarness": "v1.1.3",
+  "packageReadinessStatuses": [
+    "ready_for_explicit_scope_review",
+    "blocked_by_missing_explicit_scope",
+    "blocked_by_qg",
+    "blocked_by_review",
+    "blocked_by_runtime_boundary",
+    "blocked_by_workflow_package_boundary",
+    "blocked_by_dependency",
+    "blocked_by_candidate_branch_only",
+    "blocked_by_missing_rollback_strategy",
+    "ambiguous"
+  ],
+  "scopeGrantStatuses": [
+    "scopeGrantCandidate",
+    "not_granted",
+    "canonicalOwnershipNotGranted",
+    "runtimeNotGranted",
+    "mergeNotGranted"
+  ],
+  "requiredEvidence": {
+    "sameHeadQGSuccess": true,
+    "reviewOrProjectGovernanceEvidence": true,
+    "acceptanceEvidence": true,
+    "compatibilityEvidence": true,
+    "registryEvidence": true,
+    "candidateFileInventory": true,
+    "targetFileImpactReview": true,
+    "runtimeExcluded": true,
+    "adapterExcluded": true,
+    "debugRouteExcluded": true,
+    "activeQGExcluded": true,
+    "workflowPackageExcluded": true,
+    "rollbackStrategy": true,
+    "explicitMainReflectionScope": true
+  },
+  "forbiddenClaims": [
+    "candidate branch evidence is main evidence",
+    "docs-only acceptance evidence grants merge readiness",
+    "QG success alone grants reflection",
+    "scope decision is execution",
+    "package readiness is merge readiness",
+    "main reflection package executes merge",
+    "main reflection package opens runtime",
+    "canonical ownership is granted without explicit scope",
+    "runtime readiness is granted by non-runtime package"
+  ],
+  "runtimeBoundary": {
+    "runtimeConnected": false,
+    "adapterConnected": false,
+    "debugRouteConnected": false,
+    "activeQGConnected": false,
+    "runtimeReadinessClaimed": false
+  },
+  "mergeBoundary": {
+    "mergePerformed": false,
+    "prClosed": false,
+    "existingPrModified": false,
+    "mergeReadiness": false
+  },
+  "safeSummaryBoundary": {
+    "safeSummaryOnly": true,
+    "rawPrBodyAllowed": false,
+    "rawCommentsAllowed": false,
+    "reviewerNamesAllowed": false,
+    "rawLogsAllowed": false,
+    "endpointsAllowed": false,
+    "tokensAllowed": false,
+    "secretsAllowed": false,
+    "privatePathsAllowed": false
+  },
+  "rollbackBoundary": {
+    "rollbackStrategyRequired": true,
+    "preserveStrategyRequired": true,
+    "packageBuilderDoesNotExecuteRollback": true
+  }
+}
+
