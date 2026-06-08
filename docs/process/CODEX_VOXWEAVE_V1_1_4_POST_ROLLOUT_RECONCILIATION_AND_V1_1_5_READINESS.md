@@ -192,8 +192,31 @@ support policy becomes an explicit blocker.
 
 Hidden/bidirectional Unicode scan for AGENTS.md,
 `docs/process/CODEX_HARNESS_MANIFEST.json`, and
-`docs/process/CODEX_V114_SPEC.md` found no risk. The new file must also pass the
-same scan before publication.
+`docs/process/CODEX_V114_SPEC.md` found no byte-level risk. The PR #134 target
+file also scanned clean locally and through GitHub byte-level sources, but
+ChatGPT Pro Web review observed a GitHub Files UI warning for hidden or
+bidirectional Unicode text. This discrepancy is recorded as governance evidence
+and must not be silently converted into a simple pass.
+
+| Field | Status |
+| --- | --- |
+| hiddenUnicodeByteScanStatus | pass |
+| githubFilesUiWarningStatus | observed_by_chatgpt_pro_web_review |
+| codexLocalCheckoutScanStatus | pass |
+| githubContentsApiScanStatus | pass |
+| ghPrDiffPatchScanStatus | pass |
+| crossSourceDiscrepancyStatus | recorded_not_silently_ignored |
+| publicationCleanlinessStatus | provisional_until_next_pr_files_ui_observation |
+| governanceAcceptanceStatus | evidence_boundary_accepted_with_ui_warning_discrepancy_recorded |
+
+GitHub Files UI warning was observed by ChatGPT Pro Web review. Codex
+byte-level sources did not reproduce hidden or bidirectional Unicode. This
+discrepancy must not be treated as runtime risk. This discrepancy must not
+authorize file mutation outside the PR #134 docs file. This discrepancy must not
+authorize workflow, package, runtime, active QG, product verification execution,
+or remote npm diagnostic execution changes. Future reuse of PR #134 evidence
+must preserve this discrepancy note unless a later head SHA clears the GitHub
+Files UI warning.
 
 ## Existing Runtime Surface Risk
 
