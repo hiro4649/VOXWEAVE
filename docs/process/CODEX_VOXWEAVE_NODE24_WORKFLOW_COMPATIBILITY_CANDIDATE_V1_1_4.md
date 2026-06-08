@@ -81,7 +81,7 @@ does not authorize runtime adoption or merge.
 | --- | --- | --- | --- |
 | `actions/checkout` | v4 | v5 | v5 updates checkout to Node 24 runtime and requires compatible runner support |
 | `actions/setup-node` | v4 | v5 | v5 upgrades the action to Node 24 and may enable automatic package-manager caching unless disabled |
-| `actions/upload-artifact` | v4 | v5 | v5 supports Node 24.x and is treated as a compatibility-major action update |
+| `actions/upload-artifact` | v4 | v6 | v6 runs on Node 24 and requires compatible runner support |
 
 ## Selected Action Version Decision
 
@@ -90,7 +90,7 @@ does not authorize runtime adoption or merge.
 | `actions/checkout@v5` | selected | Node 24-compatible action major with smaller compatibility step than v6 |
 | `actions/setup-node@v5` | selected | Node 24-compatible action major |
 | `package-manager-cache: false` | selected | Prevents automatic caching side effects in setup-node v5 |
-| `actions/upload-artifact@v5` | selected | Node 24-compatible artifact action major |
+| `actions/upload-artifact@v6` | selected | Node 24-running artifact action major after v5 still emitted Node 20 warning |
 | project `node-version: '20'` | preserved | Project runtime Node 24 scope is not authorized |
 
 ## Rejected Alternatives
@@ -198,7 +198,7 @@ does not implement v1.1.5.
 | workflowHarnessMarkerDriftStatus | confirmed_and_reconciled |
 | actionsCheckoutVersionDecision | v4_to_v5 |
 | actionsSetupNodeVersionDecision | v4_to_v5_with_cache_disabled |
-| actionsUploadArtifactVersionDecision | v4_to_v5 |
+| actionsUploadArtifactVersionDecision | v4_to_v6 |
 | projectNodeVersionStatus | preserved_node_20 |
 | packageChangeStatus | no |
 | activeQGScriptChangeStatus | no |
