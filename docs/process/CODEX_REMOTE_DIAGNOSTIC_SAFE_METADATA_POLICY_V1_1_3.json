@@ -1,0 +1,110 @@
+{
+  "schemaVersion": "1.1.3",
+  "activeHarness": "v1.1.3",
+  "safeReasonCodes": [
+    "product_verification_failure",
+    "remote_product_evidence_failure",
+    "remote_npm_diagnostic_failure",
+    "formal_evidence_precedence_failure",
+    "target_quality_score_failure",
+    "normalization_self_check_failure",
+    "node_syntax_failure",
+    "changed_file_boundary_failure",
+    "runtime_boundary_failure",
+    "workflow_package_boundary_failure",
+    "active_qg_boundary_failure",
+    "safe_summary_leakage_failure",
+    "insufficient_safe_metadata",
+    "unknown_failure"
+  ],
+  "actionabilityStatuses": [
+    "actionable_in_changed_files",
+    "actionable_docs_only",
+    "actionable_self_check_only",
+    "requires_runtime_scope",
+    "requires_workflow_package_scope",
+    "requires_active_qg_scope",
+    "requires_external_service_scope",
+    "requires_rerun_scope",
+    "blocked_by_insufficient_safe_metadata",
+    "unknown_or_ambiguous"
+  ],
+  "boundedCodeFixDecisionStatuses": [
+    "safe_code_fix_allowed",
+    "docs_addendum_only",
+    "harness_policy_fix_candidate",
+    "remote_diagnostic_metadata_policy_needed",
+    "blocked_by_runtime_scope",
+    "blocked_by_workflow_package_scope",
+    "blocked_by_active_qg_scope",
+    "blocked_by_external_service_scope",
+    "blocked_by_insufficient_safe_metadata",
+    "requires_rerun_scope",
+    "unknown_or_ambiguous"
+  ],
+  "requiredSafeFields": [
+    "stableReasonCode",
+    "failureCategory",
+    "sameHeadStatus",
+    "blockingStatus",
+    "actionabilityStatus",
+    "changedFileScope",
+    "requiresRuntime",
+    "requiresWorkflowPackage",
+    "requiresActiveQG",
+    "requiresExternalService",
+    "requiresRerun",
+    "requiresUserAction",
+    "safeSummary",
+    "redactionStatus"
+  ],
+  "forbiddenRawFields": [
+    "rawLogs",
+    "rawStackTrace",
+    "tokens",
+    "secrets",
+    "endpoints",
+    "privatePaths",
+    "rawPayloads",
+    "rawReviewerNames",
+    "rawPrBody",
+    "rawComments"
+  ],
+  "runtimeBoundary": {
+    "runtimeConnected": false,
+    "runtimeReadinessClaimed": false,
+    "engineCallsAllowed": false
+  },
+  "mergeBoundary": {
+    "mergeReadiness": false,
+    "mergeAllowed": false,
+    "qgSuccessGrantsMerge": false
+  },
+  "activeQGBoundary": {
+    "activeQGConnected": false,
+    "activeQGChangeAllowed": false,
+    "passFailSemanticsChangeAllowed": false,
+    "targetQualityScoreChangeAllowed": false
+  },
+  "safeSummaryBoundary": {
+    "safeSummaryOnly": true,
+    "rawLogsAllowed": false,
+    "rawStackTraceAllowed": false,
+    "tokenOutputAllowed": false,
+    "secretOutputAllowed": false,
+    "endpointOutputAllowed": false,
+    "privatePathOutputAllowed": false,
+    "rawPayloadOutputAllowed": false
+  },
+  "forbiddenClaims": [
+    "safe metadata adapter fixes PR #127",
+    "safe metadata adapter changes active QG",
+    "safe metadata adapter changes product verification execution",
+    "safe metadata adapter changes remote npm diagnostic execution",
+    "safe metadata adapter grants merge readiness",
+    "safe metadata adapter grants runtime readiness",
+    "QG success grants merge",
+    "docs-only policy fixes product verification",
+    "insufficient safe metadata permits code fix"
+  ]
+}
