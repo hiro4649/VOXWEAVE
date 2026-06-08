@@ -162,6 +162,16 @@ function buildTimeoutDiagnostic(input = {}, env = process.env, summary = {}, cap
   };
 }
 
+function buildExitOneNoSafeDetailDiagnostic(summary = {}, timeoutDiagnostic = null) {
+  if (timeoutDiagnostic) return null;
+  if (summary.safeDetailUnavailable !== true) return null;
+  return {
+    primaryClass: 'npm_exit1_no_timeout_no_safe_detail',
+    safeReasonCode: 'npm_exit1_no_timeout_no_safe_detail',
+    safeNextAction: 'owner_authorized_npm_failure_summarizer_repair_or_bounded_suite_split_plan',
+  };
+}
+
 export function buildRemoteNpmFailureSafeArtifact(input = parseJson(process.env.CODEX_REMOTE_PRODUCT_EVIDENCE_RUNNER_JSON) || {}, env = process.env) {
   const productRelevant = input.productRelevant !== undefined ? parseBool(input.productRelevant) : true;
   const npmExecuted = parseBool(input.npmExecuted) || env.CODEX_REMOTE_NPM_EXECUTED === '1';
@@ -172,6 +182,7 @@ export function buildRemoteNpmFailureSafeArtifact(input = parseJson(process.env.
   const summary = classifySafeNpmFailureOutput(capture.output);
   const failureClass = FAILURE_CLASSES.has(summary.failureClass) ? summary.failureClass : 'unknown';
   const timeoutDiagnostic = buildTimeoutDiagnostic(input, env, summary, capture);
+  const exitOneNoSafeDetailDiagnostic = buildExitOneNoSafeDetailDiagnostic(summary, timeoutDiagnostic);
   const artifact = {
     schemaVersion: '1.1.3',
     harnessVersion: HARNESS_VERSION,
@@ -180,7 +191,8 @@ export function buildRemoteNpmFailureSafeArtifact(input = parseJson(process.env.
     npmExecuted: true,
     npmExitCode,
     failureClass: timeoutDiagnostic ? 'timeout' : failureClass,
-    safeReasonCode: timeoutDiagnostic?.safeReasonCode || summary.safeReasonCode,
+    timedOut: timeoutDiagnostic?.timedOut || false,
+    safeReasonCode: timeoutDiagnostic?.safeReasonCode || exitOneNoSafeDetailDiagnostic?.safeReasonCode || summary.safeReasonCode,
     failingTestFiles: summary.failingTestFiles,
     failingTestNames: summary.failingTestNames,
     rawStackOmitted: true,
@@ -198,10 +210,10 @@ export function buildRemoteNpmFailureSafeArtifact(input = parseJson(process.env.
       timeoutClass: timeoutDiagnostic.timeoutClass,
       partialSummaryAvailable: timeoutDiagnostic.partialSummaryAvailable,
     } : {}),
-    primaryClass: timeoutDiagnostic?.primaryClass || (summary.safeDetailUnavailable
+    primaryClass: timeoutDiagnostic?.primaryClass || exitOneNoSafeDetailDiagnostic?.primaryClass || (summary.safeDetailUnavailable
       ? 'product_test_failure_safe_summary_missing'
       : 'product_test_failure_safe_summary_available'),
-    safeNextAction: timeoutDiagnostic?.safeNextAction || (summary.safeDetailUnavailable
+    safeNextAction: timeoutDiagnostic?.safeNextAction || exitOneNoSafeDetailDiagnostic?.safeNextAction || (summary.safeDetailUnavailable
       ? 'owner_authorized_product_check_triage_or_harness_failure_summarizer_repair'
       : 'owner_authorized_product_check_triage'),
   };
@@ -215,7 +227,8 @@ export function buildRemoteNpmFailureSafeArtifact(input = parseJson(process.env.
       npmExecuted: true,
       npmExitCode,
       failureClass: timeoutDiagnostic ? 'timeout' : 'unknown',
-      safeReasonCode: timeoutDiagnostic?.safeReasonCode || 'unknown_npm_failure_no_safe_detail',
+      timedOut: timeoutDiagnostic?.timedOut || false,
+      safeReasonCode: timeoutDiagnostic?.safeReasonCode || exitOneNoSafeDetailDiagnostic?.safeReasonCode || 'unknown_npm_failure_no_safe_detail',
       failingTestFiles: [],
       failingTestNames: [],
       rawStackOmitted: true,
@@ -233,9 +246,9 @@ export function buildRemoteNpmFailureSafeArtifact(input = parseJson(process.env.
         timeoutClass: timeoutDiagnostic.timeoutClass,
         partialSummaryAvailable: false,
       } : {}),
-      primaryClass: timeoutDiagnostic?.primaryClass || 'product_test_failure_safe_summary_missing',
+      primaryClass: timeoutDiagnostic?.primaryClass || exitOneNoSafeDetailDiagnostic?.primaryClass || 'product_test_failure_safe_summary_missing',
       safeDetailUnavailable: true,
-      safeNextAction: timeoutDiagnostic?.safeNextAction || 'owner_authorized_product_check_triage_or_harness_failure_summarizer_repair',
+      safeNextAction: timeoutDiagnostic?.safeNextAction || exitOneNoSafeDetailDiagnostic?.safeNextAction || 'owner_authorized_product_check_triage_or_harness_failure_summarizer_repair',
     };
   }
   return artifact;
