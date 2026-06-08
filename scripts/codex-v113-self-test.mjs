@@ -142,6 +142,60 @@ const npmFailureArtifactUnsafe = buildRemoteNpmFailureSafeArtifact({
     '  at test/safe-normalization.test.js:10:1',
   ].join('\n'),
 });
+const npmTimeoutUnknownArtifact = buildRemoteNpmFailureSafeArtifact({
+  productRelevant: true,
+  npmExecuted: true,
+  npmExitCode: 1,
+  timedOut: true,
+  timeoutMs: 180000,
+  elapsedMs: 180000,
+  headSha: 'same-head',
+});
+const npmTimeoutWithSafeDetailArtifact = buildRemoteNpmFailureSafeArtifact({
+  productRelevant: true,
+  npmExecuted: true,
+  npmExitCode: 1,
+  timedOut: true,
+  timeoutMs: 180000,
+  elapsedMs: 180000,
+  headSha: 'same-head',
+  npmOutput: [
+    'TAP version 13',
+    'not ok 7 - safe normalization keeps subtitles bounded',
+    '  at test/safe-normalization.test.js:42:1',
+  ].join('\n'),
+});
+const npmTimeoutBeforeDiscoveryArtifact = buildRemoteNpmFailureSafeArtifact({
+  productRelevant: true,
+  npmExecuted: true,
+  npmExitCode: 1,
+  timedOut: true,
+  testDiscoveryStarted: false,
+  timeoutMs: 180000,
+  elapsedMs: 180000,
+  headSha: 'same-head',
+});
+const npmTimeoutFixtureArtifact = buildRemoteNpmFailureSafeArtifact({
+  productRelevant: true,
+  npmExecuted: true,
+  npmExitCode: 1,
+  timedOut: true,
+  timeoutClass: 'fixture_interference_possible',
+  timeoutMs: 180000,
+  elapsedMs: 180000,
+  headSha: 'same-head',
+  npmOutput: 'fixture timeout before stable completion',
+});
+const npmTimeoutUnsafeArtifact = buildRemoteNpmFailureSafeArtifact({
+  productRelevant: true,
+  npmExecuted: true,
+  npmExitCode: 1,
+  timedOut: true,
+  timeoutMs: 180000,
+  elapsedMs: 180000,
+  headSha: 'same-head',
+  npmOutput: 'timeout after https://example.invalid/secret?token=abc',
+});
 const remoteNpmFailureIndex = {
   artifacts: [
     { key: 'remoteNpmFailure', artifactName: 'codex-remote-npm-failure.safe.json', status: 'present', safeSummaryOnly: true },
@@ -166,6 +220,10 @@ const npmFailureUploadedNotIndexedContract = buildRemoteNpmFailureArtifactContra
 });
 const npmFailureContractAvailable = buildRemoteNpmFailureArtifactContractSummary({
   artifact: npmFailureArtifactWithSafeDetails,
+  index: remoteNpmFailureIndex,
+});
+const npmTimeoutContractAvailable = buildRemoteNpmFailureArtifactContractSummary({
+  artifact: npmTimeoutUnknownArtifact,
   index: remoteNpmFailureIndex,
 });
 const npmFailureContractMissingDetail = buildRemoteNpmFailureArtifactContractSummary({
@@ -208,6 +266,7 @@ const remoteNpmRequiredAbsentInput = buildSafeArtifactIndexInputForQualityGate({
 const remoteNpmOptionalNotExecutedIndex = buildWorkflowSafeArtifactIndex(remoteNpmOptionalNotExecutedInput, 'target');
 const remoteNpmOptionalZeroExitIndex = buildWorkflowSafeArtifactIndex(remoteNpmOptionalZeroExitInput, 'target');
 const remoteNpmRequiredAbsentIndex = buildWorkflowSafeArtifactIndex(remoteNpmRequiredAbsentInput, 'target');
+const remoteNpmTimeoutMissingIndex = buildWorkflowSafeArtifactIndex([], 'target', { remoteNpmFailureRequired: true });
 
 const cases = [
   test('all_v113_status_keys_default_pass', () => V113_STATUS_KEYS.every((key) => statuses[key]?.status === 'pass')),
@@ -256,7 +315,13 @@ const cases = [
   test('remote_npm_failure_unknown_output_stays_safe', () => npmFailureArtifactUnknown.failureClass === 'unknown' && npmFailureArtifactUnknown.safeDetailUnavailable === true && npmFailureArtifactUnknown.rawOutputIngestedForSafeSummary === true && npmFailureArtifactUnknown.rawOutputPrinted === false && npmFailureArtifactUnknown.rawStackOmitted === true && npmFailureArtifactUnknown.safeNextAction === 'owner_authorized_product_check_triage_or_harness_failure_summarizer_repair'),
   test('remote_npm_failure_no_output_marks_not_ingested', () => npmFailureArtifactNoOutput.failureClass === 'unknown' && npmFailureArtifactNoOutput.safeDetailUnavailable === true && npmFailureArtifactNoOutput.rawOutputIngestedForSafeSummary === false && npmFailureArtifactNoOutput.rawOutputPrinted === false),
   test('remote_npm_failure_unsafe_output_not_echoed', () => npmFailureArtifactUnsafe.safeSummaryOnly === true && npmFailureArtifactUnsafe.failingTestNames.length === 0 && !JSON.stringify(npmFailureArtifactUnsafe).includes('https://example.invalid')),
+  test('remote_npm_timeout_unknown_detail_artifact', () => npmTimeoutUnknownArtifact.timedOut === true && npmTimeoutUnknownArtifact.timeoutClass === 'unknown_timeout' && npmTimeoutUnknownArtifact.safeDetailUnavailable === true && npmTimeoutUnknownArtifact.rawOutputPrinted === false && npmTimeoutUnknownArtifact.rawStackOmitted === true && npmTimeoutUnknownArtifact.primaryClass === 'npm_timeout'),
+  test('remote_npm_timeout_with_safe_detail_artifact', () => npmTimeoutWithSafeDetailArtifact.timedOut === true && npmTimeoutWithSafeDetailArtifact.failingTestFiles.includes('test/safe-normalization.test.js') && npmTimeoutWithSafeDetailArtifact.timeoutClass === 'product_test_timeout_possible' && npmTimeoutWithSafeDetailArtifact.primaryClass === 'product_test_timeout_possible'),
+  test('remote_npm_timeout_before_discovery_artifact', () => npmTimeoutBeforeDiscoveryArtifact.timedOut === true && npmTimeoutBeforeDiscoveryArtifact.timeoutClass === 'suite_timeout' && npmTimeoutBeforeDiscoveryArtifact.primaryClass === 'test_suite_timeout'),
+  test('remote_npm_timeout_fixture_interference_artifact', () => npmTimeoutFixtureArtifact.timedOut === true && npmTimeoutFixtureArtifact.timeoutClass === 'fixture_interference_possible' && npmTimeoutFixtureArtifact.primaryClass === 'fixture_interference_possible'),
+  test('remote_npm_timeout_unsafe_output_not_echoed', () => npmTimeoutUnsafeArtifact.safeSummaryOnly === true && npmTimeoutUnsafeArtifact.rawOutputPrinted === false && !JSON.stringify(npmTimeoutUnsafeArtifact).includes('https://example.invalid')),
   test('remote_npm_failure_artifact_index_contract_available', () => npmFailureContractAvailable.generated === true && npmFailureContractAvailable.indexed === true && npmFailureContractAvailable.consumed === true && npmFailureContractAvailable.primaryClass === 'product_test_failure_safe_summary_available'),
+  test('remote_npm_timeout_artifact_index_contract_available', () => npmTimeoutContractAvailable.generated === true && npmTimeoutContractAvailable.indexed === true && npmTimeoutContractAvailable.consumed === true && npmTimeoutContractAvailable.primaryClass === 'npm_timeout'),
   test('remote_npm_failure_artifact_index_contract_missing_detail', () => npmFailureContractMissingDetail.generated === true && npmFailureContractMissingDetail.indexed === true && npmFailureContractMissingDetail.primaryClass === 'product_test_failure_safe_summary_missing'),
   test('remote_npm_failure_uploaded_not_indexed_is_discovered', () => remoteNpmUploadedNotIndexedDiscoveredEntry?.status === 'present' && remoteNpmUploadedNotIndexedDiscoveredEntry.indexed === true && remoteNpmUploadedNotIndexedDiscoveredEntry.consumed === true),
   test('remote_npm_failure_present_safe_detail_unavailable_consumed', () => npmFailureUploadedNotIndexedContract.generated === true && npmFailureUploadedNotIndexedContract.indexed === true && npmFailureUploadedNotIndexedContract.consumed === true && npmFailureUploadedNotIndexedContract.primaryClass === 'product_test_failure_safe_summary_missing' && npmFailureUploadedNotIndexedContract.primaryClass !== 'unknown_npm_failure'),
@@ -265,6 +330,7 @@ const cases = [
   test('remote_npm_failure_optional_when_not_executed', () => remoteNpmOptionalNotExecutedInput.some((item) => item.key === 'remoteNpmFailure' && item.status === 'not_applicable') && remoteNpmOptionalNotExecutedIndex.status === 'pass'),
   test('remote_npm_failure_optional_when_exit_zero', () => remoteNpmOptionalZeroExitInput.some((item) => item.key === 'remoteNpmFailure' && item.status === 'not_applicable') && remoteNpmOptionalZeroExitIndex.status === 'pass'),
   test('remote_npm_failure_required_missing_blocks', () => remoteNpmRequiredAbsentInput.some((item) => item.key === 'remoteNpmFailure' && item.status === 'missing_required' && item.reasonCodes.includes('safe_npm_failure_artifact_required_missing')) && remoteNpmRequiredAbsentIndex.status === 'fail'),
+  test('remote_npm_timeout_missing_artifact_remains_hard_failure', () => remoteNpmTimeoutMissingIndex.status === 'fail' && (remoteNpmTimeoutMissingIndex.reasonCodes || []).includes('safe_npm_failure_artifact_required_missing')),
   test('remote_npm_failure_missing_index_not_consumed', () => npmFailureContractMissingIndex.indexed === false && npmFailureContractMissingIndex.consumed === false && remoteNpmFailureBuiltMissingEntry?.indexed === false && remoteNpmFailureBuiltMissingEntry?.consumed === false),
   test('remote_product_evidence_missing_still_fails', () => remoteExecutionStatus(missingEvidenceReport).status === 'fail' && (remoteExecutionStatus(missingEvidenceReport).reasonCodes || []).includes('remote_product_evidence_execution_missing')),
   test('remote_product_evidence_head_mismatch_still_fails', () => remoteExecutionStatus(headMismatchReport).status === 'fail' && (remoteExecutionStatus(headMismatchReport).reasonCodes || []).includes('same_head_artifact_missing')),
