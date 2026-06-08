@@ -1,0 +1,94 @@
+{
+  "schemaVersion": "1.1.3",
+  "activeHarness": "v1.1.3",
+  "status": "standalone_non_runtime_harness_candidate_policy",
+  "evidenceClassStatuses": [
+    "docs_only_evidence",
+    "candidate_branch_behavior_evidence",
+    "same_head_review_evidence",
+    "qg_evidence_only",
+    "main_evidence",
+    "target_branch_evidence",
+    "runtime_evidence",
+    "merge_evidence",
+    "acceptance_audit_evidence",
+    "compatibility_review_evidence",
+    "scope_decision_evidence",
+    "package_readiness_evidence",
+    "unknown_or_ambiguous"
+  ],
+  "inventoryActionStatuses": [
+    "preserve_only",
+    "terminal_no_action",
+    "dependency_root",
+    "dependent_stacked_candidate",
+    "main_reflection_candidate",
+    "main_reflection_package_candidate",
+    "target_branch_migration_candidate",
+    "runtime_return_gate_candidate",
+    "superseded",
+    "absorbed_by_registry",
+    "close_candidate",
+    "needs_governance_scope",
+    "needs_explicit_main_reflection_scope",
+    "needs_explicit_runtime_scope",
+    "blocked_by_qg",
+    "blocked_by_review",
+    "blocked_by_dependency",
+    "ambiguous"
+  ],
+  "stackedDependencyStatuses": [
+    "stacked_on_dependency",
+    "no_dependency_declared",
+    "dependency_not_main_reflected",
+    "dependency_resolved",
+    "blocked_by_qg",
+    "blocked_by_review"
+  ],
+  "forbiddenClaims": [
+    "docs-only evidence grants merge readiness",
+    "candidate branch evidence is main evidence",
+    "QG success alone grants merge readiness",
+    "scope decision grants actual reflection without explicit execution scope",
+    "package readiness grants package execution",
+    "terminal no-action creates new PR",
+    "absorbed_by_registry means merged",
+    "superseded means deleted without governance",
+    "close_candidate means auto-close",
+    "main_reflection_candidate means merge-ready",
+    "runtime_return_gate_candidate means runtime-ready"
+  ],
+  "runtimeBoundary": {
+    "runtimeConnected": false,
+    "runtimeReadinessClaimed": false,
+    "runtimeEvidenceRequiresExplicitRuntimeExecutionScopeAndProof": true
+  },
+  "mergeBoundary": {
+    "mergeReadiness": false,
+    "mergeEvidenceRequiresExplicitMergeScopeAndProof": true,
+    "qgSuccessAloneGrantsMerge": false
+  },
+  "safeSummaryBoundary": {
+    "safeSummaryOnly": true,
+    "rawPrBodyAllowed": false,
+    "rawCommentsAllowed": false,
+    "rawReviewerNamesAllowed": false,
+    "rawLogsAllowed": false,
+    "secretsAllowed": false,
+    "endpointsAllowed": false,
+    "tokensAllowed": false
+  },
+  "reviewGovernanceBoundary": {
+    "writerOnlyReviewIsIndependent": false,
+    "botOnlyReviewIsIndependent": false,
+    "reviewRequestIsApproval": false,
+    "chatgptProTechnicalReviewIsProjectGovernanceEvidence": true,
+    "chatgptProTechnicalReviewIsNativeGithubReviewMetadata": false
+  },
+  "qualityGateBoundary": {
+    "qualityGateSuccessIsEvidenceOnly": true,
+    "qualityGateSuccessIsMergePermission": false,
+    "targetQualityScoreChanged": false,
+    "passFailSemanticsChanged": false
+  }
+}
