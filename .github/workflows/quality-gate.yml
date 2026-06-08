@@ -1,4 +1,4 @@
-# CODEX_QUALITY_HARNESS_FILE v1.0.7
+# CODEX_QUALITY_HARNESS_FILE v1.1.4
 name: quality-gate
 
 on:
@@ -46,13 +46,14 @@ jobs:
           }
           JSON
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '20'
+          package-manager-cache: false
       - name: Install root dependencies if present
         shell: bash
         run: |
@@ -346,7 +347,7 @@ jobs:
           NODE
       - name: Upload safe quality artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: codex-quality-gate-safe-artifacts
           path: |
