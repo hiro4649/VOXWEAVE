@@ -26,6 +26,15 @@ const FAILURE_CLASSES = new Set([
   'unknown',
 ]);
 
+const TIMEOUT_CLASSES = new Set([
+  'command_timeout',
+  'suite_timeout',
+  'fixture_interference_possible',
+  'environment_timeout_possible',
+  'product_test_timeout_possible',
+  'unknown_timeout',
+]);
+
 export { buildRemoteProductEvidenceRunnerReport };
 
 function uniq(values) {
@@ -48,6 +57,11 @@ function safeRelativeTestFile(value) {
   if (!match) return '';
   const safe = match[0].split('/').filter((part) => part !== '..').join('/');
   return scanObjectForUnsafe(safe).length ? '' : safe.slice(0, MAX_SAFE_NAME_LENGTH);
+}
+
+function positiveNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? Math.floor(number) : fallback;
 }
 
 function readCapturedNpmOutput(input = {}, env = process.env) {
@@ -105,6 +119,49 @@ export function classifySafeNpmFailureOutput(output = '') {
   return { failureClass, safeReasonCode, failingTestFiles, failingTestNames, safeDetailUnavailable };
 }
 
+function buildTimeoutDiagnostic(input = {}, env = process.env, summary = {}, capture = {}) {
+  const explicitTimedOut = input.timedOut !== undefined
+    ? parseBool(input.timedOut)
+    : env.CODEX_NPM_TIMED_OUT === '1' || env.CODEX_NPM_TEST_TIMED_OUT === '1';
+  const timedOut = explicitTimedOut || summary.failureClass === 'timeout';
+  if (!timedOut) return null;
+  const requestedClass = String(input.timeoutClass || env.CODEX_NPM_TIMEOUT_CLASS || '');
+  let timeoutClass = TIMEOUT_CLASSES.has(requestedClass) ? requestedClass : '';
+  if (!timeoutClass) {
+    if ((summary.failingTestFiles || []).length || (summary.failingTestNames || []).length) timeoutClass = 'product_test_timeout_possible';
+    else if (summary.failureClass === 'fixture_interference') timeoutClass = 'fixture_interference_possible';
+    else if (input.testDiscoveryStarted === false || env.CODEX_NPM_TEST_DISCOVERY_STARTED === '0') timeoutClass = 'suite_timeout';
+    else timeoutClass = 'unknown_timeout';
+  }
+  const primaryClassByTimeoutClass = {
+    command_timeout: 'npm_timeout',
+    suite_timeout: 'test_suite_timeout',
+    fixture_interference_possible: 'fixture_interference_possible',
+    environment_timeout_possible: 'environment_timeout_possible',
+    product_test_timeout_possible: 'product_test_timeout_possible',
+    unknown_timeout: 'npm_timeout',
+  };
+  const safeNextActionByTimeoutClass = {
+    command_timeout: 'owner_authorized_timeout_diagnostic_or_suite_split',
+    suite_timeout: 'bounded_suite_split_plan',
+    fixture_interference_possible: 'bounded_suite_split_plan',
+    environment_timeout_possible: 'owner_authorized_timeout_diagnostic_or_suite_split',
+    product_test_timeout_possible: 'owner_authorized_product_check_triage',
+    unknown_timeout: 'owner_authorized_timeout_diagnostic_or_suite_split',
+  };
+  return {
+    timedOut: true,
+    timeoutMs: positiveNumber(input.timeoutMs ?? env.CODEX_NPM_TIMEOUT_MS, 0),
+    elapsedMs: positiveNumber(input.elapsedMs ?? env.CODEX_NPM_ELAPSED_MS, 0),
+    timeoutClass,
+    safeDetailUnavailable: (summary.failingTestFiles || []).length === 0 && (summary.failingTestNames || []).length === 0,
+    partialSummaryAvailable: Boolean(capture.ingested && ((summary.failingTestFiles || []).length || (summary.failingTestNames || []).length)),
+    primaryClass: primaryClassByTimeoutClass[timeoutClass] || 'npm_timeout',
+    safeReasonCode: `${timeoutClass}_safe_timeout_summary`,
+    safeNextAction: safeNextActionByTimeoutClass[timeoutClass] || 'owner_authorized_timeout_diagnostic_or_suite_split',
+  };
+}
+
 export function buildRemoteNpmFailureSafeArtifact(input = parseJson(process.env.CODEX_REMOTE_PRODUCT_EVIDENCE_RUNNER_JSON) || {}, env = process.env) {
   const productRelevant = input.productRelevant !== undefined ? parseBool(input.productRelevant) : true;
   const npmExecuted = parseBool(input.npmExecuted) || env.CODEX_REMOTE_NPM_EXECUTED === '1';
@@ -114,6 +171,7 @@ export function buildRemoteNpmFailureSafeArtifact(input = parseJson(process.env.
   const capture = readCapturedNpmOutput(input, env);
   const summary = classifySafeNpmFailureOutput(capture.output);
   const failureClass = FAILURE_CLASSES.has(summary.failureClass) ? summary.failureClass : 'unknown';
+  const timeoutDiagnostic = buildTimeoutDiagnostic(input, env, summary, capture);
   const artifact = {
     schemaVersion: '1.1.3',
     harnessVersion: HARNESS_VERSION,
@@ -121,8 +179,8 @@ export function buildRemoteNpmFailureSafeArtifact(input = parseJson(process.env.
     commandClass: 'npm_test',
     npmExecuted: true,
     npmExitCode,
-    failureClass,
-    safeReasonCode: summary.safeReasonCode,
+    failureClass: timeoutDiagnostic ? 'timeout' : failureClass,
+    safeReasonCode: timeoutDiagnostic?.safeReasonCode || summary.safeReasonCode,
     failingTestFiles: summary.failingTestFiles,
     failingTestNames: summary.failingTestNames,
     rawStackOmitted: true,
@@ -133,14 +191,21 @@ export function buildRemoteNpmFailureSafeArtifact(input = parseJson(process.env.
     rawOutputPrinted: false,
     rawLogsRead: false,
     safeSummaryOnly: true,
-    primaryClass: summary.safeDetailUnavailable
+    ...(timeoutDiagnostic ? {
+      timedOut: true,
+      timeoutMs: timeoutDiagnostic.timeoutMs,
+      elapsedMs: timeoutDiagnostic.elapsedMs,
+      timeoutClass: timeoutDiagnostic.timeoutClass,
+      partialSummaryAvailable: timeoutDiagnostic.partialSummaryAvailable,
+    } : {}),
+    primaryClass: timeoutDiagnostic?.primaryClass || (summary.safeDetailUnavailable
       ? 'product_test_failure_safe_summary_missing'
-      : 'product_test_failure_safe_summary_available',
-    safeNextAction: summary.safeDetailUnavailable
+      : 'product_test_failure_safe_summary_available'),
+    safeNextAction: timeoutDiagnostic?.safeNextAction || (summary.safeDetailUnavailable
       ? 'owner_authorized_product_check_triage_or_harness_failure_summarizer_repair'
-      : 'owner_authorized_product_check_triage',
+      : 'owner_authorized_product_check_triage'),
   };
-  if (summary.safeDetailUnavailable) artifact.safeDetailUnavailable = true;
+  if (timeoutDiagnostic?.safeDetailUnavailable || summary.safeDetailUnavailable) artifact.safeDetailUnavailable = true;
   if (scanObjectForUnsafe(artifact).length) {
     return {
       schemaVersion: '1.1.3',
@@ -149,8 +214,8 @@ export function buildRemoteNpmFailureSafeArtifact(input = parseJson(process.env.
       commandClass: 'npm_test',
       npmExecuted: true,
       npmExitCode,
-      failureClass: 'unknown',
-      safeReasonCode: 'unknown_npm_failure_no_safe_detail',
+      failureClass: timeoutDiagnostic ? 'timeout' : 'unknown',
+      safeReasonCode: timeoutDiagnostic?.safeReasonCode || 'unknown_npm_failure_no_safe_detail',
       failingTestFiles: [],
       failingTestNames: [],
       rawStackOmitted: true,
@@ -161,9 +226,16 @@ export function buildRemoteNpmFailureSafeArtifact(input = parseJson(process.env.
       rawOutputPrinted: false,
       rawLogsRead: false,
       safeSummaryOnly: true,
-      primaryClass: 'product_test_failure_safe_summary_missing',
+      ...(timeoutDiagnostic ? {
+        timedOut: true,
+        timeoutMs: timeoutDiagnostic.timeoutMs,
+        elapsedMs: timeoutDiagnostic.elapsedMs,
+        timeoutClass: timeoutDiagnostic.timeoutClass,
+        partialSummaryAvailable: false,
+      } : {}),
+      primaryClass: timeoutDiagnostic?.primaryClass || 'product_test_failure_safe_summary_missing',
       safeDetailUnavailable: true,
-      safeNextAction: 'owner_authorized_product_check_triage_or_harness_failure_summarizer_repair',
+      safeNextAction: timeoutDiagnostic?.safeNextAction || 'owner_authorized_product_check_triage_or_harness_failure_summarizer_repair',
     };
   }
   return artifact;
@@ -198,16 +270,17 @@ export function buildRemoteNpmFailureArtifactContractSummary(input = {}) {
   }
   const safeDetailUnavailable = artifact.safeDetailUnavailable === true ||
     ((artifact.failingTestFiles || []).length === 0 && (artifact.failingTestNames || []).length === 0);
+  const primaryClass = artifact.primaryClass || (safeDetailUnavailable ? 'product_test_failure_safe_summary_missing' : 'product_test_failure_safe_summary_available');
   return {
     generated: true,
     indexed,
     consumed: indexed,
-    primaryClass: safeDetailUnavailable ? 'product_test_failure_safe_summary_missing' : 'product_test_failure_safe_summary_available',
+    primaryClass,
     safeNextAction: !indexed
       ? 'harness_artifact_index_repair'
-      : safeDetailUnavailable
+      : artifact.safeNextAction || (safeDetailUnavailable
       ? 'owner_authorized_product_check_triage_or_harness_failure_summarizer_repair'
-      : 'owner_authorized_product_check_triage',
+      : 'owner_authorized_product_check_triage'),
     safeSummaryOnly: true,
   };
 }

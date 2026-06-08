@@ -27,6 +27,11 @@ if (remoteNpmFailurePath && fs.existsSync(remoteNpmFailurePath)) {
   summary.remoteNpmFailure = {
     primaryClass: artifact.primaryClass || 'product_test_failure_safe_summary_missing',
     failureClass: artifact.failureClass || 'unknown',
+    timedOut: artifact.timedOut === true,
+    timeoutClass: artifact.timeoutClass || '',
+    timeoutMs: Number.isFinite(Number(artifact.timeoutMs)) ? Number(artifact.timeoutMs) : 0,
+    elapsedMs: Number.isFinite(Number(artifact.elapsedMs)) ? Number(artifact.elapsedMs) : 0,
+    partialSummaryAvailable: artifact.partialSummaryAvailable === true,
     safeDetailUnavailable: artifact.safeDetailUnavailable === true,
     rawOutputPrinted: artifact.rawOutputPrinted === false ? false : true,
     rawStackOmitted: artifact.rawStackOmitted === true,
