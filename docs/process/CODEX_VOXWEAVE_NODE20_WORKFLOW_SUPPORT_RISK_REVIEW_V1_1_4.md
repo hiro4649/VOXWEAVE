@@ -65,6 +65,56 @@ as workflow support inventory, not as product runtime evidence.
 Safe summary of warning class: workflows or JavaScript actions tied to Node 20
 may require compatibility review before future runner support changes complete.
 
+## GitHub Files UI / Byte Scan Cross-Source Discrepancy
+
+GitHub Files UI warning was observed by ChatGPT Pro Web review on PR #135.
+Codex byte-level sources may remain clean, but the discrepancy must not be
+silently collapsed into a simple pass.
+
+| Field | Status |
+| --- | --- |
+| hiddenUnicodeByteScanStatus | pass |
+| githubFilesUiWarningStatus | observed_by_chatgpt_pro_web_review_for_PR135 |
+| codexLocalCheckoutScanStatus | pass |
+| githubContentsApiScanStatus | pass |
+| ghPrDiffPatchScanStatus | pass |
+| crossSourceDiscrepancyStatus | recorded_not_silently_ignored |
+| publicationCleanlinessStatus | provisional_until_next_pr_files_ui_observation |
+| governanceAcceptanceStatus | pending_final_acceptance_until_discrepancy_recorded_and_qg_success |
+
+The local checkout, GitHub Contents API copy, and `gh pr diff --patch` output
+did not reproduce hidden or bidirectional Unicode for the PR #135 docs artifact.
+This cross-source discrepancy remains publication cleanliness evidence only. It
+does not authorize workflow changes, package changes, runtime changes, active QG
+integration, product verification execution changes, remote npm diagnostic
+execution changes, merge, or v1.1.5 implementation.
+
+## PR #135 Quality Gate History Boundary
+
+Initial PR #135 QG failure must remain part of the evidence history. The later
+QG success after PR body edit does not authorize workflow changes. The later QG
+success after PR body edit does not authorize runtime. The later QG success
+after PR body edit does not authorize merge. Node 20 risk remains inventory-only.
+Future workflow mutation requires a separate explicit workflow compatibility
+candidate.
+
+| Field | Status |
+| --- | --- |
+| initialQualityGateConclusion | FAILURE |
+| initialFailureSafeSummary | targetQualityScoreStatus_failed_and_report_status_failed |
+| recoveryActionStatus | PR_body_test_coverage_evidence_edit_observed |
+| manualRerunStatus | no_manual_rerun_observed |
+| latestQualityGateConclusion | SUCCESS |
+| latestSuccessEvidenceBoundary | qg_success_after_pr_body_edit_only |
+| qgSuccessDoesNotAuthorizeWorkflowMutation | true |
+| qgSuccessDoesNotAuthorizeRuntime | true |
+| qgSuccessDoesNotAuthorizeMerge | true |
+
+The initial failure was safe-summary classified as test coverage evidence
+missing, target quality score failure, and report failure. The later success was
+observed after the PR body received Test Coverage Evidence for the docs-only
+change. No manual rerun was observed.
+
 ## Workflow Inventory
 
 | Workflow item | Current value | Risk interpretation |
