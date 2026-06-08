@@ -54,6 +54,30 @@ The JSON registry is:
 
 Inventory pressure remains high. The registry records a current safe summary so future tasks can target a smaller explicit scope instead of adding more broad audit PRs.
 
+## Count Consistency Addendum
+
+Status: corrected_on_same_branch
+
+The original registry summary reused broader PR #123 dry-run totals for several fields. This addendum corrects the summary to match the 36 entries persisted in the JSON registry. The correction remains safe-summary-only and advisory-only.
+
+| count | corrected value | supporting PR entries | decision |
+| --- | --- | --- | --- |
+| docsOnlyEvidenceCount | 22 | PR #84, #85, #86, #87, #88, #90, #91, #93, #94, #95, #96, #97, #98, #99, #100, #102, #105, #107, #108, #111, #121, #123 | registry-entry count only |
+| candidateBranchEvidenceCount | 13 | PR #1, #53, #61, #65, #68, #71, #74, #89, #92, #101, #112, #122 plus one high-sensitivity runtime candidate flag | candidate evidence is not merge evidence |
+| dependencyRootCount | 3 | PR #3, #53, #89 | not merge-ready |
+| dependentStackedCandidateCount | 6 | PR #61, #65, #68, #71, #74, #92 | stacked dependency remains blocked |
+| mainReflectionCandidateCount | 2 | PR #53, #89 | requires explicit scope |
+| mainReflectionPackageCandidateCount | 3 | PR #101, #111, #112 | PR #112 remains blocked_by_qg |
+| runtimeReturnGateCandidateCount | 1 | PR #1 | runtime remains blocked |
+| absorbedByRegistryCandidateCount | 5 | PR #84, #85, #86, #87, #88 | future TTS registry scope only |
+| closeCandidateCount | 0 | none | PR close not allowed |
+| terminalNoActionCount | 0 | none | no terminal no-action authority in this registry |
+| blockedByQGCount | 7 | PR #1, #15, #61, #68, #71, #74, #112 | QG failures remain blockers |
+| blockedByReviewCount | 4 | PR #3, #53, #89, #95 | independent review or review evidence remains unresolved |
+| blockedByDependencyCount | 13 | PR #1, #15, #61, #65, #68, #71, #74, #92, #97, #98, #99, #101, #111 | dependency context requires future explicit scope |
+
+These corrected counts do not grant PR close, merge, runtime, active QG rollout, benchmark execution, model download, API call, dataset use, or readiness.
+
 ## Evidence Class Summary
 
 | evidence class | status |
