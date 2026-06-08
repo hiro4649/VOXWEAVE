@@ -189,3 +189,25 @@ Safe summaries are count-only. Raw payloads, endpoint-like inputs, secret-like i
 ## Safe Next Action
 
 Preserve this replacement candidate as draft non-runtime candidate evidence. Future same-head acceptance audit and terminal QG are required before any separate merge or runtime scope can be considered.
+
+## Safe Failure / Fix Addendum
+
+checkedAt: 2026-06-08T16:00:00+09:00
+pr127HeadShaBefore: 38ec8005d968a9c820ee43bdb7fa67fb4cade2f2
+failureReasonExtractionStatus: safe_reason_extracted
+stableReasonCode: product_verification_failure
+safeReasonSummary: PR #127 quality-gate failed in the product verification and remote npm diagnostic path. Safe artifacts also reported formal evidence precedence, remote diagnostic normalization, and target quality score blockers as downstream effects. Local candidate self-check and syntax checks passed. The remote npm safe diagnostic did not provide enough safe detail to identify a code-level fix inside the allowed four files.
+fixApplied: no
+fixedFiles: none
+ChatGPTProScopeGrantBoundary: limited_non_runtime_main_reflection_execution_candidate_only
+runtimeBoundaryStatus: no_runtime
+adapterBoundaryStatus: not_connected
+debugRouteBoundaryStatus: not_connected
+activeQGBoundaryStatus: not_connected
+workflowPackageBoundaryStatus: no_change
+actualMainReflectionCompleted: no
+canonicalNormalizationOwnershipGranted: no
+readinessClaimStatus: no_runtime_no_production_no_real_tts_no_asr_no_benchmark
+mergeReadiness: no
+remainingRisks: Product verification remains failed and safe detail is insufficient for a bounded code fix. Any future fix must be explicitly scoped and must not change runtime, adapter, debug route, active QG, workflow, package, or tests unless separately authorized.
+safeNextAction: Preserve PR #127 as failed draft candidate evidence until an explicit PR #127 product verification failure fix scope or safe npm diagnostic repair scope is provided.
