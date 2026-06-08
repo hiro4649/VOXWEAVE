@@ -4,6 +4,8 @@
 
 import fs from 'node:fs';
 
+import path from 'node:path';
+
 import { fileURLToPath } from 'node:url';
 
 import { HARNESS_VERSION, scanObjectForUnsafe, simpleStatus, writeJsonReport, exitFor } from './codex-v080-lib.mjs';
@@ -36,11 +38,119 @@ const REQUIRED_ARTIFACTS = [
 
 const DEFAULT_ARTIFACT_BUDGET = 16;
 
+const REMOTE_NPM_FAILURE_ARTIFACT = 'codex-remote-npm-failure.safe.json';
+
+const REMOTE_NPM_FAILURE_CANDIDATES = [
+  REMOTE_NPM_FAILURE_ARTIFACT,
+  path.join('_temp', REMOTE_NPM_FAILURE_ARTIFACT),
+];
+
+const STATUS_VALUES = ['present', 'missing', 'missing_required', 'not_applicable'];
+
+function isRemoteNpmFailureEntry(item = {}) {
+  return item.key === 'remoteNpmFailure' || item.artifactName === REMOTE_NPM_FAILURE_ARTIFACT;
+}
+
+function readJsonIfSafe(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function normalizePath(filePath) {
+  return String(filePath || '').replace(/\\/g, '/');
+}
+
+function remoteNpmFailureSearchRoots(options = {}) {
+  const roots = [
+    process.cwd(),
+    process.env.RUNNER_TEMP || '',
+    process.env.CODEX_SAFE_ARTIFACT_BUNDLE_DIR || '',
+    ...(Array.isArray(options.bundleRoots) ? options.bundleRoots : []),
+  ].filter(Boolean);
+  return [...new Set(roots.map((root) => path.resolve(root)))];
+}
+
+function findRemoteNpmFailureArtifact(options = {}) {
+  const explicitPaths = [
+    options.remoteNpmFailurePath,
+    process.env.CODEX_REMOTE_NPM_FAILURE_PATH,
+  ].filter(Boolean);
+  for (const candidate of explicitPaths) {
+    const artifact = readJsonIfSafe(candidate);
+    if (artifact) return { filePath: candidate, artifact };
+  }
+  if (options.remoteNpmFailureArtifact && typeof options.remoteNpmFailureArtifact === 'object') {
+    return {
+      filePath: options.remoteNpmFailurePath || path.join('_temp', REMOTE_NPM_FAILURE_ARTIFACT),
+      artifact: options.remoteNpmFailureArtifact,
+    };
+  }
+  for (const root of remoteNpmFailureSearchRoots(options)) {
+    for (const candidate of REMOTE_NPM_FAILURE_CANDIDATES) {
+      const filePath = path.join(root, candidate);
+      const artifact = readJsonIfSafe(filePath);
+      if (artifact) return { filePath, artifact };
+    }
+  }
+  return null;
+}
+
+function enrichRemoteNpmFailureArtifacts(artifacts = [], options = {}) {
+  const hasRemoteNpmFailure = artifacts.some(isRemoteNpmFailureEntry);
+  if (hasRemoteNpmFailure) return artifacts;
+  const found = findRemoteNpmFailureArtifact(options);
+  if (found) {
+    return [
+      ...artifacts,
+      {
+        key: 'remoteNpmFailure',
+        artifactName: REMOTE_NPM_FAILURE_ARTIFACT,
+        path: normalizePath(found.filePath),
+        status: 'present',
+        consumed: true,
+        reasonCodes: [],
+        nextAction: '',
+        safeSummaryOnly: true,
+      },
+    ];
+  }
+  if (options.remoteNpmFailureRequired) {
+    return [
+      ...artifacts,
+      {
+        key: 'remoteNpmFailure',
+        artifactName: REMOTE_NPM_FAILURE_ARTIFACT,
+        path: REMOTE_NPM_FAILURE_ARTIFACT,
+        status: 'missing_required',
+        consumed: false,
+        reasonCodes: ['safe_npm_failure_artifact_required_missing'],
+        nextAction: 'harness_artifact_index_repair',
+        safeSummaryOnly: true,
+      },
+    ];
+  }
+  return artifacts;
+}
+
 
 
 export function buildSafeArtifactIndex(artifacts = [], mode = process.env.CODEX_HARNESS_MODE || 'source', options = {}) {
 
-  const entries = artifacts.map((item) => ({
+  const enrichedArtifacts = enrichRemoteNpmFailureArtifacts(artifacts, options);
+
+  const entries = enrichedArtifacts.map((item) => {
+
+    const status = STATUS_VALUES.includes(item.status) ? item.status : 'present';
+
+    const remoteNpmFailure = isRemoteNpmFailureEntry(item);
+
+    return {
+
+    key: item.key ? String(item.key).slice(0, 80) : undefined,
 
     artifactName: String(item.artifactName || item.name || '').slice(0, 100),
 
@@ -48,7 +158,7 @@ export function buildSafeArtifactIndex(artifacts = [], mode = process.env.CODEX_
 
     producer: String(item.producer || 'codex-workflow-quality-runner').slice(0, 80),
 
-    status: ['present', 'missing', 'not_applicable'].includes(item.status) ? item.status : 'present',
+    status,
 
     mode,
 
@@ -64,13 +174,20 @@ export function buildSafeArtifactIndex(artifacts = [], mode = process.env.CODEX_
 
     reasonCodes: Array.isArray(item.reasonCodes) ? item.reasonCodes.slice(0, 10) : [],
 
-  }));
+    ...(remoteNpmFailure ? {
+      indexed: status === 'present',
+      consumed: status === 'present' && item.consumed !== false,
+    } : {}),
+
+    };
+
+  });
 
   const names = entries.map((item) => item.artifactName);
 
   const missingArtifacts = options.enforceRequired
 
-    ? REQUIRED_ARTIFACTS.filter((name) => !names.includes(name) && !artifacts.some((item) => item.artifactName === name && item.status === 'not_applicable'))
+    ? REQUIRED_ARTIFACTS.filter((name) => !names.includes(name) && !enrichedArtifacts.some((item) => item.artifactName === name && item.status === 'not_applicable'))
 
     : [];
 
@@ -98,7 +215,7 @@ export function buildSafeArtifactIndex(artifacts = [], mode = process.env.CODEX_
 
   const unsafe = unsafePath || entries.some((item) => scanObjectForUnsafe(item).length || !item.safeSummaryOnly || item.rawLogIncluded || item.containsSecrets || item.containsEndpointValues);
 
-  const requiredNpmFailureMissing = entries.some((item) => (item.reasonCodes || []).includes('safe_npm_failure_artifact_required_missing'));
+  const requiredNpmFailureMissing = entries.some((item) => item.status === 'missing_required' || (item.reasonCodes || []).includes('safe_npm_failure_artifact_required_missing'));
 
   const requiredMissing = missingArtifacts.length > 0;
 
