@@ -2375,7 +2375,7 @@ export function buildSafeArtifactIndexInputForQualityGate(env = process.env) {
   const productEvidence = readJsonFileIfPresent(productEvidencePath);
   const npmExecuted = productEvidence?.npmExecuted === true || env.CODEX_REMOTE_NPM_EXECUTED === '1';
   const npmExitCode = Number(productEvidence?.npmExitCode ?? env.CODEX_NPM_EXIT_CODE ?? 0);
-  const remoteNpmFailureExists = Boolean(remoteNpmFailurePath && fs.existsSync(remoteNpmFailurePath));
+  const remoteNpmFailureExists = Boolean(remoteNpmFailurePath && readJsonFileIfPresent(remoteNpmFailurePath));
   const remoteNpmFailureRequired = npmExecuted && npmExitCode !== 0;
   const names = [
     ['codex-diagnostic-consolidated-summary.json', 'codex-diagnostic-consolidated-summary.json'],
@@ -2405,9 +2405,9 @@ export function buildSafeArtifactIndexInputForQualityGate(env = process.env) {
       key: 'remoteNpmFailure',
       artifactName: 'codex-remote-npm-failure.safe.json',
       path: 'codex-remote-npm-failure.safe.json',
-      status: remoteNpmFailureExists ? 'present' : 'missing',
+      status: remoteNpmFailureExists ? 'present' : 'missing_required',
       reasonCodes: remoteNpmFailureExists ? [] : ['safe_npm_failure_artifact_required_missing'],
-      nextAction: remoteNpmFailureExists ? '' : 'harness_safe_artifact_upload_contract_repair',
+      nextAction: remoteNpmFailureExists ? '' : 'harness_artifact_index_repair',
       safeSummaryOnly: true,
     });
   } else if (remoteNpmFailurePath) {

@@ -192,7 +192,7 @@ export function buildRemoteNpmFailureArtifactContractSummary(input = {}) {
       indexed: false,
       consumed: false,
       primaryClass: 'product_test_failure_safe_summary_missing',
-      safeNextAction: 'harness_safe_artifact_upload_contract_repair',
+      safeNextAction: 'harness_artifact_index_repair',
       safeSummaryOnly: true,
     };
   }
@@ -203,7 +203,9 @@ export function buildRemoteNpmFailureArtifactContractSummary(input = {}) {
     indexed,
     consumed: indexed,
     primaryClass: safeDetailUnavailable ? 'product_test_failure_safe_summary_missing' : 'product_test_failure_safe_summary_available',
-    safeNextAction: safeDetailUnavailable
+    safeNextAction: !indexed
+      ? 'harness_artifact_index_repair'
+      : safeDetailUnavailable
       ? 'owner_authorized_product_check_triage_or_harness_failure_summarizer_repair'
       : 'owner_authorized_product_check_triage',
     safeSummaryOnly: true,
