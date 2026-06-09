@@ -11623,6 +11623,10 @@ async function runTargetHarnessGate() {
 
 
 
+    console.log(`remoteDiagnosticSafeMetadataDiagnosticStatus: ${report.remoteDiagnosticSafeMetadataDiagnosticStatus.status}`);
+
+
+
   }
 
 
