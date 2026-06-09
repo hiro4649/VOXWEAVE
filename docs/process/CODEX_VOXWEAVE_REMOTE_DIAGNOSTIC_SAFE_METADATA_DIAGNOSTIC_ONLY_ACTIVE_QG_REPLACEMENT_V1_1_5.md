@@ -175,6 +175,16 @@ mergeReadiness: no
 
 The PR body is expected to record exact Test Coverage Evidence and Quality Gate Evidence subfields for the v1.1.5 replacement candidate. This evidence completeness repair does not authorize merge, runtime, active QG rollout, PR #144 repair, PR #127 repair, or v1.1.6 implementation.
 
+## PR Body Evidence Completion Confirmation
+
+testCoverageEvidenceSubfieldsStatus: complete
+qualityGateEvidenceSubfieldsStatus: complete
+prBodyEvidenceRepairStatus: already_complete
+manualRerunStatus: no_manual_rerun
+mergeReadiness: no
+
+The PR #151 body contains the required Test Coverage Evidence subfields: changed area, test command, what the test covers, and edge cases / failure paths / reason if no test. It also contains the required Quality Gate Evidence subfields: previous related QG evidence, expected QG behavior, manual rerun status, and merge readiness.
+
 ## GitHub Files UI / Public Raw / Byte Scan Discrepancy Boundary
 
 githubFilesUiWarningStatus: observed_by_chatgpt_pro_web_review_for_policy_json_and_docs
@@ -190,9 +200,28 @@ ghPrDiffPatchScanStatus: pass
 crossSourceDiscrepancyStatus: recorded_not_silently_ignored
 rawLeakageBoundaryStatus: pass
 
-Public raw `curl -L` evidence for PR #151 head `67aba7e1f12cccda11201c1b06f34aa3e753e6de` shows normal LF line structure, no BOM, no hidden or bidirectional Unicode code points, and final newlines for all five candidate files. The GitHub Files UI warning reported by ChatGPT Pro Web review is recorded as a cross-source discrepancy and must not be silently converted into a simple pass.
+Public raw `curl -L` evidence for PR #151 head `d2ce81d089fc8965f3b544820df9f8e428c5c1fc` shows normal LF line structure, no BOM, no hidden or bidirectional Unicode code points, and final newlines for all five candidate files. The previous public raw evidence for `67aba7e1f12cccda11201c1b06f34aa3e753e6de` is superseded by latest-head public raw verification. The GitHub Files UI warning reported by ChatGPT Pro Web review is recorded as a cross-source discrepancy and must not be silently converted into a simple pass.
 
 The public raw / UI discrepancy does not authorize semantic changes. It does not authorize PR #144 repair, PR #127 repair, active QG rollout, runtime adoption, workflow changes, package changes, pass/fail semantics changes, targetQualityScore changes, process exit behavior changes, mergeReady behavior changes, or merge readiness.
+
+## Latest Public Raw Verification Boundary
+
+publicRawVerifiedHeadSha: d2ce81d089fc8965f3b544820df9f8e428c5c1fc
+publicRawCurlStatus: pass
+publicRawCurlLineCountLocalQG: 12261
+publicRawCurlLineCountAdapter: 132
+publicRawCurlLineCountSelfCheck: 123
+publicRawCurlLineCountPolicyJson: 82
+publicRawCurlLineCountDocs: 340
+publicRawCurlSha256LocalQG: 93018b29597581157378c971130a2e6535fd943b61004eebafb7b39325f9592b
+publicRawCurlSha256Adapter: 4ae631b89f67063fbe43e56ab5e3b37d486e02e046fd08565b74510e60a1a54d
+publicRawCurlSha256SelfCheck: 9f05b5df1649b03657e46fb9a3255c62c83ec1cb14317a04a65c75f650da5e36
+publicRawCurlSha256PolicyJson: 1529f39a616009af461041b74fe54a4b35f06a5c8567fc8fe6d16bde66a3eab1
+publicRawCurlSha256Docs: 2120fbc2793b2526e794c727f2f42e29b7be0f2acbb2c6fa18044f58610cebc3
+chatgptProWebRawStatus: stale_or_parser_discrepancy_if_applicable
+crossSourceDiscrepancyStatus: recorded_not_silently_ignored
+
+Latest-head public raw verification is evidence for line integrity and safe publication shape only. It does not authorize merge, active QG rollout, runtime, PR #144 repair, PR #127 repair, or v1.1.6 implementation.
 
 ## v1.1.5 Required Surface Preservation Evidence
 
@@ -290,11 +319,25 @@ gitDiffCachedCheckStatus: required
 
 ## Quality Gate Evidence
 
-qualityGateEvidenceStatus: pending_after_push
+qualityGateEvidenceStatus: completed_success
+previousPendingAfterPushStatus: superseded_by_pr151_qg_success
 qualityGateScope: natural_qg_only
 manualRerunPerformed: no
 mergeReadiness: no
-If natural quality-gate status remains pending or in progress, preserve this candidate and report pending. If it fails, preserve and report safe failure evidence. If it succeeds, preserve as candidate evidence only.
+PR #151 latest natural QG succeeded on head `d2ce81d089fc8965f3b544820df9f8e428c5c1fc`. The prior `pending_after_push` evidence is superseded. This completion is replacement candidate evidence only and does not authorize merge, active QG rollout, runtime, PR #144 repair, PR #127 repair, or v1.1.6 implementation.
+
+## PR #151 Natural Quality Gate Completion Evidence
+
+pr151HeadSha: d2ce81d089fc8965f3b544820df9f8e428c5c1fc
+pr151NaturalQualityGateTerminalStatus: completed
+pr151NaturalQualityGateConclusion: COMPLETED / SUCCESS
+qualityGateEvidenceStatus: completed_success
+manualRerunStatus: no_manual_rerun
+replacementCandidateEvidenceStatus: completed_candidate_evidence_only
+activeQGRolloutStatus: not_authorized
+mergeReadiness: no
+
+This completion does not authorize merge. This completion does not authorize active QG rollout. This completion does not authorize runtime. This completion does not authorize PR #144 repair. This completion does not authorize PR #127 repair. This completion does not implement v1.1.6. Merge readiness: no.
 
 ## Decision Matrix
 
