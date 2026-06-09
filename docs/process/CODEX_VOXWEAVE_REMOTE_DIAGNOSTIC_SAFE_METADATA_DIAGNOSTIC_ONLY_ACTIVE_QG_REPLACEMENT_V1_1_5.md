@@ -193,35 +193,57 @@ publicRawCurlLineCountLocalQG: 12261
 publicRawCurlLineCountAdapter: 132
 publicRawCurlLineCountSelfCheck: 123
 publicRawCurlLineCountPolicyJson: 82
-publicRawCurlLineCountDocs: 340
+publicRawCurlLineCountDocs: 383
 codexLocalCheckoutScanStatus: pass
 githubContentsApiScanStatus: pass
 ghPrDiffPatchScanStatus: pass
 crossSourceDiscrepancyStatus: recorded_not_silently_ignored
 rawLeakageBoundaryStatus: pass
 
-Public raw `curl -L` evidence for PR #151 head `d2ce81d089fc8965f3b544820df9f8e428c5c1fc` shows normal LF line structure, no BOM, no hidden or bidirectional Unicode code points, and final newlines for all five candidate files. The previous public raw evidence for `67aba7e1f12cccda11201c1b06f34aa3e753e6de` is superseded by latest-head public raw verification. The GitHub Files UI warning reported by ChatGPT Pro Web review is recorded as a cross-source discrepancy and must not be silently converted into a simple pass.
+Public raw `curl -L` evidence for PR #151 final head `06d3af1f7c0c3227fa1cc9b1f1a78b82af34274a` shows normal LF line structure, no BOM, no hidden or bidirectional Unicode code points, and final newlines for all five candidate files. The previous public raw evidence for `d2ce81d089fc8965f3b544820df9f8e428c5c1fc` is superseded by final-head public raw verification. The GitHub Files UI warning reported by ChatGPT Pro Web review is recorded as a cross-source discrepancy and must not be silently converted into a simple pass.
 
 The public raw / UI discrepancy does not authorize semantic changes. It does not authorize PR #144 repair, PR #127 repair, active QG rollout, runtime adoption, workflow changes, package changes, pass/fail semantics changes, targetQualityScore changes, process exit behavior changes, mergeReady behavior changes, or merge readiness.
 
 ## Latest Public Raw Verification Boundary
 
-publicRawVerifiedHeadSha: d2ce81d089fc8965f3b544820df9f8e428c5c1fc
+publicRawVerifiedHeadSha: 06d3af1f7c0c3227fa1cc9b1f1a78b82af34274a
 publicRawCurlStatus: pass
 publicRawCurlLineCountLocalQG: 12261
 publicRawCurlLineCountAdapter: 132
 publicRawCurlLineCountSelfCheck: 123
 publicRawCurlLineCountPolicyJson: 82
-publicRawCurlLineCountDocs: 340
+publicRawCurlLineCountDocs: 383
 publicRawCurlSha256LocalQG: 93018b29597581157378c971130a2e6535fd943b61004eebafb7b39325f9592b
 publicRawCurlSha256Adapter: 4ae631b89f67063fbe43e56ab5e3b37d486e02e046fd08565b74510e60a1a54d
 publicRawCurlSha256SelfCheck: 9f05b5df1649b03657e46fb9a3255c62c83ec1cb14317a04a65c75f650da5e36
 publicRawCurlSha256PolicyJson: 1529f39a616009af461041b74fe54a4b35f06a5c8567fc8fe6d16bde66a3eab1
-publicRawCurlSha256Docs: 2120fbc2793b2526e794c727f2f42e29b7be0f2acbb2c6fa18044f58610cebc3
+publicRawCurlSha256Docs: 852f84fc4d68f0bc806b802a71f6169122f7e2c0bacaa2f74d4ff279a21e0c5d
 chatgptProWebRawStatus: stale_or_parser_discrepancy_if_applicable
 crossSourceDiscrepancyStatus: recorded_not_silently_ignored
 
 Latest-head public raw verification is evidence for line integrity and safe publication shape only. It does not authorize merge, active QG rollout, runtime, PR #144 repair, PR #127 repair, or v1.1.6 implementation.
+
+## Final Head Public Raw Verification Boundary
+
+finalPublicRawVerifiedHeadSha: 06d3af1f7c0c3227fa1cc9b1f1a78b82af34274a
+previousPublicRawVerifiedHeadSha: d2ce81d089fc8965f3b544820df9f8e428c5c1fc
+previousPublicRawVerificationStatus: superseded_by_final_head_verification
+publicRawCurlStatus: pass
+publicRawCurlLineCountLocalQG: 12261
+publicRawCurlLineCountAdapter: 132
+publicRawCurlLineCountSelfCheck: 123
+publicRawCurlLineCountPolicyJson: 82
+publicRawCurlLineCountDocs: 383
+publicRawCurlSha256LocalQG: 93018b29597581157378c971130a2e6535fd943b61004eebafb7b39325f9592b
+publicRawCurlSha256Adapter: 4ae631b89f67063fbe43e56ab5e3b37d486e02e046fd08565b74510e60a1a54d
+publicRawCurlSha256SelfCheck: 9f05b5df1649b03657e46fb9a3255c62c83ec1cb14317a04a65c75f650da5e36
+publicRawCurlSha256PolicyJson: 1529f39a616009af461041b74fe54a4b35f06a5c8567fc8fe6d16bde66a3eab1
+publicRawCurlSha256Docs: 852f84fc4d68f0bc806b802a71f6169122f7e2c0bacaa2f74d4ff279a21e0c5d
+docsPublicRawLineStructureStatus: pass
+chatgptProWebRawStatus: stale_or_parser_discrepancy_if_applicable
+crossSourceDiscrepancyStatus: recorded_not_silently_ignored
+
+The docs public raw line count is greater than 100 and does not rely on renderer wrapping. If ChatGPT Pro Web raw still shows collapsed 37-line output while `curl -L` passes, treat that as ChatGPT Web raw parser/cache discrepancy, not as runtime risk or authorization for semantic changes.
 
 ## v1.1.5 Required Surface Preservation Evidence
 
@@ -324,11 +346,11 @@ previousPendingAfterPushStatus: superseded_by_pr151_qg_success
 qualityGateScope: natural_qg_only
 manualRerunPerformed: no
 mergeReadiness: no
-PR #151 latest natural QG succeeded on head `d2ce81d089fc8965f3b544820df9f8e428c5c1fc`. The prior `pending_after_push` evidence is superseded. This completion is replacement candidate evidence only and does not authorize merge, active QG rollout, runtime, PR #144 repair, PR #127 repair, or v1.1.6 implementation.
+PR #151 latest natural QG succeeded on head `06d3af1f7c0c3227fa1cc9b1f1a78b82af34274a`. The prior `pending_after_push` evidence is superseded. This completion is replacement candidate evidence only and does not authorize merge, active QG rollout, runtime, PR #144 repair, PR #127 repair, or v1.1.6 implementation.
 
 ## PR #151 Natural Quality Gate Completion Evidence
 
-pr151HeadSha: d2ce81d089fc8965f3b544820df9f8e428c5c1fc
+pr151HeadSha: 06d3af1f7c0c3227fa1cc9b1f1a78b82af34274a
 pr151NaturalQualityGateTerminalStatus: completed
 pr151NaturalQualityGateConclusion: COMPLETED / SUCCESS
 qualityGateEvidenceStatus: completed_success
@@ -338,6 +360,18 @@ activeQGRolloutStatus: not_authorized
 mergeReadiness: no
 
 This completion does not authorize merge. This completion does not authorize active QG rollout. This completion does not authorize runtime. This completion does not authorize PR #144 repair. This completion does not authorize PR #127 repair. This completion does not implement v1.1.6. Merge readiness: no.
+
+## PR #151 Final Candidate Evidence Boundary
+
+pr151FinalHeadSha: 06d3af1f7c0c3227fa1cc9b1f1a78b82af34274a
+pr151FinalNaturalQualityGateConclusion: COMPLETED / SUCCESS
+replacementCandidateEvidenceStatus: completed_candidate_evidence_only
+activeQGRolloutStatus: not_authorized
+mergeReadiness: no
+runtimeReadinessClaimed: no
+v116ImplementationStatus: not_started
+
+PR #151 latest natural QG succeeded on head `06d3af1f7c0c3227fa1cc9b1f1a78b82af34274a`. The prior public raw verification for `d2ce81d089fc8965f3b544820df9f8e428c5c1fc` is superseded. This completion does not authorize merge, active QG rollout, runtime, PR #144 repair, PR #127 repair, or v1.1.6 implementation. Merge readiness: no.
 
 ## Decision Matrix
 
