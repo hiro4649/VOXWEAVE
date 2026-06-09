@@ -165,6 +165,53 @@ The adapter and self-check are JavaScript modules with valid syntax and no runti
 githubFilesUiByteScanDiscrepancyBoundaryStatus: no_new_discrepancy_observed
 This candidate does not rely on GitHub Files UI warning state. Any future UI discrepancy must be recorded as evidence boundary, not silently converted into pass.
 
+## PR Body Evidence Completeness Boundary
+
+testCoverageEvidenceSubfieldsStatus: complete
+qualityGateEvidenceSubfieldsStatus: complete
+prBodyRepairStatus: evidence_completeness_only
+manualRerunStatus: no_manual_rerun
+mergeReadiness: no
+
+The PR body is expected to record exact Test Coverage Evidence and Quality Gate Evidence subfields for the v1.1.5 replacement candidate. This evidence completeness repair does not authorize merge, runtime, active QG rollout, PR #144 repair, PR #127 repair, or v1.1.6 implementation.
+
+## GitHub Files UI / Public Raw / Byte Scan Discrepancy Boundary
+
+githubFilesUiWarningStatus: observed_by_chatgpt_pro_web_review_for_policy_json_and_docs
+publicRawCurlStatus: pass
+publicRawCurlLineCountLocalQG: 12261
+publicRawCurlLineCountAdapter: 132
+publicRawCurlLineCountSelfCheck: 123
+publicRawCurlLineCountPolicyJson: 82
+publicRawCurlLineCountDocs: 340
+codexLocalCheckoutScanStatus: pass
+githubContentsApiScanStatus: pass
+ghPrDiffPatchScanStatus: pass
+crossSourceDiscrepancyStatus: recorded_not_silently_ignored
+rawLeakageBoundaryStatus: pass
+
+Public raw `curl -L` evidence for PR #151 head `67aba7e1f12cccda11201c1b06f34aa3e753e6de` shows normal LF line structure, no BOM, no hidden or bidirectional Unicode code points, and final newlines for all five candidate files. The GitHub Files UI warning reported by ChatGPT Pro Web review is recorded as a cross-source discrepancy and must not be silently converted into a simple pass.
+
+The public raw / UI discrepancy does not authorize semantic changes. It does not authorize PR #144 repair, PR #127 repair, active QG rollout, runtime adoption, workflow changes, package changes, pass/fail semantics changes, targetQualityScore changes, process exit behavior changes, mergeReady behavior changes, or merge readiness.
+
+## v1.1.5 Required Surface Preservation Evidence
+
+traceKernelCompatibilityStatus: preserved
+policyHookContractCompatibilityStatus: preserved
+goalContractCompatibilityStatus: preserved
+skillProfileRegistryCompatibilityStatus: preserved
+permissionProfileMatrixCompatibilityStatus: preserved
+targetFinalizerCompatibilityStatus: preserved
+legacyCompatibilityMatrixCompatibilityStatus: preserved
+tokenRuntimeMeterCompatibilityStatus: preserved
+validationDependencyGraphCompatibilityStatus: preserved
+decisionCoreV2CompatibilityStatus: preserved
+safeSummaryPickerCompatibilityStatus: preserved
+
+These statuses are static diff preservation evidence for the v1.1.5 replacement candidate. They do not convert diagnostic-only metadata visibility into pass/fail evidence, runtime readiness, active QG rollout approval, or merge readiness.
+
+PR #151 is a main-based v1.1.5 replacement candidate, not a PR #144 rebase. PR #151 does not repair PR #144. PR #151 does not repair PR #127. PR #151 does not authorize active QG rollout. PR #151 does not authorize runtime. PR #151 does not authorize merge. PR #151 does not implement v1.1.6. Merge readiness: no.
+
 ## Pass / Fail Semantics Boundary
 
 passFailSemanticsChangeStatus: no_change
