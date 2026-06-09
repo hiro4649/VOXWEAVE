@@ -1,0 +1,38 @@
+{
+  "policy": "CODEX_REMOTE_DIAGNOSTIC_SAFE_METADATA_POLICY_V1_1_4",
+  "activeHarness": "v1.1.4",
+  "status": "diagnostic_only_non_blocking_candidate_policy",
+  "safeSummaryOnly": true,
+  "allowedInputs": [
+    "remoteNpmDiagnosticStatus",
+    "safeArtifactIndexStatus",
+    "diagnosticConsolidationStatus"
+  ],
+  "forbiddenInputs": [
+    "rawLogs",
+    "rawPayloads",
+    "endpoints",
+    "tokens",
+    "secrets",
+    "privatePaths",
+    "artifactContents"
+  ],
+  "requiredBoundaries": {
+    "diagnosticOnly": true,
+    "nonBlocking": true,
+    "passFailSemanticsChange": false,
+    "targetQualityScoreSemanticsChange": false,
+    "processExitCodeChange": false,
+    "mergeReadySemanticsChange": false,
+    "productVerificationExecutionChange": false,
+    "remoteDiagnosticExecutionChange": false,
+    "runtimeReadinessClaimed": false,
+    "mergeReadinessClaimed": false,
+    "v115Implementation": false
+  },
+  "neutralStatuses": [
+    "not_available_without_effect",
+    "unknown_without_effect",
+    "available_without_effect"
+  ]
+}

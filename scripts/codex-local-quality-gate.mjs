@@ -54,6 +54,7 @@ import { V111_STATUS_KEYS, buildDefaultV111Statuses, buildTargetModeLegacyCompat
 import { V112_STATUS_KEYS, buildV112Report } from './codex-v112-conversation-surface.mjs';
 import { V113_STATUS_KEYS, buildV113Report } from './codex-v113-minimal-surface.mjs';
 import { V114_STATUS_KEYS, buildV114Report, writeLoopArtifacts } from './codex-v114-loop-kernel.mjs';
+import { buildRemoteDiagnosticSafeMetadataDiagnosticStatus } from './codex-remote-diagnostic-safe-metadata-adapter.mjs';
 
 
 
@@ -7729,6 +7730,10 @@ async function runSourceHarnessGate() {
 
 
 
+    remoteDiagnosticSafeMetadataDiagnosticStatus: { status: 'not_available_without_effect', safeSummaryOnly: true },
+
+
+
     workflowPreflightStatus: { status: 'not_run' },
 
 
@@ -8574,6 +8579,14 @@ async function runSourceHarnessGate() {
 
 
   report.diagnosticConsolidationStatus = runGateScript('scripts/codex-diagnostic-consolidation-runner.mjs', 'diagnosticConsolidationStatus', 'CODEX_DIAGNOSTIC_CONSOLIDATION_REPORT', gateEnv);
+
+
+
+  report.remoteDiagnosticSafeMetadataDiagnosticStatus = buildRemoteDiagnosticSafeMetadataDiagnosticStatus({
+    remoteNpmDiagnosticStatus: report.remoteNpmDiagnosticStatus,
+    safeArtifactIndexStatus: report.safeArtifactIndexStatus,
+    diagnosticConsolidationStatus: report.diagnosticConsolidationStatus,
+  });
 
 
 
