@@ -69,12 +69,23 @@ future v1.1.5 work, active QG diagnostic integration, or runtime adoption ready.
 
 ## Node 20 Warning Clearance Boundary
 
-node20WarningStatusOnFreshSentinelRun: to_be_observed_by_natural_pr_quality_gate
+pr139NaturalQualityGateConclusion: COMPLETED / SUCCESS
+node20WarningStatusOnFreshSentinelRun: cleared_or_not_observed
+node20WarningAnnotationCountStatus: zero
+postMergeWorkflowExecutionStatus: pass
+mainWorkflowRolloutValidationStatus: observed_on_fresh_pr_quality_gate
+sentinelEvidenceStatus: completed_post_merge_sentinel_evidence
+mergeReadinessClaimStatus: no
+runtimeReadinessClaimStatus: no
+activeQGDiagnosticIntegrationStatus: not_authorized
+v115ImplementationStatus: not_started
 
-The sentinel is intended to reveal whether the previous Node 20 action warning
-is cleared by the merged workflow action version updates. The project runtime
-Node version remains 20. This sentinel does not upgrade project runtime Node,
-change package manager behavior, or authorize Node 24 runtime adoption.
+PR #139 natural quality-gate succeeded after PR #136 was merged. The fresh
+sentinel run did not observe Node20 deprecation annotations according to Codex
+check-run evidence. This confirms the main workflow substrate for
+Node24-compatible action versions only. This does not authorize runtime,
+active QG diagnostic integration, v1.1.5 implementation, merge readiness, or
+approval of PR #137 or PR #138. The project runtime Node version remains 20.
 
 ## Workflow Behavior Boundary
 
@@ -157,10 +168,25 @@ implementation, not v1.1.5 rollout, and not v1.1.5 compatibility approval.
 
 ## GitHub UI / Raw / Local Source-of-Truth Boundary
 
+githubFilesUiWarningStatus: observed_by_chatgpt_pro_web_review_for_PR139_docs
+codexLocalCheckoutScanStatus: pass
+githubContentsApiScanStatus: pass
+ghPrDiffPatchScanStatus: pass
+rawFileByteScanStatus: pass
+detectedCodePoints: none
+lineEndingStatus: LF
+crossSourceDiscrepancyStatus: recorded_not_silently_ignored
+publicationCleanlinessStatus: provisional_until_next_pr_files_ui_observation
+
 GitHub UI, raw repository content, local checkout evidence, and quality-gate
 outputs can diverge in timing and presentation. This sentinel records the
 post-merge workflow state and its own natural PR quality-gate outcome only.
 It does not silently convert UI observations into runtime or merge evidence.
+The PR #139 Files UI warning was observed by ChatGPT Pro Web review, while
+Codex byte-level local checkout, GitHub Contents API, and PR patch scans did
+not reproduce hidden or bidirectional Unicode. Future reuse of this sentinel
+evidence must preserve this discrepancy note unless a later head SHA clears
+the GitHub Files UI warning.
 
 ## PR #137 / PR #138 Preservation Boundary
 
