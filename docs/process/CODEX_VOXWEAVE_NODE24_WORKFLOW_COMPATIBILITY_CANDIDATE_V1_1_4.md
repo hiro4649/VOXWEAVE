@@ -83,6 +83,50 @@ does not authorize runtime adoption or merge.
 | `actions/setup-node` | v4 | v5 | v5 upgrades the action to Node 24 and may enable automatic package-manager caching unless disabled |
 | `actions/upload-artifact` | v4 | v6 | v6 runs on Node 24 and requires compatible runner support |
 
+## GitHub Files UI / Byte Scan Cross-Source Discrepancy
+
+GitHub Files UI warning was observed by ChatGPT Pro Web review for the workflow
+file and docs file. Codex byte-level sources must not be silently converted into
+a simple pass if GitHub Files UI still shows warning. Because one warning is on
+`.github/workflows/quality-gate.yml`, the discrepancy is governance-significant
+even if byte scans are clean.
+
+| Field | Status |
+| --- | --- |
+| githubFilesUiWarningStatus | observed_by_chatgpt_pro_web_review_for_workflow_and_docs |
+| workflowByteScanStatus | pass |
+| docsByteScanStatus | pass |
+| codexLocalCheckoutScanStatus | pass |
+| githubContentsApiScanStatus | pass |
+| ghPrDiffPatchScanStatus | pass |
+| rawFileByteScanStatus | pass |
+| detectedCodePoints | none |
+| lineEndingStatus | LF |
+| crossSourceDiscrepancyStatus | recorded_not_silently_ignored |
+| workflowExecutionRiskStatus | no_byte_level_issue_detected |
+| governanceAcceptanceStatus | pending_until_qg_success_after_discrepancy_record |
+
+The discrepancy does not authorize runtime. The discrepancy does not authorize
+workflow semantic changes. The discrepancy does not authorize package or
+lockfile changes. The discrepancy does not authorize active QG diagnostic
+integration. The discrepancy does not authorize merge.
+
+## PR Body Version Consistency Boundary
+
+PR body action-version text must match the actual workflow diff and docs
+evidence. The actions/upload-artifact candidate version is v6, not v5. QG
+success after this cleanup remains candidate validation only, not merge
+readiness.
+
+| Field | Status |
+| --- | --- |
+| prBodyUploadArtifactVersionBefore | v5 |
+| actualWorkflowUploadArtifactVersion | v6 |
+| docsUploadArtifactVersion | v6 |
+| prBodyUploadArtifactVersionAfter | v6 |
+| prBodyCorrectionStatus | corrected |
+| qgTriggerBoundary | PR_body_edit_may_trigger_natural_qg_but_manual_rerun_not_allowed |
+
 ## Selected Action Version Decision
 
 | Decision | Status | Reason |
