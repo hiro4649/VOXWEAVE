@@ -1,15 +1,15 @@
 # VOXWEAVE PR #144 v1.1.5 Surface Incompatibility Boundary Audit
 
-currentActiveHarness: v1.1.5
-futureHarnessAssumption: v1.1.6 planning only
-pr144SurfaceIncompatibilityStatus: blocked
-pr144V115MergeCandidateStatus: no
-pr144AcceptanceAuditAllowedStatus: no
-pr144RebaseAllowedInThisTask: no
-pr144RepairAllowedInThisTask: no
-pr144ReplacementCandidateStatus: future_explicit_scope_required
-activeQGRolloutAllowedStatus: no
-mergeReadiness: no
+- currentActiveHarness: v1.1.5
+- futureHarnessAssumption: v1.1.6 planning only
+- pr144SurfaceIncompatibilityStatus: blocked
+- pr144V115MergeCandidateStatus: no
+- pr144AcceptanceAuditAllowedStatus: no
+- pr144RebaseAllowedInThisTask: no
+- pr144RepairAllowedInThisTask: no
+- pr144ReplacementCandidateStatus: future_explicit_scope_required
+- activeQGRolloutAllowedStatus: no
+- mergeReadiness: no
 
 ## Executive Summary
 
@@ -36,42 +36,40 @@ v1.1.6.
 
 ## Current Active Harness Confirmation
 
-currentActiveHarness: v1.1.5
-AGENTS marker: v1.1.5
-manifestHarnessVersion: v1.1.5
-workflow marker: v1.1.5
-localQualityGateHarnessVersion: v1.1.5
+- currentActiveHarness: v1.1.5
+- AGENTS marker: v1.1.5
+- manifestHarnessVersion: v1.1.5
+- workflow marker: v1.1.5
+- localQualityGateHarnessVersion: v1.1.5
 
 ## PR #145 v1.1.5 Rollout Evidence
 
-pr145MergeCommitSha: 5241af5e918d0ddd697236257f0e0809c19b44ce
-pr145RolloutStatus: merged
+- pr145MergeCommitSha: 5241af5e918d0ddd697236257f0e0809c19b44ce
+- pr145RolloutStatus: merged
 
 ## PR #148 Workflow Marker Reconciliation Evidence
 
-pr148MergeCommitSha: 1aa2164eec1fc69b9bc90dd549169ee897412ada
-workflowMarkerAfterPR148: CODEX_QUALITY_HARNESS_FILE v1.1.5
+- pr148MergeCommitSha: 1aa2164eec1fc69b9bc90dd549169ee897412ada
+- workflowMarkerAfterPR148: CODEX_QUALITY_HARNESS_FILE v1.1.5
 
 ## PR #149 Post-Merge Sentinel Evidence
 
-pr149HeadSha: 398db545ebc203a432d93354a83bc1344b8f8ce3
-pr149QualityGateConclusion: COMPLETED / SUCCESS
-pr149EvidenceClass: completed docs-only v1.1.5 workflow marker post-merge
-sentinel evidence
+- pr149HeadSha: 398db545ebc203a432d93354a83bc1344b8f8ce3
+- pr149QualityGateConclusion: COMPLETED / SUCCESS
+- pr149EvidenceClass: completed docs-only v1.1.5 workflow marker post-merge sentinel evidence
 
 ## PR #144 Original Candidate Evidence
 
-pr144HeadSha: 40d986fdd1196b598863048f2dacae1d555ecfa7
-pr144QualityGateConclusion: COMPLETED / SUCCESS
-pr144DraftState: draft
-pr144PriorEvidenceClass: hardened diagnostic-only non-blocking active QG
-integration candidate under v1.1.4
+- pr144HeadSha: 40d986fdd1196b598863048f2dacae1d555ecfa7
+- pr144QualityGateConclusion: COMPLETED / SUCCESS
+- pr144DraftState: draft
+- pr144PriorEvidenceClass: hardened diagnostic-only non-blocking active QG integration candidate under v1.1.4
 
 ## PR #144 Current Main Compatibility Diagnostic
 
-pr144BehindMainStatus: behind_main / origin/main ahead 5, PR #144 ahead 4
-pr144MergeableState: CONFLICTING
-pr144DiagnosticResult: blocked_by_v115_surface_incompatibility
+- pr144BehindMainStatus: behind_main / origin/main ahead 5, PR #144 ahead 4
+- pr144MergeableState: CONFLICTING
+- pr144DiagnosticResult: blocked_by_v115_surface_incompatibility
 
 The PR #144 branch touches scripts/codex-local-quality-gate.mjs. Current main
 also changed that file for v1.1.5. Read-only merge-tree evidence reports
@@ -79,7 +77,7 @@ changed-in-both conflict in scripts/codex-local-quality-gate.mjs.
 
 ## v1.1.5 Surface Incompatibility Boundary
 
-pr144V115RequiredSurfaceCompatibilityStatus: blocked
+- pr144V115RequiredSurfaceCompatibilityStatus: blocked
 PR #144 must not be used as v1.1.5 merge readiness evidence. In current-main
 comparison, PR #144 risks removing or overwriting v1.1.5 surfaces such as
 CODEX_V115_SPEC, CODEX_V115_PROFILE_REGISTRY, v115 trace kernel, policy hooks,
@@ -88,111 +86,111 @@ workflow marker state.
 
 ## Local QG Conflict Boundary
 
-localQGConflictStatus: changed_in_both
-conflictingFile: scripts/codex-local-quality-gate.mjs
+- localQGConflictStatus: changed_in_both
+- conflictingFile: scripts/codex-local-quality-gate.mjs
 
 ## HARNESS_VERSION Mismatch Boundary
 
-mainHarnessVersion: v1.1.5
-pr144HarnessVersion: v1.1.4
+- mainHarnessVersion: v1.1.5
+- pr144HarnessVersion: v1.1.4
 HARNESS_VERSION mismatch is a hard blocker for naive merge or acceptance.
 
 ## Trace Kernel Boundary
 
-traceKernelCompatibilityStatus: blocked_by_v115_surface_incompatibility
+- traceKernelCompatibilityStatus: blocked_by_v115_surface_incompatibility
 
 ## Policy Hook Contract Boundary
 
-policyHookContractCompatibilityStatus: blocked_by_v115_surface_incompatibility
+- policyHookContractCompatibilityStatus: blocked_by_v115_surface_incompatibility
 
 ## Goal Contract Boundary
 
-goalContractCompatibilityStatus: blocked_by_v115_surface_incompatibility
+- goalContractCompatibilityStatus: blocked_by_v115_surface_incompatibility
 
 ## Skill Profile Registry Boundary
 
-skillProfileRegistryCompatibilityStatus: blocked_by_v115_surface_incompatibility
+- skillProfileRegistryCompatibilityStatus: blocked_by_v115_surface_incompatibility
 
 ## Permission Profile Matrix Boundary
 
-permissionProfileMatrixCompatibilityStatus: blocked_by_v115_surface_incompatibility
+- permissionProfileMatrixCompatibilityStatus: blocked_by_v115_surface_incompatibility
 
 ## Target Finalizer Boundary
 
-targetFinalizerCompatibilityStatus: blocked_by_v115_surface_incompatibility
+- targetFinalizerCompatibilityStatus: blocked_by_v115_surface_incompatibility
 
 ## Legacy Compatibility Matrix Boundary
 
-legacyCompatibilityMatrixCompatibilityStatus: blocked_by_v115_surface_incompatibility
+- legacyCompatibilityMatrixCompatibilityStatus: blocked_by_v115_surface_incompatibility
 
 ## Token Runtime Meter Boundary
 
-tokenRuntimeMeterCompatibilityStatus: blocked_by_v115_surface_incompatibility
+- tokenRuntimeMeterCompatibilityStatus: blocked_by_v115_surface_incompatibility
 
 ## Validation Dependency Graph Boundary
 
-validationDependencyGraphCompatibilityStatus: blocked_by_v115_surface_incompatibility
+- validationDependencyGraphCompatibilityStatus: blocked_by_v115_surface_incompatibility
 
 ## Decision Core v2 Boundary
 
-decisionCoreV2CompatibilityStatus: blocked_by_v115_surface_incompatibility
+- decisionCoreV2CompatibilityStatus: blocked_by_v115_surface_incompatibility
 
 ## Safe Summary Picker Boundary
 
-safeSummaryPickerCompatibilityStatus: blocked_by_current_main_delta
+- safeSummaryPickerCompatibilityStatus: blocked_by_current_main_delta
 
 ## Pass / Fail Semantics Boundary
 
-passFailSemanticsCompatibilityStatus: unknown_until_rebase_or_repair_scope
-passFailSemanticsChangeStatus: no_change_in_this_audit
+- passFailSemanticsCompatibilityStatus: unknown_until_rebase_or_repair_scope
+- passFailSemanticsChangeStatus: no_change_in_this_audit
 
 ## Target Quality Score Boundary
 
-targetQualityScoreCompatibilityStatus: unknown_until_rebase_or_repair_scope
-targetQualityScoreSemanticsChangeStatus: no_change_in_this_audit
+- targetQualityScoreCompatibilityStatus: unknown_until_rebase_or_repair_scope
+- targetQualityScoreSemanticsChangeStatus: no_change_in_this_audit
 
 ## Process Exit Code Boundary
 
-processExitCodeCompatibilityStatus: unknown_until_rebase_or_repair_scope
-processExitCodeChangeStatus: no_change_in_this_audit
+- processExitCodeCompatibilityStatus: unknown_until_rebase_or_repair_scope
+- processExitCodeChangeStatus: no_change_in_this_audit
 
 ## Merge Ready Boundary
 
-mergeReadyCompatibilityStatus: unknown_until_rebase_or_repair_scope
-mergeReadySemanticsChangeStatus: no_change_in_this_audit
-merge readiness: no
+- mergeReadyCompatibilityStatus: unknown_until_rebase_or_repair_scope
+- mergeReadySemanticsChangeStatus: no_change_in_this_audit
+- merge readiness: no
 
 ## Product Verification Execution Boundary
 
-productVerificationExecutionCompatibilityStatus: no_product_execution_observed
-productVerificationExecutionChangeStatus: no_change_in_this_audit
+- productVerificationExecutionCompatibilityStatus: no_product_execution_observed
+- productVerificationExecutionChangeStatus: no_change_in_this_audit
 
 ## Remote NPM Diagnostic Execution Boundary
 
-remoteDiagnosticExecutionCompatibilityStatus: no_remote_execution_observed
-remoteDiagnosticExecutionChangeStatus: no_change_in_this_audit
+- remoteDiagnosticExecutionCompatibilityStatus: no_remote_execution_observed
+- remoteDiagnosticExecutionChangeStatus: no_change_in_this_audit
 
 ## Raw Leakage Boundary
 
-rawLeakageCompatibilityStatus: no_raw_leakage_observed_in_this_audit
+- rawLeakageCompatibilityStatus: no_raw_leakage_observed_in_this_audit
 
 ## GitHub Files UI / Byte Scan / Line Structure Boundary
 
-githubFilesUiWarningStatus: observed_by_chatgpt_pro_web_review_for_PR150_docs
-publicRawLineStructureStatusBefore: collapsed_markdown_lines_observed_by_chatgpt_pro_web_review
-codexLocalCheckoutScanStatus: pass
-githubContentsApiScanStatus: pass
-ghPrDiffPatchScanStatus: pass
-rawFileByteScanStatus: pass
-publicRawLineCountBefore: 19_observed_by_chatgpt_pro_web_review
-lineCountBefore: 349_codex_byte_sources
-lineCountAfter: 353_codex_byte_sources
-lineStructureStatusBefore: collapsed_markdown_lines_observed_by_chatgpt_pro_web_review
-lineStructureStatusAfter: normalized_markdown_lines
-lineEndingStatus: LF
-crossSourceDiscrepancyStatus: recorded_not_silently_ignored
-semanticChangeStatus: no_change
-governanceEvidenceReadabilityStatus: improved
+- githubFilesUiWarningStatus: observed_by_chatgpt_pro_web_review_for_PR150_docs
+- publicRawLineStructureStatusBefore: collapsed_markdown_lines_observed_by_chatgpt_pro_web_review
+- codexLocalCheckoutScanStatus: pass
+- githubContentsApiScanStatus: pass
+- ghPrDiffPatchScanStatus: pass
+- rawFileByteScanStatus: pass
+- publicRawLineCountBefore: 19_observed_by_chatgpt_pro_web_review
+- lineCountBefore: 353_codex_byte_sources
+- lineCountAfter: 359_codex_byte_sources
+- lineStructureStatusBefore: collapsed_markdown_lines_observed_by_chatgpt_pro_web_review
+- lineStructureStatusAfter: normalized_markdown_tables_and_fields
+- lineEndingStatus: LF
+- crossSourceDiscrepancyStatus: recorded_not_silently_ignored
+- semanticChangeStatus: no_change
+- governanceEvidenceReadabilityStatus: final_readable_structure
 
 GitHub Files UI warning was observed by ChatGPT Pro Web review for PR #150 docs.
 Raw/public docs rendering showed weak line structure / collapsed Markdown.
@@ -203,19 +201,19 @@ This repair is readability / evidence-structure only. It does not authorize PR
 #144 merge, rebase, repair, active QG rollout, runtime, PR #127 repair, or
 v1.1.6 implementation.
 
-Merge readiness: no
+- Merge readiness: no
 
 ## Runtime Boundary
 
-runtimeBoundaryStatus: no_runtime_change
-runtime readiness claimed: no
+- runtimeBoundaryStatus: no_runtime_change
+- runtime readiness claimed: no
 
 ## Workflow / Package Boundary
 
-workflowChangeStatus: no_change
-packageChangeStatus: no_change
-scriptChangeStatus: no_change
-activeQGScriptChangeStatus: no_change
+- workflowChangeStatus: no_change
+- packageChangeStatus: no_change
+- scriptChangeStatus: no_change
+- activeQGScriptChangeStatus: no_change
 
 ## PR #127 Boundary
 
@@ -229,14 +227,14 @@ as active QG rollout evidence in this task.
 
 ## Replacement Candidate Boundary
 
-pr144ReplacementCandidateStatus: future_explicit_scope_required
+- pr144ReplacementCandidateStatus: future_explicit_scope_required
 A future repair should prefer a main-based v1.1.5-compatible replacement
 candidate over naive rebase unless a separate Pro scope authorizes rebase or
 repair.
 
 ## v1.1.6 Boundary
 
-v116ImplementationStatus: not_started
+- v116ImplementationStatus: not_started
 
 ## Decision Matrix
 
@@ -302,17 +300,20 @@ do_not:
 
 ## Test Coverage Evidence
 
-changed area:
+### changed area
+
 docs/process/CODEX_VOXWEAVE_PR144_V1_1_5_SURFACE_INCOMPATIBILITY_BOUNDARY_AUDIT.md only.
 
-test command:
+### test command
+
 No runtime or product test command was applicable because this is docs-only
 incompatibility boundary audit evidence. Validation evidence is git diff
 --check, git diff --cached --check, changed-file boundary scan,
 hidden/bidirectional Unicode byte scan, negative readiness claim scan, and raw
 logs / secrets / endpoint / token scan.
 
-what the test covers:
+### what the test covers
+
 It covers PR #144 v1.1.5 surface incompatibility boundary, no PR #144 mutation,
 no rebase, no merge, no active QG rollout, no runtime, no package/workflow/script
 mutation, no pass/fail semantics change, no targetQualityScore semantics change,
@@ -320,7 +321,8 @@ no process exit behavior change, no mergeReady semantics change, no product
 verification execution change, no remote diagnostic execution change, and no
 readiness claims.
 
-edge cases / failure paths / reason if no test:
+### edge cases / failure paths / reason if no test
+
 No product runtime tests were executed because this PR does not touch product
 source, runtime adapters, tests, package files, workflow files, active QG
 scripts, product verification execution, or remote diagnostic execution. The key
@@ -329,20 +331,24 @@ v1.1.5 merge readiness or overwriting v1.1.5 harness surfaces.
 
 ## Quality Gate Evidence
 
-previous related QG evidence:
+### previous related QG evidence
+
 PR #149 latest QG COMPLETED / SUCCESS confirms v1.1.5 workflow marker
 post-merge sentinel. PR #144 latest QG was COMPLETED / SUCCESS only under its
 v1.1.4 candidate context.
 
-expected QG behavior:
+### expected QG behavior
+
 This docs-only incompatibility boundary audit should pass if Test Coverage
 Evidence and Quality Gate Evidence are complete and no forbidden readiness claim
 or mutation is present.
 
-manual rerun status:
+### manual rerun status
+
 No manual rerun requested. Any QG run must be natural after PR creation.
 
-merge readiness:
+### merge readiness
+
 no
 
 ## Safe Next Action
