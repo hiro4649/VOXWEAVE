@@ -55,6 +55,7 @@ import { V112_STATUS_KEYS, buildV112Report } from './codex-v112-conversation-sur
 import { V113_STATUS_KEYS, buildV113Report } from './codex-v113-minimal-surface.mjs';
 import { V114_STATUS_KEYS, buildV114Report, writeLoopArtifacts } from './codex-v114-loop-kernel.mjs';
 import { V115_STATUS_KEYS, buildV115Report } from './codex-v115-trace-kernel.mjs';
+import { classifyRemoteDiagnosticSafeMetadata } from './codex-remote-diagnostic-safe-metadata-adapter.mjs';
 
 
 
@@ -2883,6 +2884,33 @@ function runV115Gates(report, gateEnv) {
 }
 
 function initializeV115Statuses(report) { for (const key of V115_STATUS_KEYS) if (!report[key]) report[key] = { status: 'not_run' }; }
+
+function parseRemoteDiagnosticSafeMetadataEnv(env = process.env) {
+  const raw = env.CODEX_REMOTE_DIAGNOSTIC_SAFE_METADATA_JSON || '';
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return {
+      status: 'unknown',
+      safeSummaryOnly: true,
+      reasonCodes: ['safe_metadata_env_parse_failed'],
+    };
+  }
+}
+
+function buildRemoteDiagnosticSafeMetadataStatus(report = {}, env = process.env) {
+  const metadata = parseRemoteDiagnosticSafeMetadataEnv(env)
+    || report.remoteNpmDiagnosticStatus?.safeMetadata
+    || report.remoteNpmDiagnosticStatus?.safeMetadataStatus
+    || null;
+  return {
+    ...classifyRemoteDiagnosticSafeMetadata(metadata),
+    integration: 'diagnostic_only_report_visibility',
+    harnessVersion: HARNESS_VERSION,
+  };
+}
 
 function legacySelfTestPreservedStatus(legacyVersion) {
   return {
@@ -7798,6 +7826,10 @@ async function runSourceHarnessGate() {
 
 
 
+    remoteDiagnosticSafeMetadataStatus: { status: 'not_run' },
+
+
+
     workflowPreflightStatus: { status: 'not_run' },
 
 
@@ -8325,6 +8357,10 @@ async function runSourceHarnessGate() {
 
 
   report.remoteNpmDiagnosticStatus = runGateScript('scripts/codex-remote-npm-diagnostic-classify.mjs', 'remoteNpmDiagnosticStatus', 'CODEX_REMOTE_NPM_DIAGNOSTIC_REPORT', gateEnv);
+
+
+
+  report.remoteDiagnosticSafeMetadataStatus = buildRemoteDiagnosticSafeMetadataStatus(report, gateEnv);
 
 
 
@@ -10142,6 +10178,10 @@ async function runTargetHarnessGate() {
 
 
 
+    remoteDiagnosticSafeMetadataStatus: { status: 'not_run' },
+
+
+
     workflowPreflightStatus: { status: 'not_run' },
 
 
@@ -10481,6 +10521,8 @@ async function runTargetHarnessGate() {
 
 
   report.remoteNpmDiagnosticStatus = runGateScript('scripts/codex-remote-npm-diagnostic-classify.mjs', 'remoteNpmDiagnosticStatus', 'CODEX_REMOTE_NPM_DIAGNOSTIC_REPORT', gateEnv);
+
+  report.remoteDiagnosticSafeMetadataStatus = buildRemoteDiagnosticSafeMetadataStatus(report, gateEnv);
 
 
 
@@ -11608,6 +11650,8 @@ async function runTargetHarnessGate() {
 
     console.log(`targetQualityScoreStatus: ${report.targetQualityScoreStatus.status}`);
 
+    console.log(`remoteDiagnosticSafeMetadataStatus: ${report.remoteDiagnosticSafeMetadataStatus.status}`);
+
 
 
     console.log(`versionLineageStatus: ${report.versionLineageStatus.status}`);
@@ -12209,6 +12253,7 @@ async function runSourceHarnessCoreContractGate() {
     console.log(`qualityScore: ${report.qualityScoreStatus.score}`);
     console.log(`decision: ${report.decisionCore?.decision || report.status}`);
     console.log(`primaryClass: ${report.decisionCore?.primaryClass || 'none'}`);
+    console.log(`remoteDiagnosticSafeMetadataStatus: ${report.remoteDiagnosticSafeMetadataStatus.status}`);
     console.log(`traceId: ${report.traceId || report.decisionCore?.traceId || ''}`);
     console.log(`safeNextAction: ${report.decisionCore?.safeNextAction || 'owner_authorized_merge_after_same_head_checks'}`);
   }

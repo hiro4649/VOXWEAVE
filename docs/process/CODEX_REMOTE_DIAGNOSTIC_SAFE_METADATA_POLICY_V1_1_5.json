@@ -1,0 +1,82 @@
+{
+  "policy": "CODEX_REMOTE_DIAGNOSTIC_SAFE_METADATA_POLICY_V1_1_5",
+  "harnessVersion": "1.1.5",
+  "status": "diagnostic_only_non_blocking_candidate",
+  "diagnosticOnly": true,
+  "nonBlocking": true,
+  "effect": "none",
+  "safeSummaryOnly": true,
+  "runtimeReadinessClaimed": false,
+  "mergeReadiness": "no",
+  "boundaries": {
+    "passFailSemanticsChangeStatus": "no_change",
+    "targetQualityScoreSemanticsChangeStatus": "no_change",
+    "processExitCodeChangeStatus": "no_change",
+    "mergeReadySemanticsChangeStatus": "no_change",
+    "productVerificationExecutionChangeStatus": "no_change",
+    "remoteDiagnosticExecutionChangeStatus": "no_change",
+    "workflowChangeStatus": "no_change",
+    "packageChangeStatus": "no_change",
+    "runtimeBoundaryStatus": "no_runtime_change",
+    "v116ImplementationStatus": "not_started"
+  },
+  "statusAllowlist": [
+    "available",
+    "available_without_effect",
+    "pass",
+    "success",
+    "not_available",
+    "not_available_without_effect",
+    "not_run",
+    "manual_confirmation_required",
+    "unknown",
+    "unknown_without_effect"
+  ],
+  "outputStatuses": [
+    "available_without_effect",
+    "not_available_without_effect",
+    "unknown_without_effect"
+  ],
+  "rawLikeDetection": {
+    "keys": [
+      "raw",
+      "payload",
+      "body",
+      "log",
+      "artifact",
+      "content",
+      "secret",
+      "token",
+      "endpoint",
+      "url",
+      "path",
+      "key",
+      "password",
+      "credential"
+    ],
+    "values": [
+      "url_like_content",
+      "token_like_content",
+      "secret_like_content",
+      "endpoint_like_content",
+      "local_private_path_like_content",
+      "raw_json_like_content"
+    ]
+  },
+  "forbidden": [
+    "external_service_call",
+    "file_or_artifact_read_by_adapter",
+    "remote_diagnostic_execution_by_adapter",
+    "product_verification_execution_change",
+    "remote_npm_diagnostic_execution_change",
+    "pass_fail_semantics_change",
+    "target_quality_score_semantics_change",
+    "process_exit_code_behavior_change",
+    "merge_ready_semantics_change",
+    "runtime_readiness_claim",
+    "merge_readiness_claim",
+    "pr144_merge_evidence_conversion",
+    "pr127_repair_claim",
+    "v116_implementation_claim"
+  ]
+}
