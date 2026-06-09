@@ -176,6 +176,31 @@ remoteDiagnosticExecutionChangeStatus: no_change_in_this_audit
 
 rawLeakageCompatibilityStatus: no_raw_leakage_observed_in_this_audit
 
+## GitHub Files UI / Byte Scan / Line Structure Boundary
+
+githubFilesUiWarningStatus: observed_by_chatgpt_pro_web_review_for_PR150_docs
+codexLocalCheckoutScanStatus: pass
+githubContentsApiScanStatus: pass
+ghPrDiffPatchScanStatus: pass
+rawFileByteScanStatus: pass
+lineStructureStatusBefore: weak_line_structure_reported_by_github_files_ui_or_public_rendering
+lineStructureStatusAfter: normalized_markdown_lines
+lineEndingStatus: LF
+crossSourceDiscrepancyStatus: recorded_not_silently_ignored
+semanticChangeStatus: no_change
+governanceEvidenceReadabilityStatus: improved
+
+GitHub Files UI warning was observed by ChatGPT Pro Web review for PR #150 docs.
+Raw/public docs rendering showed weak line structure / collapsed Markdown.
+Codex byte-level source-of-truth did not reproduce hidden or bidirectional
+Unicode in local checkout, GitHub Contents API, or gh PR diff patch sources.
+
+This repair is readability / evidence-structure only. It does not authorize PR
+#144 merge, rebase, repair, active QG rollout, runtime, PR #127 repair, or
+v1.1.6 implementation.
+
+Merge readiness: no
+
 ## Runtime Boundary
 
 runtimeBoundaryStatus: no_runtime_change
@@ -233,15 +258,31 @@ v116ImplementationStatus: not_started
 
 ## Do-Now / Do-Later / Do-Not
 
-do_now: record this docs-only incompatibility boundary audit.
+do_now:
+- Preserve this docs-only incompatibility boundary audit.
+- Normalize the PR #150 docs artifact for GitHub readability evidence only.
 
-do_later: create a main-based v1.1.5-compatible replacement candidate only
-under separate explicit scope, or perform rebase/repair only under separate Pro
-authorization.
+do_later:
+- Create a main-based v1.1.5-compatible replacement candidate only under
+  separate explicit scope.
+- Perform rebase or repair only under separate Pro authorization.
 
-do_not: modify PR #144, rebase PR #144, merge PR #144, undraft PR #144, roll
-out active QG, modify runtime, modify workflow, modify package, modify scripts,
-repair PR #127, request review, comment, manually rerun, close, or merge.
+do_not:
+- Modify PR #144.
+- Rebase PR #144.
+- Merge PR #144.
+- Undraft PR #144.
+- Roll out active QG.
+- Modify runtime.
+- Modify workflow.
+- Modify package files.
+- Modify scripts.
+- Repair PR #127.
+- Request review.
+- Comment.
+- Manually rerun.
+- Close PRs.
+- Merge PRs.
 
 ## Forbidden Claims
 
