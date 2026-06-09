@@ -58,8 +58,33 @@ post-merge main workflow marker state can run through natural PR quality-gate.
 
 ## Fresh Pull Request Quality Gate Evidence
 
-This PR should run the post-merge main workflow marker v1.1.5 naturally. No
-manual rerun is requested.
+pr149NaturalQualityGateTerminalStatus: completed
+pr149NaturalQualityGateConclusion: COMPLETED / SUCCESS
+mainWorkflowMarkerRuntimeStatusOnFreshSentinelRun: pass
+postMergeWorkflowMarkerSentinelStatus: completed
+manualRerunStatus: no_manual_rerun
+mainWorkflowMarkerStatusOnSentinel: CODEX_QUALITY_HARNESS_FILE v1.1.5
+workflowBehaviorChangeStatus: no_change
+activeQGScriptChangeStatus: no_change
+passFailSemanticsChangeStatus: no_change
+targetQualityScoreSemanticsChangeStatus: no_change
+processExitCodeChangeStatus: no_change
+mergeReadySemanticsChangeStatus: no_change
+pr144ReclassificationStatus: not_authorized
+activeQGRolloutStatus: not_authorized
+runtimeReadinessClaimStatus: no
+mergeReadinessClaimStatus: no
+v116ImplementationStatus: not_started
+
+PR #149 natural quality-gate succeeded after PR #148 merged the workflow marker
+to v1.1.5. The fresh sentinel run validates the main workflow marker v1.1.5
+execution path only. This success does not authorize PR #144 merge or
+reclassification, active QG rollout, runtime, workflow changes, package or
+lockfile changes, scripts/codex-local-quality-gate.mjs changes, product
+verification execution changes, remote diagnostic execution changes, pass/fail
+semantics changes, targetQualityScore semantics changes, process exit code
+behavior changes, mergeReady semantics changes, PR #127 repair, or v1.1.6
+implementation. Merge readiness: no.
 
 ## Workflow Marker Execution Boundary
 
@@ -145,9 +170,22 @@ v116ImplementationStatus: not_started
 
 ## GitHub UI / Raw / Local Source-of-Truth Boundary
 
-This sentinel is docs-only and should remain ASCII printable with LF line
-endings. Any future GitHub UI warning requires separate byte-level
-source-of-truth inspection.
+githubFilesUiWarningStatus: observed_by_chatgpt_pro_web_review_for_PR149_docs
+codexLocalCheckoutScanStatus: pass
+githubContentsApiScanStatus: pass
+ghPrDiffPatchScanStatus: pass
+rawFileByteScanStatus: pass
+detectedCodePoints: none
+lineEndingStatus: LF
+crossSourceDiscrepancyStatus: recorded_not_silently_ignored
+publicationCleanlinessStatus: provisional_until_next_pr_files_ui_observation
+
+PR #149 Files UI warning was observed by ChatGPT Pro Web review. Codex
+byte-level scans from local checkout, GitHub Contents API, and gh PR diff patch
+did not reproduce hidden or bidirectional Unicode, BOM, CR-only or mixed line
+endings, non-ASCII, raw logs, secrets, endpoint values, or token values. The UI
+observation is recorded as a cross-source discrepancy and must not be silently
+collapsed into a simple pass claim.
 
 ## Risk Register
 
@@ -228,6 +266,9 @@ no
 
 ## Safe Next Action
 
-safe next action: preserve this sentinel as docs-only post-merge workflow marker
-evidence. Do not use it as PR #144 merge readiness, active QG rollout approval,
-runtime evidence, PR #127 repair, or v1.1.6 implementation.
+safe next action: preserve PR #149 as completed docs-only v1.1.5 workflow
+marker post-merge sentinel evidence after natural quality-gate SUCCESS. Do not
+proceed to PR #144 merge or reclassification, active QG rollout, runtime,
+workflow/package/script changes, PR #127 repair, v1.1.6 implementation, comment,
+review request, manual rerun, rebase, close, or merge without separate explicit
+scope.
