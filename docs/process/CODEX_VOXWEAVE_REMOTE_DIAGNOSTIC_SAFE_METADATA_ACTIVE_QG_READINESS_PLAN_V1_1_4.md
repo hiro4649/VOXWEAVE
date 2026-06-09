@@ -75,6 +75,48 @@ PR #140 is the required v1.1.4 carry-forward boundary for using PR #130 and
 PR #131 evidence. It classifies PR #130 and PR #131 as adapter / acceptance
 evidence only, not active QG integration.
 
+## PR #141 Quality Gate Failure Boundary
+
+pr141NaturalQualityGateTerminalStatus: completed
+pr141NaturalQualityGateConclusion: FAILURE
+pr141QualityGateFailureSafeSummary: report.status_failed_and_targetQualityScoreStatus_failed
+processExitCodeObserved: 1
+targetQualityScoreFailureStatus: observed
+reportStatusFailureStatus: observed
+qgFailureEvidenceClass: safe_annotation_failure_boundary
+runtimeFailureStatus: not_observed_from_safe_annotations
+implementationFailureStatus: not_observed_from_safe_annotations
+boundedRepairDecisionStatus: docs_or_pr_body_evidence_repair_candidate_only_if_safe_metadata_confirms
+mergeReadinessClaimStatus: no
+runtimeReadinessClaimStatus: no
+activeQGDiagnosticIntegrationStatus: not_authorized
+v115ImplementationStatus: not_started
+
+PR #141 natural quality-gate failed. The failure is currently safe-annotation
+evidence only. The observed safe annotations are `report.status=fail`,
+`targetQualityScoreStatus=fail`, and process exit code 1. The failure does not
+authorize active QG integration, runtime, script changes, workflow changes,
+package changes, product verification execution changes, remote diagnostic
+execution changes, pass/fail changes, targetQualityScore changes, process exit
+code changes, mergeReady changes, PR #127 repair, or conversion of PR #130 /
+PR #131 into active QG integration evidence.
+
+## PR #141 Target Quality Score Repair Boundary
+
+targetQualityScoreRepairScopeStatus: docs_and_pr_body_evidence_only
+allowedRepairFiles: docs/process/CODEX_VOXWEAVE_REMOTE_DIAGNOSTIC_SAFE_METADATA_ACTIVE_QG_READINESS_PLAN_V1_1_4.md
+prBodyEvidenceRepairAllowed: true_only_if_missing_test_coverage_or_quality_gate_evidence_confirmed
+codeRepairAllowed: false
+scriptRepairAllowed: false
+workflowRepairAllowed: false
+semanticRepairAllowed: false
+manualRerunAllowed: false
+
+If the failure is due to missing or insufficient docs / PR body evidence, the
+repair may add explicit Test Coverage Evidence and Quality Gate Evidence. If
+the failure is not safely attributable to docs / PR body evidence completeness,
+no repair is allowed in this scope.
+
 ## PR #127 Failure Context
 
 pr127Status: failed_unfixed
@@ -203,11 +245,23 @@ paths, or raw diagnostic payloads.
 ## GitHub Files UI / Byte Scan Discrepancy Carry-forward
 
 githubFilesUiDiscrepancyCarryForwardStatus: recorded_boundary_only
+githubFilesUiWarningStatus: observed_by_chatgpt_pro_web_review_for_PR141_docs
+codexLocalCheckoutScanStatus: pass
+githubContentsApiScanStatus: pass
+ghPrDiffPatchScanStatus: pass
+rawFileByteScanStatus: pass
+detectedCodePoints: none
+lineEndingStatus: LF
+crossSourceDiscrepancyStatus: recorded_not_silently_ignored
+publicationCleanlinessStatus: provisional_until_next_pr_files_ui_observation
 
 Prior docs-only PRs recorded GitHub Files UI warning observations that were not
 reproduced by Codex byte-level scans. This plan carries that discrepancy as an
 evidence boundary only. It is not runtime risk evidence and does not authorize
 file mutation outside the scoped document.
+PR #141 Files UI warning was observed by ChatGPT Pro Web review, while Codex
+byte-level local checkout, GitHub Contents API, and PR patch scans did not
+reproduce hidden or bidirectional Unicode.
 
 ## Docs Saturation Boundary
 
@@ -319,10 +373,10 @@ execution evidence, and not merge evidence.
 
 ## Safe Next Action
 
-safe next action: preserve this draft PR as docs-only remote diagnostic safe
-metadata active QG readiness planning evidence after its natural quality-gate
-reaches a terminal state. Do not proceed to implementation, active QG
-integration, runtime, workflow, package, script, product verification, remote
-npm diagnostic execution, v1.1.5 implementation, PR #127 repair, PR #137 merge,
-PR #138 merge, PR #139 merge, PR #140 merge, comment, review request, manual
-rerun, rebase, close, or merge in this task.
+safe next action: preserve PR #141 as failed docs-only readiness-plan evidence
+unless the same-branch target-quality repair succeeds on a later natural QG
+run. Do not proceed to active QG integration, implementation, runtime,
+workflow, package, script, product verification, remote diagnostic execution,
+v1.1.5 implementation, PR #127 repair, PR #137 merge, PR #138 merge, PR #139
+merge, PR #140 merge, comment, review request, manual rerun, rebase, close, or
+merge.
