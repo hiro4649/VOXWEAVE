@@ -141,10 +141,71 @@ PR #144 acceptance, rollout, or merge evidence.
 
 v116ImplementationStatus: not_started
 
-## GitHub Files UI / Byte Scan Boundary
+## GitHub Files UI / Raw Rendering / Byte Scan Discrepancy
 
-This candidate is expected to remain ASCII printable with LF line endings. Any
-GitHub Files UI warning would require separate source-of-truth byte inspection.
+githubFilesUiWarningStatus:
+observed_by_chatgpt_pro_web_review_for_workflow_and_docs
+
+publicRawLineCollapseObservationStatus:
+observed_by_chatgpt_pro_web_review
+
+codexWorkflowByteScanStatus:
+pass
+
+codexDocsByteScanStatus:
+pass
+
+workflowLineEndingStatus:
+LF
+
+docsLineEndingStatus:
+LF
+
+workflowLineCountStatus:
+consistent
+
+docsLineCountStatus:
+consistent
+
+workflowMarkerDiffStatus:
+marker_comment_only
+
+crossSourceDiscrepancyStatus:
+recorded_not_silently_ignored
+
+normalizationApplied:
+no
+
+semanticChangeStatus:
+no_change
+
+workflowBehaviorChangeStatus:
+no_change
+
+passFailSemanticsChangeStatus:
+no_change
+
+targetQualityScoreSemanticsChangeStatus:
+no_change
+
+processExitCodeChangeStatus:
+no_change
+
+mergeReadySemanticsChangeStatus:
+no_change
+
+GitHub Files UI warning was observed by ChatGPT Pro Web review for the workflow
+file and docs file. ChatGPT Pro Web review also observed raw/public rendering
+that looked line-collapsed. Codex byte-level source-of-truth confirmed that the
+workflow and docs files use LF line endings, have no BOM, have no CR-only or
+mixed line endings, have final newlines, have no hidden, bidirectional,
+non-ASCII, or disallowed control characters, and do not show a real
+single-line collapse in local bytes.
+
+Any normalization is semantic-preserving only. No normalization was applied
+because the byte-level source was clean. This does not authorize workflow
+behavior changes, active QG rollout, PR #144 merge or reclassification,
+runtime, v1.1.6 implementation, or merge readiness.
 
 ## Decision Matrix
 
