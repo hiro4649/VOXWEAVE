@@ -117,6 +117,51 @@ repair may add explicit Test Coverage Evidence and Quality Gate Evidence. If
 the failure is not safely attributable to docs / PR body evidence completeness,
 no repair is allowed in this scope.
 
+## PR #141 PR Body Repair Recovery Evidence
+
+pr141BodyRepairStatus: applied_pr_body_only
+testCoverageEvidenceStatusAfterBodyRepair: pass_or_not_directly_exposed_with_blocking_count_zero
+targetQualityScoreStatusAfterBodyRepair: pass
+targetQualityScoreAfterBodyRepair: 89
+reportStatusAfterBodyRepair: pass
+blockingCountAfterBodyRepair: 0
+qualityGateConclusionAfterBodyRepair: COMPLETED / SUCCESS
+manualRerunStatus: no_manual_rerun
+fileChangeStatusDuringBodyRepair: none
+commitStatusDuringBodyRepair: no_commit
+pushStatusDuringBodyRepair: no_push
+repairEvidenceClass: pr_body_evidence_completeness_repair
+readinessPlanEvidenceStatus: repaired_docs_only_readiness_plan_evidence
+
+PR #141 initially failed because testCoverageEvidenceStatus failed. PR #141
+same-head PR body repair added the complete Test Coverage Evidence contract
+fields. The natural PR body edit run recovered to COMPLETED / SUCCESS. This
+recovery does not authorize active QG diagnostic integration. This recovery
+does not authorize runtime. This recovery does not authorize workflow changes.
+This recovery does not authorize package or lockfile changes. This recovery
+does not authorize scripts/codex-local-quality-gate.mjs changes. This recovery
+does not authorize product verification execution changes. This recovery does
+not authorize remote diagnostic execution changes. This recovery does not
+authorize pass/fail semantics changes. This recovery does not authorize
+targetQualityScore semantics changes. This recovery does not authorize
+mergeReady semantics changes. This recovery does not repair PR #127. This
+recovery does not affect PR #142. Merge readiness: no.
+
+## GitHub Web / Codex Source Discrepancy After PR Body Repair
+
+publicGitHubWebViewStatus: stale_or_incomplete_for_PR141_after_body_edit
+codexGhSourceOfTruthStatus: PR_body_repair_success_confirmed
+crossSourceDiscrepancyStatus: recorded_not_silently_ignored
+
+PR #141 public GitHub web view may still show a stale failed run or old body
+content. Codex source-of-truth for this update is the current `gh` PR body
+state plus the natural quality-gate run for PR #141 head
+f9a7d72a84be6f82269bc2af063161f29dc80fb2 reporting COMPLETED / SUCCESS.
+This discrepancy is recorded as a publication and evidence-boundary issue only.
+It does not authorize runtime, workflow, package, script, product verification,
+remote diagnostic execution, pass/fail semantics, targetQualityScore semantics,
+mergeReady semantics, PR #127, PR #142, or merge changes.
+
 ## PR #127 Failure Context
 
 pr127Status: failed_unfixed
@@ -373,10 +418,10 @@ execution evidence, and not merge evidence.
 
 ## Safe Next Action
 
-safe next action: preserve PR #141 as failed docs-only readiness-plan evidence
-unless the same-branch target-quality repair succeeds on a later natural QG
-run. Do not proceed to active QG integration, implementation, runtime,
-workflow, package, script, product verification, remote diagnostic execution,
-v1.1.5 implementation, PR #127 repair, PR #137 merge, PR #138 merge, PR #139
-merge, PR #140 merge, comment, review request, manual rerun, rebase, close, or
-merge.
+safe next action: preserve PR #141 as repaired docs-only Remote Diagnostic Safe
+Metadata Active QG Readiness Plan v1.1.4 evidence after PR body-only Test
+Coverage Evidence repair and natural quality-gate SUCCESS. Do not proceed to
+active QG integration, implementation, runtime, workflow, package, script,
+product verification, remote diagnostic execution, v1.1.5 implementation, PR
+#127 repair, PR #137 merge, PR #138 merge, PR #139 merge, PR #140 merge, PR
+#142 merge, comment, review request, manual rerun, rebase, close, or merge.
