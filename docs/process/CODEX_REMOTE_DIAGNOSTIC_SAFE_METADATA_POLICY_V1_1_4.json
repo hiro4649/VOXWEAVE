@@ -17,6 +17,29 @@
     "privatePaths",
     "artifactContents"
   ],
+  "statusAllowlist": [
+    "pass",
+    "fail",
+    "warning",
+    "not_run",
+    "unknown",
+    "manual_confirmation_required",
+    "blocked",
+    "skipped",
+    "completed",
+    "success",
+    "failure",
+    "neutral",
+    "not_available",
+    "available"
+  ],
+  "redactionPolicy": {
+    "allowlistOutsideStatusHandling": "unknown_without_effect",
+    "rawLikeStatusValueHandling": "unknown_without_effect",
+    "rawLikeReasonCodeHandling": "unsafe_reason_code_redacted",
+    "observedStatuses": "safe_allowlisted_labels_only",
+    "fixedSafeReasonCodesOnly": true
+  },
   "requiredBoundaries": {
     "diagnosticOnly": true,
     "nonBlocking": true,

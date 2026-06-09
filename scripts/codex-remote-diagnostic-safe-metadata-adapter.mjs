@@ -1,18 +1,48 @@
 #!/usr/bin/env node
 // CODEX_QUALITY_HARNESS_FILE v1.1.4
 
+const SAFE_STATUS_LABELS = new Set([
+  'pass',
+  'fail',
+  'warning',
+  'not_run',
+  'unknown',
+  'manual_confirmation_required',
+  'blocked',
+  'skipped',
+  'completed',
+  'success',
+  'failure',
+  'neutral',
+  'not_available',
+  'available',
+]);
+
 const RAW_KEY_RE = /(?:raw|secret|token|endpoint|private|payload|log|stack|cookie|authorization)/i;
+const SAFE_REASON_CODE_RE = /^[a-z][a-z0-9_]{0,80}$/;
+const PRIVATE_KEY_PATTERN = '\\bBEGIN [A-Z ]*PRIVATE' + ' KEY\\b';
+const RAW_VALUE_RE = new RegExp([
+  'https?://',
+  'www\\.',
+  '\\b(?:endpoint|url|uri|host|authorization|password|secret|token|api[_ -]?key)\\b\\s*[:=]',
+  '\\b(?:ghp|gho|github_pat|sk|xoxb|xoxp)_[A-Za-z0-9]',
+  PRIVATE_KEY_PATTERN,
+  '^[A-Za-z]:[\\\\/]',
+  '(^|\\s)/(?:Users|home|var|tmp)/',
+  "[{\\[]\\s*[\\\"']?(?:raw|token|secret|endpoint|payload)",
+].join('|'), 'i');
 
 function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function limitedStrings(values = [], limit = 8) {
-  if (!Array.isArray(values)) return [];
-  return values
-    .filter((value) => typeof value === 'string' && value.trim())
-    .map((value) => value.trim())
-    .slice(0, limit);
+function firstString(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function rawLikeValue(value) {
+  const text = firstString(value);
+  return Boolean(text && RAW_VALUE_RE.test(text));
 }
 
 function hasRawLikeKey(value, depth = 0) {
@@ -25,15 +55,58 @@ function hasRawLikeKey(value, depth = 0) {
   return false;
 }
 
+function hasRawLikeValue(value, depth = 0) {
+  if (depth > 4) return false;
+  if (typeof value === 'string') return rawLikeValue(value);
+  if (Array.isArray(value)) return value.some((item) => hasRawLikeValue(item, depth + 1));
+  if (isObject(value)) return Object.values(value).some((item) => hasRawLikeValue(item, depth + 1));
+  return false;
+}
+
+function normalizeStatusLabel(value) {
+  const text = firstString(value).toLowerCase();
+  if (!text) return { status: 'unknown', redacted: false };
+  if (rawLikeValue(text)) return { status: 'unknown', redacted: true };
+  if (!SAFE_STATUS_LABELS.has(text)) return { status: 'unknown', redacted: true };
+  return { status: text, redacted: false };
+}
+
+function sanitizeReasonCodes(values = [], limit = 8) {
+  const source = Array.isArray(values) ? values : [];
+  const reasonCodes = [];
+  let redacted = false;
+  for (const value of source) {
+    const text = firstString(value).toLowerCase();
+    if (!text) continue;
+    if (rawLikeValue(text) || !SAFE_REASON_CODE_RE.test(text)) {
+      redacted = true;
+      reasonCodes.push('unsafe_reason_code_redacted');
+      continue;
+    }
+    reasonCodes.push(text);
+  }
+  return {
+    reasonCodes: [...new Set(reasonCodes)].slice(0, limit),
+    redacted,
+  };
+}
+
 function normalizeSafeStatus(name, value) {
   if (!isObject(value)) return null;
-  const status = typeof value.status === 'string' ? value.status : 'unknown';
+  const normalizedStatus = normalizeStatusLabel(value.status);
+  const sanitizedReasons = sanitizeReasonCodes(value.reasonCodes || value.missingReasonCodes || value.labels);
   return {
     name,
-    status,
-    reasonCodes: limitedStrings(value.reasonCodes || value.missingReasonCodes || value.labels),
+    status: normalizedStatus.status,
+    statusRedacted: normalizedStatus.redacted,
+    reasonCodes: sanitizedReasons.reasonCodes,
+    reasonCodesRedacted: sanitizedReasons.redacted,
     safeSummaryOnly: value.safeSummaryOnly !== false,
   };
+}
+
+function observedStatusesFrom(sources) {
+  return Object.fromEntries(sources.map((source) => [source.name, source.status]));
 }
 
 export function buildRemoteDiagnosticSafeMetadataDiagnosticStatus(input = {}) {
@@ -44,10 +117,15 @@ export function buildRemoteDiagnosticSafeMetadataDiagnosticStatus(input = {}) {
   ].filter(Boolean);
 
   const rawLikeInputDetected = hasRawLikeKey(input);
+  const rawLikeValueDetected = hasRawLikeValue(input);
   const safeSources = sources.filter((source) => source.safeSummaryOnly);
   const unsafeSources = sources.filter((source) => !source.safeSummaryOnly);
+  const redactedStatusDetected = sources.some((source) => source.statusRedacted);
+  const redactedReasonDetected = sources.some((source) => source.reasonCodesRedacted);
+  const observedSafeInputs = safeSources.map((source) => source.name);
+  const observedStatuses = observedStatusesFrom(safeSources);
 
-  if (rawLikeInputDetected || unsafeSources.length) {
+  if (rawLikeInputDetected || rawLikeValueDetected || unsafeSources.length || redactedStatusDetected || redactedReasonDetected) {
     return {
       status: 'unknown_without_effect',
       diagnosticOnly: true,
@@ -55,9 +133,13 @@ export function buildRemoteDiagnosticSafeMetadataDiagnosticStatus(input = {}) {
       effect: 'none',
       reasonCodes: [
         ...(rawLikeInputDetected ? ['raw_like_metadata_key_detected'] : []),
+        ...(rawLikeValueDetected ? ['raw_like_metadata_value_redacted'] : []),
         ...(unsafeSources.length ? ['unsafe_source_not_safe_summary_only'] : []),
+        ...(redactedStatusDetected ? ['status_value_unknown_or_redacted'] : []),
+        ...(redactedReasonDetected ? ['unsafe_reason_code_redacted'] : []),
       ],
-      observedSafeInputs: safeSources.map((source) => source.name),
+      observedSafeInputs,
+      observedStatuses,
       safeSummaryOnly: true,
     };
   }
@@ -70,6 +152,7 @@ export function buildRemoteDiagnosticSafeMetadataDiagnosticStatus(input = {}) {
       effect: 'none',
       reasonCodes: ['safe_metadata_input_absent'],
       observedSafeInputs: [],
+      observedStatuses: {},
       safeSummaryOnly: true,
     };
   }
@@ -81,9 +164,8 @@ export function buildRemoteDiagnosticSafeMetadataDiagnosticStatus(input = {}) {
     nonBlocking: true,
     effect: 'none',
     reasonCodes: uncertain ? ['safe_metadata_status_uncertain'] : [],
-    observedSafeInputs: safeSources.map((source) => source.name),
-    observedStatuses: Object.fromEntries(safeSources.map((source) => [source.name, source.status])),
+    observedSafeInputs,
+    observedStatuses,
     safeSummaryOnly: true,
   };
 }
-

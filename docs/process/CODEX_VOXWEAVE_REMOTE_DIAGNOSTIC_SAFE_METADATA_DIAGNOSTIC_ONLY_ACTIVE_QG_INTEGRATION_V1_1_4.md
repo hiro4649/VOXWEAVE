@@ -87,6 +87,25 @@ The script change imports the adapter and assigns a report field. It does not
 append to failures, warnings, targetQualityScore blocking keys, output shape
 requirements, process exit code logic, or mergeReady logic.
 
+## Active QG Script GitHub Files UI / Byte Scan Discrepancy
+
+githubFilesUiWarningStatus: observed_by_chatgpt_pro_web_review_for_active_qg_script
+codexLocalCheckoutScanStatus: pass
+githubContentsApiScanStatus: pass
+ghPrDiffPatchScanStatus: pass
+rawFileByteScanStatus: pass
+lineEndingStatus: LF
+lineCountStatus: consistent
+crossSourceDiscrepancyStatus: recorded_not_silently_ignored
+activeQGScriptRiskStatus: governance_significant_because_script_surface_changed
+
+GitHub Files UI warning was observed by ChatGPT Pro Web review on the active QG
+script diff. Codex byte-level scans must not be silently collapsed into a
+simple pass. The warning does not authorize pass/fail semantics changes. The
+warning does not authorize targetQualityScore changes. The warning does not
+authorize process exit behavior changes. The warning does not authorize
+workflow/package/runtime changes.
+
 ## Safe Metadata Input Boundary
 
 safeMetadataInputBoundaryStatus: safe_status_inputs_only
@@ -110,6 +129,24 @@ rawLeakageBoundaryStatus: pass
 Raw-like keys are classified as `unknown_without_effect` and do not expose their
 values. This candidate does not print endpoints, tokens, secrets, local private
 paths, raw logs, raw payloads, artifact contents, or remote diagnostic output.
+
+## Adapter Value Sanitization Boundary
+
+statusAllowlistBoundaryStatus: enforced
+rawLikeValueDetectionStatus: enforced
+observedStatusesSanitizationStatus: safe_allowlisted_labels_only
+reasonCodeValueSanitizationStatus: fixed_safe_reason_codes_only
+unknownStatusHandlingStatus: unknown_without_effect
+nonBlockingEffectStatus: preserved
+rawLeakageBoundaryStatus: pass
+
+The adapter must not echo untrusted status values, reason code values, raw-like
+values, endpoints, tokens, secrets, private paths, raw payloads, logs, or
+artifact contents. Status values outside the allowlist are reduced to
+`unknown_without_effect`. Reason code values that look raw or unsafe are
+replaced with fixed safe reason codes. Unsafe source, safeSummaryOnly=false,
+raw-like key, raw-like value, and unknown status paths remain diagnostic-only,
+non-blocking, effect none, and safeSummaryOnly true.
 
 ## Pass / Fail Semantics Boundary
 
