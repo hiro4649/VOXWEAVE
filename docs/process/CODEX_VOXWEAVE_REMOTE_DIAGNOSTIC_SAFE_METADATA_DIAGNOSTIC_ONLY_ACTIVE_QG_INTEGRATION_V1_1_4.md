@@ -289,6 +289,63 @@ No manual rerun requested. Any QG run must be natural after PR creation.
 merge readiness:
 no
 
+## JS Shebang / Newline / Execution Integrity Boundary
+
+publicRawSingleLineObservationStatus:
+observed_by_chatgpt_pro_web_review
+
+codexByteLineCountStatus:
+pass
+
+adapterShebangIntegrityStatus:
+pass
+
+selfCheckShebangIntegrityStatus:
+pass
+
+selfCheckExecutionOutputStatus:
+pass_only_if_stdout_contains_pass_and_checkedCases_13
+
+singleLineShebangCollapseRiskStatus:
+cleared
+
+normalizationApplied:
+no
+
+semanticChangeStatus:
+no_change
+
+activeQGScriptSemanticChangeStatus:
+no_change
+
+processExitCodeChangeStatus:
+no_change
+
+passFailSemanticsChangeStatus:
+no_change
+
+targetQualityScoreSemanticsChangeStatus:
+no_change
+
+mergeReadySemanticsChangeStatus:
+no_change
+
+ChatGPT Pro Web review observed raw/public rendering that looked like a
+single-line shebang collapse for adapter and self-check. Codex byte-level
+source-of-truth confirmed that the adapter and self-check files preserve the
+shebang as a standalone first line, use LF line endings, have no BOM, have no
+CR-only or mixed line endings, have final newlines, and have no hidden,
+bidirectional, non-ASCII, or disallowed control characters.
+
+Self-check pass requires actual stdout evidence, not node --check alone. The
+same-head local execution produced the required pass status and checked 13
+cases, so the self-check execution integrity evidence is present for this
+candidate head.
+
+Any future normalization remains semantic-preserving only. This boundary does
+not authorize runtime, active QG rollout, merge, PR #127 repair, or v1.1.5
+implementation.
+
 ## Decision Matrix
 
 | question | decision | reason |
