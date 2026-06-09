@@ -187,8 +187,8 @@ HARNESS_VERSION mismatch is a hard blocker for naive merge or acceptance.
 - riskRegisterTableStatus: pass
 - publicRawLineCountBefore: 19_observed_by_chatgpt_pro_web_review
 - lineCountBefore: 353_codex_byte_sources
-- lineCountAfter: 366_codex_byte_sources
-- publicRawLineCountAfter: 366_verified_exact_public_raw_head
+- lineCountAfter: 388_codex_byte_sources
+- publicRawLineCountAfter: 388_verified_exact_public_raw_head
 - publicRawHasSourceEvidenceTableAfter: true
 - publicRawHasDecisionMatrixTableAfter: true
 - publicRawHasRiskRegisterTableAfter: true
@@ -207,6 +207,28 @@ Unicode in local checkout, GitHub Contents API, or gh PR diff patch sources.
 This repair is readability / evidence-structure only. It does not authorize PR
 #144 merge, rebase, repair, active QG rollout, runtime, PR #127 repair, or
 v1.1.6 implementation.
+
+- Merge readiness: no
+
+## Public Raw Verification Boundary
+
+- publicRawCurlStatus: pass
+- publicRawCurlLineCountBefore: 366
+- publicRawCurlLineCountAfter: 388
+- publicRawCurlHasSourceEvidenceTableAfter: true
+- publicRawCurlHasDecisionMatrixTableAfter: true
+- publicRawCurlHasRiskRegisterTableAfter: true
+- publicRawCurlSha256After: final_report_value_authoritative_after_push
+- chatgptProWebRawStatus: stale_or_parser_discrepancy
+- crossSourceDiscrepancyStatus: recorded_not_silently_ignored
+- governanceEvidenceReadabilityStatus: public_raw_curl_verified_markdown_tables_and_fields
+
+The success condition is public raw curl verification, not editor wrapping. If
+ChatGPT Pro Web raw view still collapses while curl raw passes, the discrepancy
+is recorded as a parser/cache/source discrepancy.
+
+This does not authorize PR #144 merge, rebase, repair, active QG rollout,
+runtime, PR #127 repair, or v1.1.6 implementation.
 
 - Merge readiness: no
 
