@@ -166,6 +166,27 @@ publicRawCurlLineCountPolicyJson: 82
 chatgptProWebRawStatus: stale_or_parser_discrepancy
 crossSourceDiscrepancyStatus: recorded_not_silently_ignored
 
+## GitHub Files UI / Public Raw / Byte Scan Discrepancy Boundary
+
+githubFilesUiWarningStatus: observed_by_chatgpt_pro_web_review_for_PR152_docs
+publicRawLineStructureStatusBefore: collapsed_markdown_lines_observed_by_chatgpt_pro_web_review
+publicRawCurlStatus: pass
+publicRawCurlLineCountBefore: 277
+publicRawCurlLineCountAfter: 298
+publicRawHasSourceEvidenceTableAfter: true
+publicRawHasDecisionMatrixTableAfter: true
+publicRawHasRiskRegisterTableAfter: true
+codexLocalCheckoutScanStatus: pass
+githubContentsApiScanStatus: pass
+ghPrDiffPatchScanStatus: pass
+rawFileByteScanStatus: pass
+detectedCodePoints: none
+lineEndingStatus: LF
+crossSourceDiscrepancyStatus: recorded_not_silently_ignored
+governanceEvidenceReadabilityStatus: public_raw_verified_markdown_tables_and_fields
+
+GitHub Files UI warning was observed by ChatGPT Pro Web review for PR #152 docs. Public raw rendering showed collapsed Markdown line structure in ChatGPT Pro Web review. Codex curl/local/API/patch byte sources must verify actual line structure. This repair is evidence readability / structure only. This repair does not authorize PR #151 merge, undraft, active QG rollout, runtime, PR #144 repair, PR #127 repair, or v1.1.6 implementation. Merge readiness: no.
+
 ## JS Shebang / Newline / Execution Integrity Boundary
 
 executionIntegrityBoundaryStatus: pass
