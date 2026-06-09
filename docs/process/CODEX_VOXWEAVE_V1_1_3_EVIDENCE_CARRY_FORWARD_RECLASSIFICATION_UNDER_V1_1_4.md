@@ -24,6 +24,39 @@ v1.1.5 implementation.
 | scripts/codex-local-quality-gate.mjs | HARNESS_VERSION v1.1.4 | active local gate evidence | no script change in this PR |
 | PR #136 | MERGED | workflow compatibility rollout evidence | not v1.1.5 implementation |
 | PR #139 | OPEN draft, QG SUCCESS | completed post-merge sentinel evidence | not merge evidence |
+| PR #140 | OPEN draft, QG SUCCESS | completed docs-only v1.1.3 carry-forward reclassification evidence | not runtime, active QG integration, v1.1.5, or merge evidence |
+
+pr140NaturalQualityGateConclusion: COMPLETED / SUCCESS
+pr140QualityGateTerminalStatus: completed
+pr140Node20WarningStatus: cleared_or_not_observed
+pr140EvidenceStatus: completed_docs_only_v113_carry_forward_reclassification_evidence
+sentinelDependencyStatus: PR139_completed_post_merge_sentinel_evidence_preserved
+mergeReadinessClaimStatus: no
+runtimeReadinessClaimStatus: no
+activeQGDiagnosticIntegrationStatus: not_authorized
+v115ImplementationStatus: not_started
+
+PR #140 natural quality-gate succeeded. The success is docs-only
+reclassification evidence. The success does not authorize runtime, active QG
+diagnostic integration, v1.1.5 implementation, merge readiness, PR #137
+approval, PR #138 approval, or PR #127 repair. PR #130 and PR #131 remain
+adapter / acceptance evidence only, not active QG integration.
+
+githubFilesUiWarningStatus: observed_by_chatgpt_pro_web_review_for_PR140_docs
+codexLocalCheckoutScanStatus: pass
+githubContentsApiScanStatus: pass
+ghPrDiffPatchScanStatus: pass
+rawFileByteScanStatus: pass
+detectedCodePoints: none
+lineEndingStatus: LF
+crossSourceDiscrepancyStatus: recorded_not_silently_ignored
+publicationCleanlinessStatus: provisional_until_next_pr_files_ui_observation
+
+PR #140 Files UI warning was observed by ChatGPT Pro Web review. Codex
+byte-level local checkout, GitHub Contents API, and PR patch scans did not
+reproduce hidden or bidirectional Unicode. Future reuse of this evidence must
+preserve the discrepancy note unless a later head SHA clears the GitHub Files
+UI warning.
 
 ## Current Active Harness Confirmation
 
@@ -285,9 +318,9 @@ pass/fail semantics, merge-ready semantics, PR #127, PR #137, PR #138, or PR
 
 ## Safe Next Action
 
-safe next action: preserve this draft PR as v1.1.3 evidence carry-forward
-reclassification under v1.1.4 after natural quality-gate reaches a terminal
-state. Do not proceed to runtime, workflow, package, active QG diagnostic
-integration, v1.1.5 implementation, PR #127 repair, PR #137 merge, PR #138
-merge, manual rerun, rebase, comment, review request, PR close, or merge in
-this task.
+safe next action: preserve this draft PR as completed docs-only v1.1.3
+evidence carry-forward reclassification under v1.1.4 after natural
+quality-gate completed successfully. Do not proceed to runtime, workflow,
+package, active QG diagnostic integration, v1.1.5 implementation, PR #127
+repair, PR #137 merge, PR #138 merge, manual rerun, rebase, comment, review
+request, PR close, or merge in this task.
