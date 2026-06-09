@@ -94,11 +94,56 @@ The latest PR #136 quality-gate run completed with SUCCESS and no matching Node
 20 deprecation warning annotations. This clears the warning for the candidate
 run only. It does not authorize merge or rollout.
 
+## PR #137 Self-Run Node 20 Warning Boundary
+
+PR #137 own quality-gate success still emitted a Node 20 deprecation warning.
+That warning does not invalidate PR #136 candidate evidence by itself, because
+PR #137 does not include PR #136 workflow changes. PR #136 candidate run may be
+treated as the Node 24 workflow compatibility candidate evidence. PR #137
+self-run must not be cited as Node 20 warning cleared evidence. PR #137 QG
+success does not authorize workflow rollout. PR #137 QG success does not
+authorize merge. PR #137 QG success does not authorize runtime. Future workflow
+rollout or merge requires a separate explicit rollout / merge-readiness scope.
+
+| Field | Status |
+| --- | --- |
+| pr137SelfQualityGateConclusion | SUCCESS |
+| pr137SelfNode20WarningStatus | observed |
+| pr137SelfWarningActions | actions/checkout@v4, actions/setup-node@v4, actions/upload-artifact@v4 |
+| pr137SelfWarningReason | PR137_docs_only_branch_does_not_include_PR136_workflow_candidate |
+| pr136CandidateNode20WarningStatus | cleared_on_PR136_latest_candidate_run |
+| node20WarningEvidenceBoundary | PR136_candidate_cleared_but_PR137_self_run_warns |
+| workflowRolloutInferenceStatus | not_allowed |
+| mergeInferenceStatus | not_allowed |
+
 ## GitHub Files UI / Byte Scan Discrepancy Carry-forward
 
 PR #136 records GitHub Files UI / byte scan discrepancy as
 governance-significant. The discrepancy is carried forward here as evidence
 boundary, not as runtime, workflow rollout, or merge evidence.
+
+## PR #137 GitHub Files UI / Byte Scan Cross-Source Discrepancy
+
+GitHub Files UI warning was observed by ChatGPT Pro Web review for PR #137 docs.
+Codex byte-level sources must not be silently converted into a simple pass if
+GitHub Files UI still shows warning. The discrepancy does not authorize workflow
+changes. The discrepancy does not authorize runtime. The discrepancy does not
+authorize package or lockfile changes. The discrepancy does not authorize active
+QG diagnostic integration. The discrepancy does not authorize merge.
+
+| Field | Status |
+| --- | --- |
+| githubFilesUiWarningStatus | observed_by_chatgpt_pro_web_review_for_PR137_docs |
+| codexLocalCheckoutScanStatus | pass |
+| githubContentsApiScanStatus | pass |
+| ghPrDiffPatchScanStatus | pass |
+| rawFileByteScanStatus | pass |
+| detectedCodePoints | none |
+| lineEndingStatus | LF |
+| lineCountStatus | consistent |
+| crossSourceDiscrepancyStatus | recorded_not_silently_ignored |
+| publicationCleanlinessStatus | provisional_until_next_pr_files_ui_observation |
+| governanceAcceptanceStatus | pending_until_qg_success_after_discrepancy_record |
 
 ## PR Body Version Consistency Evidence
 
