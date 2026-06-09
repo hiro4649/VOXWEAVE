@@ -187,13 +187,17 @@ HARNESS_VERSION mismatch is a hard blocker for naive merge or acceptance.
 - riskRegisterTableStatus: pass
 - publicRawLineCountBefore: 19_observed_by_chatgpt_pro_web_review
 - lineCountBefore: 353_codex_byte_sources
-- lineCountAfter: 362_codex_byte_sources
+- lineCountAfter: 366_codex_byte_sources
+- publicRawLineCountAfter: 366_verified_exact_public_raw_head
+- publicRawHasSourceEvidenceTableAfter: true
+- publicRawHasDecisionMatrixTableAfter: true
+- publicRawHasRiskRegisterTableAfter: true
 - lineStructureStatusBefore: collapsed_markdown_lines_observed_by_chatgpt_pro_web_review
 - lineStructureStatusAfter: normalized_markdown_tables_and_fields
 - lineEndingStatus: LF
 - crossSourceDiscrepancyStatus: recorded_not_silently_ignored
 - semanticChangeStatus: no_change
-- governanceEvidenceReadabilityStatus: final_readable_markdown_tables_and_fields
+- governanceEvidenceReadabilityStatus: public_raw_verified_markdown_tables_and_fields
 
 GitHub Files UI warning was observed by ChatGPT Pro Web review for PR #150 docs.
 Raw/public docs rendering showed weak line structure / collapsed Markdown.
