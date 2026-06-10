@@ -88,11 +88,57 @@ productVerificationExecutionChangeStatus: no_change
 
 No product verification execution is added or changed.
 
+## Product Verification Evidence
+
+changed product surface:
+`src/common/textNormalization.js` and `src/common/textNormalizationDictionary.js` are non-runtime helper candidates only and are not imported by current main runtime, server, or adapter paths in this PR.
+
+product runtime execution:
+not executed
+
+product verification command:
+not applicable in this scope; product runtime verification is blocked because this PR is a non-runtime replacement candidate and no runtime, server, or adapter connection is authorized.
+
+why no product runtime execution:
+No product runtime tests were executed because this PR does not connect the helper to runtime, server routes, adapters, endpoint configuration, TTS, ASR, Live2D, benchmarks, models, APIs, or datasets.
+
+manual confirmation boundary:
+manual_confirmation_required is recorded as external product verification scope, not satisfied by this PR.
+
+remote product baseline boundary:
+remote product baseline is not executed or mutated by this PR.
+
+formal evidence precedence boundary:
+self-check evidence is candidate evidence only and must not override product verification failure or manual confirmation requirements.
+
+safe summary only boundary:
+No raw logs, endpoints, tokens, secrets, private paths, or raw artifacts are used or exposed.
+
 ## Remote Diagnostic Boundary
 
 remoteDiagnosticExecutionChangeStatus: no_change
 
 No remote diagnostic execution is added or changed.
+
+## Remote Diagnostic Evidence
+
+remote npm diagnostic execution:
+not executed in this PR.
+
+remote diagnostic normalization:
+not changed.
+
+manual confirmation boundary:
+manual_confirmation_required remains external diagnostic scope and is not converted to pass.
+
+safe metadata visibility:
+PR #151 diagnostic-only replacement improves classification visibility only; it does not execute remote diagnostics or change status.
+
+raw leakage boundary:
+No raw logs, endpoint values, tokens, secrets, private paths, or raw artifact contents are exposed.
+
+repair boundary:
+This PR does not attempt to satisfy remote diagnostic manual confirmation and remains candidate evidence only unless QG accepts the evidence boundary.
 
 ## Pass / Fail Semantics Boundary
 
@@ -147,11 +193,17 @@ No runtime, product verification, remote diagnostic execution, benchmark, model 
 previous related QG evidence:
 PR #149, PR #150, PR #153, PR #154, and PR #155 latest QG results were COMPLETED / SUCCESS. PR #127 latest QG was COMPLETED / FAILURE with safe failure classes recorded.
 
+previous failure safe summary:
+productVerificationStatus=fail; productVerificationEvidenceStatus=fail; remoteProductBaselineStatus=manual_confirmation_required; remoteNpmDiagnosticStatus=manual_confirmation_required; remoteProductEvidenceExecutionStatus=fail; formalEvidencePrecedenceStatus=fail; remoteNpmDiagnosticNormalizationStatus=fail; targetQualityScoreStatus=fail; report.status=fail; exit code 1
+
+repair type:
+PR body / docs evidence completeness repair only.
+
 expected QG behavior:
-This candidate should pass only if it remains bounded to allowed files, offline self-checks, no runtime connection, no active QG connection, no workflow/package/script semantics mutation beyond the allowed self-check addition, no product verification execution change, no remote diagnostic execution change, and no readiness claim.
+If QG permits candidate evidence with explicit external verification boundaries, failure may narrow or clear. If not, PR #156 remains failed replacement candidate evidence and no further repair is authorized.
 
 manual rerun status:
-no_manual_rerun
+No manual rerun.
 
 merge readiness:
 no
