@@ -74,8 +74,27 @@ diagnostic execution, or v1.1.8 implementation.
 
 ## Fresh Pull Request Quality Gate Evidence
 
-This sentinel is expected to run natural QG after push. Manual rerun is not
-allowed.
+This sentinel ran natural QG after push. Manual rerun was not used.
+
+## PR #180 Natural Quality Gate Completion Evidence
+
+pr180HeadSha: 05c2fd82f8036ea07df840d4e74e1d27a7af9fd1
+pr180NaturalQualityGateTerminalStatus: completed
+pr180NaturalQualityGateConclusion: COMPLETED / SUCCESS
+manualRerunStatus: no_manual_rerun
+postMergeSentinelEvidenceStatus: completed_post_merge_sentinel_evidence
+schemaOnlyProfileStateAfter: merged_schema_only_docs_json_profile
+runtimeReadinessClaimed: no
+mergeReadiness: no
+fixtureValidatorAllowedInThisTask: no
+runtimeExecutionAllowedInThisTask: no
+v118ImplementationStatus: not_started
+
+PR #180 natural QG succeeded after PR #176 merged the schema-only profile into
+main. This validates only the schema-only profile post-merge sentinel evidence.
+It does not authorize fixture validator work, runtime, PR #173 repair, real TTS,
+ASR, Live2D, raw audio, endpoint config, product verification execution, or
+remote diagnostic execution. Merge readiness remains no.
 
 ## Outcome Contract Boundary
 
