@@ -80,12 +80,30 @@ This sentinel records that PR #182 was merged and that the post-merge boundary
 remains constrained. It is not a new implementation step and is not a runtime
 readiness artifact.
 
-## Fresh Pull Request Quality Gate Evidence
+## PR #184 Natural Quality Gate Completion Evidence
 
-This sentinel PR is expected to run a fresh pull request quality gate after
-push. The quality gate is evidence for this docs-only sentinel PR only. It does
-not retroactively authorize active QG rollout, fixture E2E retry, runtime, or
-remaining PR merges.
+| field | value |
+| --- | --- |
+| pr184HeadSha | 7b677114d4023f9b0a5df644d989d0bb4f2b361e |
+| pr184NaturalQualityGateTerminalStatus | completed |
+| pr184NaturalQualityGateConclusion | COMPLETED / SUCCESS |
+| manualRerunStatus | no_manual_rerun |
+| postMergeSentinelEvidenceStatus | completed_post_merge_sentinel_evidence |
+| readOnlyVerifierCapsuleStateAfter | present_on_main_as_read_only_schema_verifier |
+| runtimeReadinessClaimed | no |
+| mergeReadiness | no |
+| activeQGIntegrationAllowedInThisTask | no |
+| fixtureE2ERetryAllowedInThisTask | no |
+| runtimeExecutionAllowedInThisTask | no |
+| v118ImplementationStatus | not_started |
+
+PR #184 natural QG succeeded after PR #182 merged the read-only schema verifier
+capsule into main. This sentinel validates only the read-only schema verifier
+capsule post-merge state. This sentinel does not authorize active QG
+integration. This sentinel does not authorize fixture E2E retry. This sentinel
+does not open runtime. This sentinel does not repair PR #173. This sentinel does
+not authorize real TTS, ASR, Live2D, raw audio, endpoint config, product
+verification execution, or remote diagnostic execution. Merge readiness: no.
 
 ## Outcome Contract Boundary
 
@@ -180,7 +198,7 @@ assumption and is not implemented here.
 
 ## Safe Next Action
 
-Preserve this sentinel as post-merge evidence if its pull request quality gate
-succeeds. Do not proceed to active QG integration, fixture E2E retry, runtime,
-product verification execution, remote diagnostic execution, or v1.1.8
-implementation without a separate explicit owner scope.
+Preserve this sentinel as completed post-merge evidence. Do not proceed to
+active QG integration, fixture E2E retry, runtime, product verification
+execution, remote diagnostic execution, or v1.1.8 implementation without a
+separate explicit owner scope.
