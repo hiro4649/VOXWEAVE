@@ -1,0 +1,11 @@
+{
+  "schema": "iris_adapter_packet_v1",
+  "adapter_kind": "subtitle",
+  "request_id": "fixture-subtitle-001",
+  "utterance_id": "utterance-001",
+  "render_group_id": "render-group-001",
+  "subtitle_text": "Hello from the offline fixture.",
+  "subtitle_language": "en",
+  "duration_ms": 1800,
+  "dry_run": true
+}

@@ -1,0 +1,12 @@
+{
+  "schema": "iris_adapter_packet_v1",
+  "adapter_kind": "tts",
+  "request_id": "fixture-tts-001",
+  "utterance_id": "utterance-001",
+  "render_group_id": "render-group-001",
+  "text": "Hello from the offline fixture.",
+  "language": "en",
+  "emotion": "warm",
+  "duration_ms": 1800,
+  "dry_run": true
+}

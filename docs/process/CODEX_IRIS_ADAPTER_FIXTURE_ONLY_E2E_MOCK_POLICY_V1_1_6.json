@@ -1,0 +1,55 @@
+{
+  "currentActiveHarness": "v1.1.6",
+  "futureHarnessAssumption": "v1.1.7 planning only",
+  "fixtureOnlyStatus": true,
+  "runtimeExecutionAllowed": false,
+  "serverStartAllowed": false,
+  "apiCallAllowed": false,
+  "ttsEngineCallAllowed": false,
+  "asrEngineCallAllowed": false,
+  "live2dRendererCallAllowed": false,
+  "rawAudioAllowed": false,
+  "endpointConfigAllowed": false,
+  "runtimeReadinessClaimed": false,
+  "mergeReadiness": false,
+  "allowedFixtureKinds": [
+    "tts",
+    "subtitle",
+    "live2d"
+  ],
+  "forbiddenInputKeys": [
+    "canonical_envelope",
+    "command",
+    "raw_command",
+    "world_command",
+    "endpoint",
+    "renderer_endpoint",
+    "model_path",
+    "internal_model_path",
+    "raw_audio",
+    "raw_audio_body",
+    "secret",
+    "token",
+    "password"
+  ],
+  "forbiddenOutputKeys": [
+    "canonical_envelope",
+    "command",
+    "raw_command",
+    "world_command",
+    "endpoint",
+    "renderer_endpoint",
+    "model_path",
+    "internal_model_path",
+    "raw_audio",
+    "raw_audio_body",
+    "secret",
+    "token",
+    "password"
+  ],
+  "safeOutputSchemas": [
+    "voxweave_fixture_e2e_mock_response_v1",
+    "voxweave_fixture_render_group_v1",
+    "voxweave_fixture_response_summary_v1"
+  ]
+}
