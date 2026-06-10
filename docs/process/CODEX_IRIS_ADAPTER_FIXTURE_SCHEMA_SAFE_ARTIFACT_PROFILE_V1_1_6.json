@@ -1,0 +1,187 @@
+{
+  "currentActiveHarness": "v1.1.6",
+  "futureHarnessAssumption": "v1.1.7 planning only",
+  "schemaOnlyStatus": true,
+  "fixtureScriptAllowed": false,
+  "runtimeExecutionAllowed": false,
+  "serverStartAllowed": false,
+  "apiCallAllowed": false,
+  "ttsEngineCallAllowed": false,
+  "asrEngineCallAllowed": false,
+  "live2dRendererCallAllowed": false,
+  "rawAudioAllowed": false,
+  "endpointConfigAllowed": false,
+  "canonicalEnvelopeAllowed": false,
+  "commandFieldsAllowed": false,
+  "secretEndpointModelPathAllowed": false,
+  "runtimeReadinessClaimed": false,
+  "mergeReadiness": false,
+  "schemas": {
+    "iris_adapter_packet_v1_minimal_fixture_envelope": {
+      "required": [
+        "schema",
+        "adapter_kind",
+        "request_id",
+        "utterance_id",
+        "render_group_id",
+        "duration_ms",
+        "dry_run"
+      ],
+      "properties": {
+        "schema": "iris_adapter_packet_v1",
+        "adapter_kind": [
+          "tts",
+          "subtitle",
+          "live2d"
+        ],
+        "request_id": "safe_string",
+        "utterance_id": "safe_string",
+        "render_group_id": "safe_string",
+        "duration_ms": "positive_integer",
+        "dry_run": true
+      }
+    },
+    "tts_fixture_profile": {
+      "adapter_kind": "tts",
+      "allowed_fields": [
+        "schema",
+        "adapter_kind",
+        "request_id",
+        "utterance_id",
+        "render_group_id",
+        "text",
+        "language",
+        "emotion",
+        "duration_ms",
+        "dry_run"
+      ],
+      "real_tts_allowed": false,
+      "audio_generation_allowed": false
+    },
+    "subtitle_fixture_profile": {
+      "adapter_kind": "subtitle",
+      "allowed_fields": [
+        "schema",
+        "adapter_kind",
+        "request_id",
+        "utterance_id",
+        "render_group_id",
+        "subtitle_text",
+        "subtitle_language",
+        "duration_ms",
+        "dry_run"
+      ],
+      "runtime_subtitle_execution_allowed": false
+    },
+    "live2d_fixture_profile": {
+      "adapter_kind": "live2d",
+      "allowed_fields": [
+        "schema",
+        "adapter_kind",
+        "request_id",
+        "utterance_id",
+        "render_group_id",
+        "motion_style",
+        "emotion",
+        "duration_ms",
+        "dry_run"
+      ],
+      "renderer_call_allowed": false
+    },
+    "response_summary_safe_shape": {
+      "required": [
+        "schema",
+        "safe_summary_only",
+        "fixture_only",
+        "runtime_executed",
+        "server_started",
+        "api_called"
+      ],
+      "fixed_false_fields": [
+        "runtime_executed",
+        "server_started",
+        "api_called",
+        "tts_engine_called",
+        "asr_engine_called",
+        "live2d_renderer_called",
+        "raw_audio_processed",
+        "model_downloaded",
+        "benchmark_executed"
+      ]
+    },
+    "render_group_safe_shape": {
+      "required": [
+        "schema",
+        "render_group_id",
+        "safe_summary_only"
+      ],
+      "status_fields": [
+        "tts_received",
+        "subtitle_received",
+        "live2d_received"
+      ]
+    },
+    "mouth_cue_safe_summary_shape": {
+      "required": [
+        "schema",
+        "cue_count",
+        "duration_ms",
+        "safe_summary_only"
+      ],
+      "raw_audio_allowed": false
+    },
+    "subtitle_timing_safe_summary_shape": {
+      "required": [
+        "schema",
+        "segment_count",
+        "duration_ms",
+        "overflow_risk",
+        "safe_summary_only"
+      ]
+    },
+    "live2d_sync_cue_safe_summary_shape": {
+      "required": [
+        "schema",
+        "motion_style",
+        "track_count",
+        "renderer_call_performed",
+        "safe_summary_only"
+      ],
+      "renderer_call_performed": false
+    },
+    "unsafe_field_rejection_list": [
+      "canonical_envelope",
+      "command",
+      "commands",
+      "raw_audio",
+      "rawAudio",
+      "audio_body",
+      "audioBuffer",
+      "endpoint",
+      "renderer_endpoint",
+      "model_path",
+      "secret",
+      "token",
+      "api_key",
+      "private_path",
+      "phoneme_debug"
+    ],
+    "forbidden_output_fields": [
+      "canonical_envelope",
+      "command",
+      "commands",
+      "raw_audio",
+      "rawAudio",
+      "audio_body",
+      "audioBuffer",
+      "endpoint",
+      "renderer_endpoint",
+      "model_path",
+      "secret",
+      "token",
+      "api_key",
+      "private_path",
+      "phoneme_debug"
+    ]
+  }
+}
