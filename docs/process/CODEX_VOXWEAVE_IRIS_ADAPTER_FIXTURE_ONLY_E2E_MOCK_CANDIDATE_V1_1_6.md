@@ -231,6 +231,50 @@ download, dataset use, package install, npm registry call, product verification
 execution, remote diagnostic execution, PR repair, and v1.1.7 implementation
 are forbidden and not run.
 
+## Product Verification Evidence
+
+changed product surface:
+Fixture-only IRIS adapter packet mock scripts, fixture policy JSON, fixture
+packets, and docs only. No runtime route, server route, package, workflow,
+endpoint config, TTS, ASR, Live2D, model, benchmark, dataset, product
+verification execution, or remote diagnostic execution is changed.
+
+product runtime execution:
+not executed
+
+product verification command:
+not applicable in this scope; product runtime verification is blocked because
+PR #173 is a fixture-only candidate and runtime return gate remains
+documented_not_open.
+
+why no product runtime execution:
+No product runtime tests were executed because this PR does not start server,
+call HTTP endpoints, execute real TTS, ASR, or Live2D, process raw audio,
+download models, use datasets, run benchmarks, or connect endpoint
+configuration.
+
+manual confirmation boundary:
+manual_confirmation_required is not satisfied by fixture-only evidence. This PR
+records fixture-only candidate evidence only.
+
+fixture-only boundary:
+Fixture packets are static safe inputs used for offline self-check only. They
+are not IRIS runtime traffic and are not product verification execution.
+
+safe artifact boundary:
+The self-check output is safe summary only and must not include raw audio,
+canonical_envelope, command fields, endpoint values, renderer endpoints, model
+paths, secrets, tokens, raw payloads, or phoneme debug logs.
+
+formal evidence precedence boundary:
+Fixture self-check evidence must not override product verification failure,
+external verification requirements, runtime return gate closure, or manual
+confirmation requirements.
+
+safe summary only boundary:
+No raw logs, endpoints, tokens, secrets, private paths, raw audio, raw
+artifacts, or production data are exposed.
+
 ## Quality Gate Evidence
 
 previous related QG evidence:
@@ -245,6 +289,18 @@ no manual rerun
 
 merge readiness:
 no
+
+previous failure safe summary:
+productVerificationStatus=fail; targetQualityScoreStatus=fail;
+report.status=fail; exit code 1.
+
+repair type:
+PR body / docs evidence boundary repair only.
+
+expected post-edit behavior:
+If QG permits fixture-only candidate evidence with explicit product verification
+boundary, failure may clear. If not, PR #173 remains failed fixture-only
+candidate evidence and no further repair is authorized.
 
 ## Decision Matrix
 
