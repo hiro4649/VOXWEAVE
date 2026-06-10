@@ -1,0 +1,18 @@
+{
+  "currentActiveHarness": "v1.1.7",
+  "futureHarnessAssumption": "v1.1.8 planning only",
+  "readOnlyVerifierCapsule": true,
+  "fixtureScriptAllowed": false,
+  "runtimeExecutionAllowed": false,
+  "serverStartAllowed": false,
+  "apiCallAllowed": false,
+  "ttsEngineCallAllowed": false,
+  "asrEngineCallAllowed": false,
+  "live2dRendererCallAllowed": false,
+  "rawAudioAllowed": false,
+  "endpointConfigAllowed": false,
+  "productVerificationExecutionAllowed": false,
+  "remoteDiagnosticExecutionAllowed": false,
+  "runtimeReadinessClaimed": false,
+  "mergeReadiness": false
+}
