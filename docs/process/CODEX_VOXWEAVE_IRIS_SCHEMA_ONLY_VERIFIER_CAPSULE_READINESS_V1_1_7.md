@@ -33,6 +33,44 @@ runtimeReadinessClaimed: no
 mergeReadiness: no
 v118ImplementationStatus: not_started
 
+## PR #181 QG Failure Evidence Boundary
+
+pr181InitialQGConclusion: COMPLETED / FAILURE
+initialFailureSafeSummary: report.status=fail; targetQualityScoreStatus=fail; exit code 1
+repairType: PR body / docs evidence contract repair only
+manualRerunStatus: no_manual_rerun
+runtimeReadinessClaimed: no
+mergeReadiness: no
+
+The initial PR #181 quality gate failure was classified from safe metadata only.
+The blocking status was testCoverageEvidenceStatus, surfaced through
+targetQualityScoreStatus. This repair records exact evidence fields and
+boundaries only. It does not change pass/fail semantics, targetQualityScore
+semantics, process exit behavior, mergeReady semantics, workflow, package,
+scripts, source, tests, product verification execution, or remote diagnostic
+execution.
+
+This repair does not create a verifier script. This repair does not execute
+schema validation. This repair does not open runtime. This repair does not
+repair PR #173. This repair does not authorize fixture validator, TTS, ASR,
+Live2D, raw audio, endpoint config, product verification execution, or remote
+diagnostic execution. Merge readiness: no.
+
+## v1.1.7 Evidence Contract Boundary
+
+decisionCapsuleAuthorityStatus: preserved
+outcomeContractStatus: preserved
+verifierCapsuleStatus: planning_only
+artifactConsistencyStatus: planning_only
+deltaOnlyFinalizerStatus: preserved
+safeFailureReaderStatus: preserved
+
+The v1.1.7 required status surface remains a planning boundary here. The
+Decision Capsule remains authoritative. The Outcome Contract is not executed.
+The Verifier Capsule is not implemented. Artifact Consistency is represented as
+schema-only planning evidence. The finalizer must remain delta-only. The Safe
+Failure Reader must use safe artifacts only.
+
 ## Source Evidence
 
 | source | role | evidence class | status | limitation |
