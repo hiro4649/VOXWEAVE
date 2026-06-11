@@ -1,0 +1,78 @@
+{
+  "policyId": "CODEX_IRIS_SCHEMA_VERIFIER_GUIDED_FIXTURE_RETRY_POLICY_V1_1_7",
+  "title": "IRIS Schema-Verifier-Guided Fixture Retry Policy v1.1.7",
+  "currentActiveHarness": "v1.1.7",
+  "futureHarnessAssumption": "v1.1.8 planning only",
+  "status": "candidate-only / fixture-only / schema-verifier-guided / no-runtime",
+  "allowedInputs": {
+    "schemaProfilePath": "docs/process/CODEX_IRIS_ADAPTER_FIXTURE_SCHEMA_SAFE_ARTIFACT_PROFILE_V1_1_6.json",
+    "verifierCapsuleScript": "scripts/codex-iris-schema-only-verifier-capsule.mjs",
+    "fixtureDirectory": "docs/fixtures/iris-schema-verifier-guided-fixture-retry"
+  },
+  "requiredFixtureFiles": [
+    "tts-packet.json",
+    "subtitle-packet.json",
+    "live2d-packet.json",
+    "unsafe-packet.json"
+  ],
+  "requiredAdapterKinds": [
+    "tts",
+    "subtitle",
+    "live2d"
+  ],
+  "requiredSafeArtifacts": [
+    "response_summary",
+    "render_group",
+    "mouth_cue",
+    "subtitle_timing",
+    "live2d_sync_cue"
+  ],
+  "fixedFalseRuntimeFlags": [
+    "runtime_executed",
+    "server_started",
+    "api_called",
+    "tts_engine_called",
+    "asr_engine_called",
+    "live2d_renderer_called",
+    "raw_audio_processed",
+    "model_downloaded",
+    "benchmark_executed"
+  ],
+  "unsafeFieldNames": [
+    "canonical_envelope",
+    "command",
+    "commands",
+    "raw_audio",
+    "rawAudio",
+    "audio_body",
+    "audioBuffer",
+    "endpoint",
+    "renderer_endpoint",
+    "model_path",
+    "secret",
+    "token"
+  ],
+  "boundaries": {
+    "pr173DirectMutationAllowed": false,
+    "runtimeExecutionAllowed": false,
+    "serverStartAllowed": false,
+    "apiCallAllowed": false,
+    "ttsEngineCallAllowed": false,
+    "asrEngineCallAllowed": false,
+    "live2dRendererCallAllowed": false,
+    "rawAudioAllowed": false,
+    "endpointConfigAllowed": false,
+    "productVerificationExecutionAllowed": false,
+    "remoteDiagnosticExecutionAllowed": false,
+    "workflowChangeAllowed": false,
+    "packageChangeAllowed": false,
+    "mergeReadinessClaimed": false
+  },
+  "safeOutputContract": {
+    "safeSummaryOnly": true,
+    "rawFixtureValuesAllowedInReport": false,
+    "rawPathsAllowedInReport": false,
+    "countOnlyFindings": true,
+    "failClosedOnUnsafeFixture": true
+  }
+}

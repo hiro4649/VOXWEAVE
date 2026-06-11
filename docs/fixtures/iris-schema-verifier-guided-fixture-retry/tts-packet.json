@@ -1,0 +1,12 @@
+{
+  "schema": "iris_adapter_packet_v1",
+  "adapter_kind": "tts",
+  "request_id": "fixture_request_tts",
+  "utterance_id": "utt_tts_001",
+  "render_group_id": "rg_fixture_001",
+  "text": "Hello from fixture.",
+  "language": "en",
+  "emotion": "neutral",
+  "duration_ms": 1200,
+  "dry_run": true
+}

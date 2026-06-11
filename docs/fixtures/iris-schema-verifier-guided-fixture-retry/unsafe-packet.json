@@ -1,0 +1,15 @@
+{
+  "schema": "iris_adapter_packet_v1",
+  "adapter_kind": "tts",
+  "request_id": "fixture_request_unsafe",
+  "utterance_id": "utt_unsafe_001",
+  "render_group_id": "rg_fixture_unsafe",
+  "text": "Unsafe fixture should be rejected.",
+  "language": "en",
+  "duration_ms": 1200,
+  "dry_run": true,
+  "canonical_envelope": {
+    "blocked": true
+  },
+  "endpoint": "blocked_endpoint_value"
+}

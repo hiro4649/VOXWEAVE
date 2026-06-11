@@ -1,0 +1,11 @@
+{
+  "schema": "iris_adapter_packet_v1",
+  "adapter_kind": "subtitle",
+  "request_id": "fixture_request_subtitle",
+  "utterance_id": "utt_subtitle_001",
+  "render_group_id": "rg_fixture_001",
+  "subtitle_text": "Hello from fixture.",
+  "subtitle_language": "en",
+  "duration_ms": 1200,
+  "dry_run": true
+}

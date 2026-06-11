@@ -1,0 +1,11 @@
+{
+  "schema": "iris_adapter_packet_v1",
+  "adapter_kind": "live2d",
+  "request_id": "fixture_request_live2d",
+  "utterance_id": "utt_live2d_001",
+  "render_group_id": "rg_fixture_001",
+  "motion_style": "idle",
+  "emotion": "neutral",
+  "duration_ms": 1200,
+  "dry_run": true
+}
