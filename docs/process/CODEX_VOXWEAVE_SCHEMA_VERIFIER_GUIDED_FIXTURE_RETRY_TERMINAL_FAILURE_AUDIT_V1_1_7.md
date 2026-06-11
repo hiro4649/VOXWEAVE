@@ -32,6 +32,32 @@ or authorize any follow-on implementation.
 | failure evidence class | same-head candidate QG failure evidence |
 | acceptance audit allowed | no |
 
+## Current Audited PR Source-of-Truth
+
+| Field | Status |
+| --- | --- |
+| auditedPrNumber | 192 |
+| auditedPrCurrentHeadSha | 238c0b219c8a01918f216c6e6fc84c20d776e42a |
+| auditedPrCurrentState | OPEN / draft / unmerged |
+| auditedPrCurrentQualityGateConclusion | COMPLETED / FAILURE |
+| auditedPrFailureSafeSummary | productVerificationStatus=fail; targetQualityScoreStatus=fail; report.status=fail; exit code 1 |
+| auditedPrChangedFileCount | 9 |
+| auditedPrChangedFilesBoundaryStatus | allowed_candidate_surface |
+| auditPrNumber | 193 |
+| auditPrHeadShaBeforeRepair | 7e852580c8d545811c7c74066e8fb11640db31be |
+| stalePrAuditStatusBeforeRepair | fail |
+| stalePrAuditRepairType | body_docs_source_of_truth_refresh_only |
+| manualRerunStatus | no_manual_rerun |
+| mergeReadiness | no |
+
+## Stale PR Audit Boundary
+
+The audit target is PR #192 current source-of-truth, not a remembered
+conversation SHA. This repair does not modify PR #192. This repair does not
+rerun PR #192. This repair does not repair PR #192. This repair does not repair
+PR #173. This repair does not change QG semantics. This repair does not
+authorize runtime, fixture retry, product verification execution, or merge.
+
 ## Preserved Local Evidence
 
 | Evidence | Status |
@@ -84,6 +110,43 @@ remains blocked because same-head quality-gate success was not achieved.
 | acceptanceAuditStatus | not_allowed_after_candidate_qg_failure |
 | terminalFailureAuditStatus | completed |
 | safeNextAction | preserve_failure_evidence_only |
+
+## Test Coverage Evidence
+
+changed area:
+`docs/process/CODEX_VOXWEAVE_SCHEMA_VERIFIER_GUIDED_FIXTURE_RETRY_TERMINAL_FAILURE_AUDIT_V1_1_7.md` only, plus PR body source-of-truth refresh.
+
+test command:
+`git diff --check`; `git diff --cached --check`; changed-file boundary scan;
+hidden/bidirectional Unicode scan; negative readiness claim scan; raw log /
+secret / endpoint / token scan.
+
+what the test covers:
+docs-only stale audit repair for PR #192 terminal failure audit; no PR #192
+mutation; no PR #173 mutation; no runtime; no product verification execution;
+no remote diagnostic execution.
+
+edge cases / failure paths / reason if no test:
+No runtime or product tests were executed because this task updates only docs
+and PR body audit evidence and does not touch source, scripts, package,
+workflow, runtime, endpoints, TTS, ASR, Live2D, product verification, or remote
+diagnostics.
+
+## Quality Gate Evidence
+
+previous related QG evidence:
+PR #192 QG FAILURE; PR #193 QG FAILURE with stalePrAuditStatus=fail; PR #190
+QG SUCCESS; PR #191 QG SUCCESS.
+
+expected QG behavior:
+QG should pass if stale audit source-of-truth is refreshed, exact evidence
+fields are present, and no forbidden readiness or runtime claim is introduced.
+
+manual rerun status:
+no_manual_rerun
+
+merge readiness:
+no
 
 ## Non Goals
 
