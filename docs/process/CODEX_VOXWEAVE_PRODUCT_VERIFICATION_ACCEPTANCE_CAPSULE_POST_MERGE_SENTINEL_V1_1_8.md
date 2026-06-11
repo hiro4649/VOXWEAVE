@@ -150,6 +150,22 @@ this sentinel as post-merge evidence. Do not merge remaining PRs, repair failed
 PRs, execute product verification, execute runtime, or execute remote
 diagnostics without a separate explicit owner instruction.
 
+## PR Sentinel Natural Quality Gate Completion Evidence
+
+| field | value |
+| --- | --- |
+| sentinelHeadSha | 6993ea2b6760138508ad5608b6f5059ef78814d0 |
+| sentinelNaturalQualityGateTerminalStatus | completed |
+| sentinelNaturalQualityGateConclusion | COMPLETED / SUCCESS |
+| manualRerunStatus | no_manual_rerun |
+| postMergeSentinelEvidenceStatus | completed_post_merge_sentinel_evidence |
+| productVerificationAcceptanceCapsuleStateAfter | present_on_main_as_safe_metadata_only_capsule |
+| runtimeReadinessClaimed | no |
+| mergeReadiness | no |
+| productVerificationExecutionAllowedInThisTask | no |
+| runtimeExecutionAllowedInThisTask | no |
+| remoteDiagnosticExecutionAllowedInThisTask | no |
+
 ## Required Decisions
 
 | field | decision |
