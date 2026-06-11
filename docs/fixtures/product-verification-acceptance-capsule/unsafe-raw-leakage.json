@@ -1,0 +1,23 @@
+{
+  "currentActiveHarness": "v1.1.8",
+  "terminalAction": "create_pr_only",
+  "routeId": "unsafe_raw_leakage_fixture",
+  "sourcePr": "PR #205",
+  "qgConclusion": "FAILURE",
+  "reportStatus": "safe_summary_only",
+  "targetQualityScoreStatus": "pass",
+  "productVerificationStatus": "not_executed_in_this_task",
+  "productVerificationEvidenceStatus": "accepted_for_mode",
+  "manualConfirmationStatus": "satisfied",
+  "ownerScopeStatus": "satisfied",
+  "safeArtifactStatus": "present",
+  "evidenceCapsuleStatus": "fresh",
+  "artifactConsistencyStatus": "pass",
+  "safeFailureReaderStatus": "pass",
+  "runtimeSmokeEvidenceStatus": "failed_candidate_evidence",
+  "failedRouteMappingStatus": "mapped",
+  "noExecutionBoundaryStatus": "pass",
+  "sameHeadStatus": "pass",
+  "freshnessStatus": "current",
+  "rawLogPresent": true
+}

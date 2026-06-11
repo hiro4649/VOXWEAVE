@@ -1,0 +1,41 @@
+{
+  "currentActiveHarness": "v1.1.8",
+  "productVerificationAcceptanceCapsule": true,
+  "safeMetadataOnly": true,
+  "productVerificationExecutionAllowed": false,
+  "runtimeExecutionAllowed": false,
+  "remoteDiagnosticExecutionAllowed": false,
+  "serverStartAllowed": false,
+  "apiCallAllowed": false,
+  "httpEndpointCallAllowed": false,
+  "adapterEndpointCallAllowed": false,
+  "realTtsAllowed": false,
+  "asrAllowed": false,
+  "live2dRendererAllowed": false,
+  "rawAudioProcessingAllowed": false,
+  "endpointConfigAllowed": false,
+  "tokenAdditionAllowed": false,
+  "secretAdditionAllowed": false,
+  "failedPrRepairAllowed": false,
+  "runtimeReadinessClaimed": false,
+  "productionReadinessClaimed": false,
+  "realTtsReadinessClaimed": false,
+  "asrRuntimeReadinessClaimed": false,
+  "benchmarkExecutionClaimed": false,
+  "mergeReadiness": false,
+  "allowedCapsuleStatuses": [
+    "accepted_candidate_metadata_only",
+    "blocked_manual_confirmation_unsatisfied",
+    "blocked_owner_scope_unsatisfied",
+    "blocked_safe_artifact_missing",
+    "blocked_target_quality_failure",
+    "blocked_raw_leakage_risk",
+    "unknown_preserve_only"
+  ],
+  "allowedTerminalActionRecommendations": [
+    "create_pr_only",
+    "investigate_only",
+    "preserve_only",
+    "stop"
+  ]
+}
