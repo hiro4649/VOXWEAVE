@@ -1,0 +1,11 @@
+{
+  "schema": "iris_adapter_packet_v1",
+  "adapter_kind": "subtitle",
+  "adapter_validation_required": true,
+  "trace_id": "trace-safe-subtitle",
+  "event_id": "event-safe-subtitle",
+  "utterance_id": "utterance-safe-subtitle",
+  "subtitle_text": "Safe local subtitle fixture.",
+  "subtitle_language": "en",
+  "duration_ms": 900
+}

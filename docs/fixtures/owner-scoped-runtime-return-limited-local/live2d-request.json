@@ -1,0 +1,15 @@
+{
+  "schema": "iris_adapter_packet_v1",
+  "adapter_kind": "live2d",
+  "adapter_validation_required": true,
+  "trace_id": "trace-safe-live2d",
+  "event_id": "event-safe-live2d",
+  "utterance_id": "utterance-safe-live2d",
+  "line_text": "Safe local Live2D cue fixture.",
+  "language": "en",
+  "motion_cue": {
+    "motion_style": "talk",
+    "expression_hint": "calm"
+  },
+  "duration_ms": 1000
+}

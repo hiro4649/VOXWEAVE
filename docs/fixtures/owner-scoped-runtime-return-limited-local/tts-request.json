@@ -1,0 +1,11 @@
+{
+  "schema": "iris_adapter_packet_v1",
+  "adapter_kind": "tts",
+  "adapter_validation_required": true,
+  "trace_id": "trace-safe-tts",
+  "event_id": "event-safe-tts",
+  "utterance_id": "utterance-safe-tts",
+  "speech_text": "Hello from a safe local loopback fixture.",
+  "language": "en",
+  "duration_ms": 1200
+}

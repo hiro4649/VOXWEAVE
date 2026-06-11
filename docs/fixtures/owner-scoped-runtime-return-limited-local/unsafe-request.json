@@ -1,0 +1,7 @@
+{
+  "schema": "iris_adapter_packet_v1",
+  "adapter_kind": "tts",
+  "adapter_validation_required": true,
+  "speech_text": "Unsafe local fixture should fail closed.",
+  "command": "blocked"
+}
