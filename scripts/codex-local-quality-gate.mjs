@@ -57,6 +57,7 @@ import { V114_STATUS_KEYS, buildV114Report, writeLoopArtifacts } from './codex-v
 import { V115_STATUS_KEYS, buildV115Report } from './codex-v115-trace-kernel.mjs';
 import { OPERATOR_STATUS_KEYS as V116_STATUS_KEYS, buildV116Report } from './codex-decision-capsule.mjs';
 import { OPERATOR_STATUS_KEYS as V117_STATUS_KEYS, buildV117Report } from './codex-verifier-capsule.mjs';
+import { buildReport as buildIrisSchemaOnlyVerifierCapsuleReport } from './codex-iris-schema-only-verifier-capsule.mjs';
 import { LOAD_BEARING_ARTIFACTS, buildArtifactConsistencyReport } from './codex-artifact-consistency-contract.mjs';
 
 
@@ -3193,6 +3194,48 @@ function runV117Gates(report, gateEnv) {
 function initializeV117Statuses(report) {
   for (const key of V117_STATUS_KEYS) if (!report[key]) report[key] = { status: 'not_run' };
   if (!report.v117SelfTestStatus) report.v117SelfTestStatus = { status: 'not_run' };
+}
+
+function buildReadOnlyVerifierCapsuleDiagnosticStatus() {
+  const baseStatus = {
+    status: 'not_available_without_effect',
+    effect: 'none',
+    diagnosticOnly: true,
+    nonBlocking: true,
+    safeSummaryOnly: true,
+    reasonCodes: ['readonly_verifier_capsule_not_available'],
+  };
+
+  try {
+    const verifierReport = buildIrisSchemaOnlyVerifierCapsuleReport();
+    const verifierPassed = verifierReport?.status === 'pass';
+    return {
+      ...baseStatus,
+      status: verifierPassed ? 'available_without_effect' : 'failed_closed_without_effect',
+      verifierCapsuleStatus: verifierReport?.verifierCapsuleStatus?.status || 'unknown',
+      artifactConsistencyStatus: verifierReport?.artifactConsistencyStatus?.status || 'unknown',
+      decisionCapsuleAuthorityStatus: verifierReport?.decisionCapsuleAuthorityStatus?.status || 'unknown',
+      outcomeContractStatus: verifierReport?.outcomeContractStatus?.status || 'unknown',
+      safeFailureReaderStatus: verifierReport?.safeFailureReaderStatus?.status || 'unknown',
+      deltaOnlyFinalizerStatus: verifierReport?.deltaOnlyFinalizerStatus?.status || 'unknown',
+      rawContentEmissionStatus: verifierReport?.safeSummaryOnly === true ? 'safe_summary_only' : 'unknown',
+      reasonCodes: [
+        verifierPassed
+          ? 'readonly_verifier_capsule_available_without_effect'
+          : 'readonly_verifier_capsule_failed_closed_without_effect',
+      ],
+    };
+  } catch {
+    return {
+      ...baseStatus,
+      status: 'failed_closed_without_effect',
+      reasonCodes: ['readonly_verifier_capsule_exception_redacted_without_effect'],
+    };
+  }
+}
+
+function attachReadOnlyVerifierCapsuleDiagnostic(report) {
+  report.readOnlyVerifierCapsuleDiagnosticStatus = buildReadOnlyVerifierCapsuleDiagnosticStatus();
 }
 
 function legacySelfTestPreservedStatus(legacyVersion) {
@@ -9918,6 +9961,7 @@ async function runSourceHarnessGate() {
 
 
   report.localGate = { status: report.status };
+  attachReadOnlyVerifierCapsuleDiagnostic(report);
 
 
 
@@ -11962,6 +12006,7 @@ async function runTargetHarnessGate() {
 
 
   report.humanReviewRequired = warnings.length > 0;
+  attachReadOnlyVerifierCapsuleDiagnostic(report);
 
 
 
@@ -12585,6 +12630,7 @@ async function runSourceHarnessCoreContractGate() {
   }
   report.mergeReady = failures.length === 0 && warnings.length === 0;
   report.localGate = { status: report.status };
+  attachReadOnlyVerifierCapsuleDiagnostic(report);
   writeV117LoadBearingArtifacts(report);
 
   if (jsonReport) console.log(JSON.stringify(report, null, 2));
