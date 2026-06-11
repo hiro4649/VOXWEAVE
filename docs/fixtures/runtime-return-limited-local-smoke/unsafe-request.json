@@ -1,0 +1,10 @@
+{
+  "schema": "iris_adapter_packet_v1",
+  "adapter_kind": "tts",
+  "adapter_validation_required": true,
+  "trace_id": "runtime-smoke-trace-unsafe",
+  "event_id": "runtime-smoke-event-unsafe",
+  "utterance_id": "runtime-smoke-utterance-unsafe",
+  "text": "This fixture must fail closed.",
+  "raw_audio": "blocked"
+}

@@ -1,0 +1,21 @@
+{
+  "schema": "iris_adapter_packet_v1",
+  "adapter_kind": "tts",
+  "adapter_validation_required": true,
+  "trace_id": "runtime-smoke-trace-tts",
+  "event_id": "runtime-smoke-event-tts",
+  "utterance_id": "runtime-smoke-utterance-tts",
+  "text": "Limited local smoke checks safe mock TTS metadata only.",
+  "language": "en",
+  "speech_cue": {
+    "estimated_duration_ms": 1800,
+    "prosody_style": "calm",
+    "pace": "normal",
+    "pitch": "neutral",
+    "volume": "normal"
+  },
+  "expression_profile": {
+    "emotion": "neutral",
+    "profile_id": "safe-smoke"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "schema": "iris_adapter_packet_v1",
+  "adapter_kind": "subtitle",
+  "adapter_validation_required": true,
+  "trace_id": "runtime-smoke-trace-subtitle",
+  "event_id": "runtime-smoke-event-subtitle",
+  "utterance_id": "runtime-smoke-utterance-subtitle",
+  "subtitle_text": "Limited local smoke checks subtitle timing metadata only.",
+  "subtitle_language": "en",
+  "script_direction": "ltr",
+  "estimated_duration_ms": 2200
+}

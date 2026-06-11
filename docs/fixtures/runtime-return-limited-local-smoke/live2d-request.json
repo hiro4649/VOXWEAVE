@@ -1,0 +1,18 @@
+{
+  "schema": "iris_adapter_packet_v1",
+  "adapter_kind": "live2d",
+  "adapter_validation_required": true,
+  "trace_id": "runtime-smoke-trace-live2d",
+  "event_id": "runtime-smoke-event-live2d",
+  "utterance_id": "runtime-smoke-utterance-live2d",
+  "text": "Limited local smoke checks Live2D-safe cue metadata only.",
+  "language": "en",
+  "motion_cue": {
+    "motion_style": "idle",
+    "expression_hint": "neutral"
+  },
+  "speech_cue": {
+    "estimated_duration_ms": 1900,
+    "prosody_style": "calm"
+  }
+}
