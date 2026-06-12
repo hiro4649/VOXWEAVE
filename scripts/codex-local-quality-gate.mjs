@@ -216,6 +216,35 @@ function readJsonArtifactIfPresent(file) {
   }
 }
 
+function buildProductVerificationAcceptanceCapsuleDiagnosticStatus() {
+  try {
+    const requiredFiles = [
+      'scripts/codex-product-verification-acceptance-capsule.mjs',
+      'docs/process/CODEX_PRODUCT_VERIFICATION_ACCEPTANCE_CAPSULE_POLICY_V1_1_8.json',
+      'docs/fixtures/product-verification-acceptance-capsule/runtime-smoke-safe-summary.json',
+      'docs/fixtures/product-verification-acceptance-capsule/owner-scope-safe-summary.json',
+    ];
+    const present = requiredFiles.every((file) => fs.existsSync(path.join(process.cwd(), file)));
+    return {
+      status: present ? 'available_without_effect' : 'not_available_without_effect',
+      diagnosticOnly: true,
+      nonBlocking: true,
+      effect: 'none',
+      safeMetadataOnly: true,
+      safeSummaryOnly: true,
+    };
+  } catch {
+    return {
+      status: 'failed_closed_without_effect',
+      diagnosticOnly: true,
+      nonBlocking: true,
+      effect: 'none',
+      safeMetadataOnly: true,
+      safeSummaryOnly: true,
+    };
+  }
+}
+
 function buildV117ArtifactEntries(head) {
   const artifacts = HARNESS_VERSION === '1.1.8'
     ? ['codex-final-decision.safe.json', 'codex-decision-capsule.safe.json', 'codex-evidence-capsule.safe.json', 'codex-artifact-consistency.safe.json', 'codex-minimal-blockers.safe.json', 'codex-quality-gate-safe-summary.json']
@@ -264,6 +293,7 @@ function writeV117LoadBearingArtifacts(report = {}) {
     status: report.status || 'unknown',
     qualityScore: report.qualityScore ?? report.qualityScoreStatus?.score ?? null,
     qualityScoreStatus: report.qualityScoreStatus,
+    productVerificationAcceptanceCapsuleDiagnosticStatus: report.productVerificationAcceptanceCapsuleDiagnosticStatus,
     decisionCapsule,
     top3Blockers: minimalBlockers,
     artifactConsistencyStatus: report.artifactConsistencyStatus,
@@ -3331,6 +3361,7 @@ function runV118Gates(report, gateEnv) {
     : convergenceGateStatus;
   report.tokenBudgetStatus = tokenBudgetStatus;
   report.scopeBoundaryStatus = scopeBoundaryStatus;
+  report.productVerificationAcceptanceCapsuleDiagnosticStatus = buildProductVerificationAcceptanceCapsuleDiagnosticStatus();
   report.v118SelfTestStatus = selfTestStatus.status === 'fail' ? selfTestStatus : {
     ...selfTestStatus,
     status: selfTestStatus.status || 'pass',
