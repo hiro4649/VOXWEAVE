@@ -22,6 +22,18 @@ real TTS, ASR, Live2D renderer, raw audio, or external APIs.
 - mainHarnessStatus: preserved
 - mergeReadiness: no
 
+## Sentinel Natural Quality Gate Completion
+
+- sentinelNaturalQualityGateTerminalStatus: completed
+- sentinelNaturalQualityGateConclusion: COMPLETED / SUCCESS
+- sentinelHeadSha: eaec7679475e16f4b12b51bb9ddb58864560b1f6
+- manualRerunStatus: no_manual_rerun
+- postMergeSentinelEvidenceStatus: completed_post_merge_sentinel_evidence
+- runtimeReadinessClaimed: no
+- productVerificationExecutionAllowedInThisTask: no
+- remoteDiagnosticExecutionAllowedInThisTask: no
+- mergeReadiness: no
+
 ## Candidate Merge Evidence
 
 - candidatePR: #240
