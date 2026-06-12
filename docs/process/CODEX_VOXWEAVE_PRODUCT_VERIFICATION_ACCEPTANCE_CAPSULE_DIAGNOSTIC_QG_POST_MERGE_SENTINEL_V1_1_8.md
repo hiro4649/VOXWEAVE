@@ -64,9 +64,28 @@ PR #127, or PR #156.
 
 ## Fresh Pull Request Quality Gate Evidence
 
-- sentinelFreshPullRequestQualityGateStatus: pending_until_natural_qg
+- sentinelFreshPullRequestQualityGateStatus: completed
 - manualRerunStatus: no_manual_rerun
 - qualityGateEvidenceClass: docs_only_sentinel_qg_evidence
+
+## PR Sentinel Natural Quality Gate Completion Evidence
+
+- sentinelHeadSha: 36bb04018c34da3629a325652f60319b76e4012b
+- sentinelNaturalQualityGateTerminalStatus: completed
+- sentinelNaturalQualityGateConclusion: COMPLETED / SUCCESS
+- manualRerunStatus: no_manual_rerun
+- postMergeSentinelEvidenceStatus: completed_post_merge_sentinel_evidence
+- productVerificationAcceptanceCapsuleDiagnosticStateAfter:
+  present_on_main_as_diagnostic_only_non_blocking_report_field
+- runtimeReadinessClaimed: no
+- productionReadinessClaimed: no
+- realTtsReadinessClaimed: no
+- asrRuntimeReadinessClaimed: no
+- benchmarkExecutionClaimed: no
+- mergeReadiness: no
+- productVerificationExecution: not_performed
+- remoteDiagnosticExecution: not_performed
+- runtimeExecution: not_performed
 
 ## Final Decision Kernel Boundary
 
