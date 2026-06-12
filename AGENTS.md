@@ -1,5 +1,20 @@
 # AGENTS.md
 
+## VOXWEAVE Working Guide
+
+VOXWEAVE is a voice and agent-facing product workspace. Use Node.js >=20.
+Normal work should stay in the explicitly approved scope and be verified with
+the smallest relevant command.
+
+Default commands:
+- Test: `npm test`
+- Local server: `npm start` only when explicitly asked.
+
+Do not claim runtime, production, real TTS, ASR, external voice, or deployment
+readiness unless the owner explicitly scopes that evidence. Done means the
+smallest relevant verification was run or honestly reported unavailable without
+raw logs or secret-like output.
+
 <!-- CODEX_QUALITY_HARNESS_BEGIN -->
 CODEX_QUALITY_HARNESS_FILE v1.1.8
 
