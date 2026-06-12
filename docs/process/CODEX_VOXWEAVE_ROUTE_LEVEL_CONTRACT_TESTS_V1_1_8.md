@@ -3,9 +3,9 @@
 ## Executive Summary
 
 This is a route-level contract test candidate under active Harness v1.1.8. It
-adds safe local loopback tests for existing `src/server.js` endpoints without
-changing source behavior, package scripts, workflow, active QG semantics, or
-product verification behavior.
+narrows `npm test` discovery to intended test files and adds safe local
+loopback tests for existing `src/server.js` endpoints without changing source
+behavior, workflow, active QG semantics, or product verification behavior.
 
 ## Source Evidence
 
@@ -14,9 +14,9 @@ product verification behavior.
 | AGENTS.md | v1.1.8 marker | active harness boundary |
 | CODEX_HARNESS_MANIFEST.json | v1.1.8 | manifest boundary |
 | CODEX_V118_SPEC.md | present | v1.1.8 source spec |
-| package.json | `node --test` | existing test runner |
+| package.json | `node --test` before edit | discovery root cause |
 | src/server.js | `createVoxWeaveServer` exported | route test entrypoint |
-| README.md | VOXWEAVE is not TTS engine, Live2D renderer, or IRIS Core | product boundary |
+| README.md / docs/BOUNDARY.md | VOXWEAVE is not TTS engine, Live2D renderer, or IRIS Core | product boundary |
 | PR #236 | QG SUCCESS | completion gap evidence |
 | PR #237 | QG SUCCESS | code priority evidence |
 
@@ -25,6 +25,7 @@ product verification behavior.
 - currentActiveHarness: v1.1.8
 - terminalAction: create_pr_only
 - routeLevelContractTestStatus: candidate_only
+- testDiscoveryFixStatus: package_json_test_script_only
 - runtimeExecutionAllowedInThisTask: limited_local_test_server_only
 - serverStartAllowedInThisTask: limited_local_test_server_only
 - apiCallAllowedInThisTask: local_loopback_test_only
@@ -38,16 +39,21 @@ product verification behavior.
 - runtimeReadinessClaimed: no
 - mergeReadiness: no
 
-## PR #236 Completion Gap Evidence
+## Test Discovery Root Cause
 
-PR #236 identified route-level contract tests as the safe next product code
-step before runtime smoke, real TTS, ASR, Live2D renderer execution, or product
-verification execution.
+The previous candidate tests passed locally, but `npm test` used broad
+`node --test` discovery and selected an existing harness self-test under
+`scripts/`. That path failed before candidate PR creation. The failure was a
+test discovery boundary issue, not a route-level contract test failure.
 
-## PR #237 Code Priority Evidence
+## NPM Test Discovery Fix
 
-PR #237 selected `route_level_contract_tests_for_existing_server_endpoints` as
-the next implementation candidate.
+`package.json` changes only `scripts.test` to:
+
+`node --test test/voxweave.test.js test/server-routes.test.js`
+
+No package name, version, dependency, engine, license, lockfile, workflow, src,
+script, or QG semantic change is included.
 
 ## Route-Level Test Scope
 
@@ -98,8 +104,7 @@ summary fields without raw payload or command leakage.
 ## Live2D Adapter Route Contract
 
 The Live2D adapter route must return Live2D-safe cue metadata while keeping the
-renderer call disabled by temporarily clearing renderer endpoint environment
-values in the test.
+renderer call disabled through an injected dry-run forwarder.
 
 ## Safe Response Boundary
 
@@ -108,21 +113,9 @@ or print raw response bodies.
 
 ## Forbidden Field Boundary
 
-Responses must not include:
-
-- canonical_envelope
-- command
-- commands
-- raw_audio
-- audio_body
-- audioBuffer
-- renderer_endpoint
-- model_path
-- secret
-- token
-- api_key
-- private_path
-- phoneme_debug
+Responses must not include canonical envelopes, command fields, raw audio,
+renderer endpoints, model paths, secrets, tokens, API keys, private paths, or
+phoneme debug fields.
 
 ## Raw Audio Boundary
 
@@ -150,28 +143,26 @@ execution, or merge readiness.
 
 ## Workflow / Package / Source Boundary
 
-This candidate does not change workflow, package, lockfile, source, scripts, or
-active quality-gate semantics.
+This candidate changes `package.json` only to narrow `scripts.test`. It does
+not change workflow, lockfile, source, scripts, or active quality-gate
+semantics.
 
 ## Test Coverage Evidence
 
-changed area: `test/server-routes.test.js` and route-level contract test docs
+changed area: `package.json` test discovery, `test/server-routes.test.js`, and
+route-level contract test docs
 
 test command: `node --check test/server-routes.test.js`; `node --test
-test/server-routes.test.js`; `npm test`; docs and byte safety scans
+test/server-routes.test.js`; `node --test test/voxweave.test.js`; `npm test`;
+docs and byte safety scans
 
-local execution status: `node --check test/server-routes.test.js` passed;
-`node --test test/server-routes.test.js` passed; `npm test` did not complete
-within the local timeout and is left for natural quality-gate evaluation
-without manual rerun.
-
-what the test covers: existing health, orchestrate, adapter route, 404, invalid
-JSON, local server lifecycle, loopback-only behavior, and forbidden response
-field absence
+what the test covers: intended npm test discovery, existing health,
+orchestrate, adapter route, 404, invalid JSON, local server lifecycle,
+loopback-only behavior, and forbidden response field absence
 
 edge cases / failure paths / reason if no test: oversized body and auth-required
-paths are deferred because the current candidate focuses on existing unauthenticated
-default routes without process environment mutation
+paths are covered by the existing suite or deferred because this candidate
+focuses on route contract coverage without process environment mutation
 
 ## Quality Gate Evidence
 
@@ -191,6 +182,7 @@ merge readiness: no
 | decision | status |
 | --- | --- |
 | routeLevelContractTestStatus | candidate_only |
+| testDiscoveryFixStatus | package_json_test_script_only |
 | localServerUse | limited_loopback_test_only |
 | productVerificationExecution | no |
 | remoteDiagnosticExecution | no |
@@ -204,9 +196,10 @@ merge readiness: no
 
 | risk | mitigation |
 | --- | --- |
+| npm test narrowing misread as QG weakening | only scripts.test changes; QG script is untouched |
 | local server tests misread as runtime readiness | keep readiness claims negative |
 | loopback URL misread as endpoint config | keep URL ephemeral and in-memory only |
-| Live2D route test misread as renderer execution | clear renderer endpoint env during test |
+| Live2D route test misread as renderer execution | inject dry-run forwarder |
 | safe response assertions becoming raw snapshots | assert fields only, no raw body logs |
 | failed PR repair confusion | preserve failed PRs, do not repair in this candidate |
 
