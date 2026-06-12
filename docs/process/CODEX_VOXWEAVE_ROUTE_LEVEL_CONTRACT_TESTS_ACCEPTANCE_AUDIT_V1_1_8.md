@@ -2,91 +2,163 @@
 
 ## Executive Summary
 
-This is a docs-only acceptance audit for the route-level contract tests
-candidate. It records safe evidence for PR #238 without modifying code,
-tests, package files, workflows, scripts, source behavior, or quality-gate
-semantics.
+This docs-only audit accepts PR #240 as the current route-level contract tests
+candidate under active Harness v1.1.8. It updates the earlier audit evidence to
+the current candidate head and records that local route tests, existing tests,
+and narrowed `npm test` discovery pass without product verification, remote
+diagnostics, real TTS, ASR, Live2D renderer execution, raw audio, or external
+network calls.
 
-## Candidate Evidence
+## Source Evidence
 
-| field | value |
-| --- | --- |
-| candidate PR | #238 |
-| candidate branch | `codex/voxweave-v1-1-8-route-level-contract-tests-001` |
-| candidate head | `02e673502468060992758202825eebd1fc4fb818` |
-| candidate quality-gate | SUCCESS |
-| candidate quality-gate run | `27389640949` |
-| candidate changed files | `test/server-routes.test.js`; `docs/process/CODEX_VOXWEAVE_ROUTE_LEVEL_CONTRACT_TESTS_V1_1_8.md` |
+| source | status | evidence class |
+| --- | --- | --- |
+| PR #240 | OPEN / draft / QG SUCCESS | route-level contract tests candidate |
+| package.json | `scripts.test` narrowed only | test discovery fix evidence |
+| test/server-routes.test.js | local loopback tests pass | route contract evidence |
+| test/voxweave.test.js | existing suite passes | regression evidence |
+| PR #236 | QG SUCCESS | completion gap evidence |
+| PR #237 | QG SUCCESS | priority plan evidence |
+
+## Current Active Harness Confirmation
+
+- currentActiveHarness: v1.1.8
+- terminalAction: create_pr_only
+- acceptanceAuditStatus: accepted_docs_only
+- runtimeExecutionAllowedInThisTask: limited_local_test_server_only
+- productVerificationExecutionAllowedInThisTask: no
+- remoteDiagnosticExecutionAllowedInThisTask: no
+- runtimeReadinessClaimed: no
+- mergeReadiness: no
 
 ## Same-Head Candidate Verification
 
-The candidate quality-gate success is attached to candidate head
-`02e673502468060992758202825eebd1fc4fb818`.
+| field | value |
+| --- | --- |
+| candidate PR | #240 |
+| candidate branch | `codex/voxweave-v1-1-8-route-level-contract-tests-and-test-discovery-001` |
+| candidate head | `bc55289f724ab8c8c5783bc9f1bbb0e822b988aa` |
+| candidate quality-gate | COMPLETED / SUCCESS |
+| candidate changed files | `package.json`; `test/server-routes.test.js`; `docs/process/CODEX_VOXWEAVE_ROUTE_LEVEL_CONTRACT_TESTS_V1_1_8.md` |
 
-## Local Route Test Evidence
+## Test Discovery Evidence
 
-`node --test test/server-routes.test.js` passed locally before candidate PR
-creation. The test starts only a local `127.0.0.1` ephemeral server and closes
-it after each route contract check.
+- testDiscoveryFixStatus: package_json_test_script_only
+- npmTestCommand: `node --test test/voxweave.test.js test/server-routes.test.js`
+- scripts/codex-v071-self-test.mjs discovery: not_observed_in_npm_test_output
+- packageChangeBoundary: scripts.test_only
+- packageLockChangeStatus: none
 
-## npm Test Evidence
+## Local Test Evidence
 
-`npm test` did not complete within the local timeout during candidate
-preparation. This audit does not convert that timeout into runtime readiness or
-merge readiness; it leaves full-suite evaluation to natural quality-gate
-evidence and final pre-merge verification.
+| command | result | safe summary |
+| --- | --- | --- |
+| `node --check test/server-routes.test.js` | pass | syntax valid |
+| `node --test test/server-routes.test.js` | pass | 8 tests pass |
+| `node --test test/voxweave.test.js` | pass | 43 tests pass |
+| `npm test` | pass | 51 tests pass |
 
-## Limited Local Server Lifecycle
+## Server Lifecycle Boundary
 
-The candidate test uses `createVoxWeaveServer`, binds to `127.0.0.1` port `0`,
-and closes the server in a `finally` path. The route test fails if server close
-does not complete.
+The candidate tests instantiate `createVoxWeaveServer`, bind to `127.0.0.1`
+with an ephemeral port, and close the server in a `finally` path. The tests
+fail closed if close does not complete.
 
-## Loopback Only
+## Loopback Boundary
 
-The route test uses only local loopback requests. It does not call external
-hosts, product verification services, remote diagnostics, real TTS, ASR, or a
-Live2D renderer.
+The candidate uses local loopback requests only. It does not call external
+hosts, external APIs, npm registry, product verification, remote diagnostics,
+real TTS, ASR, Live2D renderer, or raw audio paths.
 
-## Forbidden Fields Absent
+## Safe Response Boundary
 
-The route test recursively checks safe response payloads for forbidden fields
-including `canonical_envelope`, `command`, `commands`, `raw_audio`,
-`audio_body`, `audioBuffer`, `renderer_endpoint`, `model_path`, `secret`,
-`token`, `api_key`, `private_path`, and `phoneme_debug`.
+The candidate parses JSON internally and asserts safe field shape. It does not
+print raw response bodies and does not store raw response artifacts.
 
-## No Raw Audio
+## Forbidden Field Boundary
 
-No raw audio is created, read, processed, stored, or asserted by the candidate.
+The candidate asserts responses do not include canonical envelope, command,
+commands, raw audio, audio body, audioBuffer, renderer endpoint, model path,
+secret, token, API key, private path, or phoneme debug fields.
 
-## No Real TTS / ASR / Live2D
+## Raw Audio Boundary
 
-The candidate verifies metadata-only route contracts. It does not execute real
-TTS, ASR, or Live2D renderer calls.
+No raw audio is created, read, processed, stored, or asserted.
 
-## No Product Verification Execution
+## Real TTS / ASR / Live2D Boundary
 
-Product verification execution is not part of this candidate or audit.
+The candidate does not execute real TTS, ASR, or Live2D renderer paths. The
+Live2D route test injects a dry-run forwarder and verifies no renderer call.
 
-## No Remote Diagnostic Execution
+## Product Verification Boundary
 
-Remote diagnostic execution is not part of this candidate or audit.
+Product verification execution is not part of the candidate or this audit.
 
-## No Runtime Readiness Claim
+## Remote Diagnostic Boundary
 
-This audit does not claim runtime readiness, production readiness, real TTS
-readiness, ASR readiness, Live2D readiness, or merge readiness.
+Remote diagnostic execution is not part of the candidate or this audit.
 
-## Merge Readiness
+## Runtime Readiness Boundary
 
-merge readiness: no
+The candidate proves existing route contracts only. It does not claim runtime
+readiness, production readiness, real TTS readiness, ASR runtime readiness,
+benchmark execution, or merge readiness.
 
-## Quality Gate Evidence
+## Decision Matrix
 
-This audit expects a natural quality-gate run on this docs-only acceptance PR.
-Manual rerun status: no_manual_rerun.
+| decision | status |
+| --- | --- |
+| candidateQGStatus | success |
+| nodeRouteTestStatus | pass |
+| nodeVoxweaveTestStatus | pass |
+| npmTestStatus | pass |
+| testDiscoveryBoundaryStatus | pass |
+| serverLifecycleStatus | pass |
+| loopbackStatus | pass |
+| forbiddenFieldBoundaryStatus | pass |
+| rawAudioBoundaryStatus | pass |
+| realTtsAsrLive2dBoundaryStatus | pass |
+| acceptanceAuditStatus | accepted_docs_only |
+| mergeReadiness | no |
+
+## Risk Register
+
+| risk | mitigation |
+| --- | --- |
+| `npm test` narrowing misread as QG weakening | QG script is untouched and package change is scripts.test only |
+| local server tests misread as runtime readiness | readiness claims remain negative |
+| loopback URL misread as endpoint config | ephemeral URL is in-memory test-only |
+| Live2D route test misread as renderer execution | dry-run forwarder prevents renderer call |
+| audit misread as merge permission | merge readiness remains no until final fresh gates pass |
 
 ## Safe Next Action
 
-Let the natural quality-gate run for this acceptance audit. If it succeeds,
-perform final fresh pre-merge verification for the candidate PR only.
+Proceed only to final fresh pre-merge verification for PR #240. Do not merge
+this acceptance audit PR, do not comment, do not request review, and do not
+manually rerun GitHub Actions.
+
+## Test Coverage Evidence
+
+changed area: docs/process acceptance audit only
+
+test command: git diff --check; git diff --cached --check; hidden Unicode,
+secret, endpoint, raw log, and negative readiness claim scans
+
+what the test covers: same-head candidate evidence, QG success, local test
+status, npm test discovery boundary, loopback boundary, and no-readiness claims
+
+edge cases / failure paths / reason if no test: no runtime or product
+verification tests are run from this audit PR because it is docs-only evidence
+
+## Quality Gate Evidence
+
+previous related QG evidence: PR #240 quality-gate SUCCESS on candidate head
+`bc55289f724ab8c8c5783bc9f1bbb0e822b988aa`
+
+expected QG behavior: natural quality-gate should evaluate this docs-only audit
+without product verification execution, remote diagnostics, real TTS, ASR, or
+Live2D renderer calls
+
+manual rerun status: no_manual_rerun
+
+merge readiness: no
