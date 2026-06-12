@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node src/server.js",
-    "test": "node --test"
+    "test": "node --test test/voxweave.test.js test/server-routes.test.js"
   },
   "license": "UNLICENSED"
 }
