@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node src/server.js",
-    "test": "node --test test/voxweave.test.js test/server-routes.test.js test/contracts-boundary.test.js test/orchestrator-service.test.js"
+    "test": "node --test test/voxweave.test.js test/server-routes.test.js test/contracts-boundary.test.js test/orchestrator-service.test.js test/live2d-forwarder.test.js"
   },
   "license": "UNLICENSED"
 }
