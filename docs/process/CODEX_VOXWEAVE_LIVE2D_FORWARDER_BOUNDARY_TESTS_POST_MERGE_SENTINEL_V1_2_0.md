@@ -72,10 +72,10 @@ merge readiness: no for remaining PRs
 
 ## Sentinel Natural Quality Gate
 
-- sentinelNaturalQualityGateTerminalStatus: pending
-- sentinelNaturalQualityGateConclusion: pending
+- sentinelNaturalQualityGateTerminalStatus: completed
+- sentinelNaturalQualityGateConclusion: COMPLETED / SUCCESS
 - manualRerunStatus: no_manual_rerun
-- postMergeSentinelEvidenceStatus: initial_post_merge_sentinel_evidence
+- postMergeSentinelEvidenceStatus: completed_post_merge_sentinel_evidence
 
 ## Decision Matrix
 
