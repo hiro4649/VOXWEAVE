@@ -109,13 +109,13 @@ merge readiness: no for remaining PRs.
 
 ## Sentinel Completion Fields
 
-sentinelNaturalQualityGateTerminalStatus: pending
+sentinelNaturalQualityGateTerminalStatus: completed
 
-sentinelNaturalQualityGateConclusion: pending
+sentinelNaturalQualityGateConclusion: COMPLETED / SUCCESS
 
 manualRerunStatus: no_manual_rerun
 
-postMergeSentinelEvidenceStatus: initial_post_merge_sentinel_evidence
+postMergeSentinelEvidenceStatus: completed_post_merge_sentinel_evidence
 
 ## Safe Next Action
 
