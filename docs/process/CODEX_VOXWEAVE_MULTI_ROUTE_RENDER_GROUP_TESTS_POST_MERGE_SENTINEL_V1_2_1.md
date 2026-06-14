@@ -63,10 +63,10 @@ Remaining PRs are not merge-ready based on this sentinel. This sentinel is evide
 
 | Field | Value |
 | --- | --- |
-| sentinelNaturalQualityGateTerminalStatus | pending |
-| sentinelNaturalQualityGateConclusion | pending |
+| sentinelNaturalQualityGateTerminalStatus | completed |
+| sentinelNaturalQualityGateConclusion | COMPLETED / SUCCESS |
 | manualRerunStatus | no_manual_rerun |
-| postMergeSentinelEvidenceStatus | pending_post_merge_sentinel_evidence |
+| postMergeSentinelEvidenceStatus | completed_post_merge_sentinel_evidence |
 
 ## Safe Next Action
 
