@@ -136,6 +136,21 @@ test("POST /unknown returns safe 404 error", async () => {
   });
 });
 
+test("POST unknown adapter subpaths return safe 404 errors", async () => {
+  await withRouteServer(async (baseUrl) => {
+    const responses = [
+      await postJson(`${baseUrl}/v1/adapter/unknown`, adapterPacket()),
+      await postJson(`${baseUrl}/adapter/unknown`, adapterPacket()),
+      await postJson(`${baseUrl}/v1/adapter/tts/extra`, adapterPacket()),
+      await postJson(`${baseUrl}/adapter/live2d/extra`, adapterPacket("live2d")),
+    ];
+
+    for (const response of responses) {
+      assertSafeError(response, 404, "not_found");
+    }
+  });
+});
+
 test("POST /v1/orchestrate invalid JSON returns safe invalid_json error", async () => {
   await withRouteServer(async (baseUrl) => {
     const response = await fetchJson(`${baseUrl}/v1/orchestrate`, {
@@ -160,6 +175,21 @@ test("POST /v1/orchestrate empty body follows safe default orchestration behavio
     assert.equal(response.body.ok, true);
     assert.equal(response.body.adapter_kind, "orchestrate");
     assert.equal(response.body.response_summary.bridge_status, "accepted");
+    assertSafeHeaders(response);
+    assertNoForbiddenFields(response.body);
+  });
+});
+
+test("POST /v1/adapter keeps generic adapter validation boundary", async () => {
+  await withRouteServer(async (baseUrl) => {
+    const response = await postJson(`${baseUrl}/v1/adapter`, {
+      ...adapterPacket("subtitle"),
+      adapter_validation_required: true,
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.ok, true);
+    assert.equal(response.body.adapter_kind, "subtitle");
     assertSafeHeaders(response);
     assertNoForbiddenFields(response.body);
   });

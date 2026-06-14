@@ -25,14 +25,7 @@ export function createVoxWeaveServer({ service = createVoxWeaveService() } = {})
       assertAuthorizedWrite(request, requiredApiKey);
       const payload = await readJson(request);
       const routeKind = resolveRouteKind(url.pathname);
-      if (
-        url.pathname === "/v1/orchestrate" ||
-        url.pathname === "/orchestrate" ||
-        url.pathname === "/v1/adapter" ||
-        url.pathname.startsWith("/v1/adapter/") ||
-        url.pathname.startsWith("/adapter/") ||
-        ["/tts", "/subtitle", "/live2d"].includes(url.pathname)
-      ) {
+      if (isAllowedPostRoute(url.pathname)) {
         const result = await service.orchestrate(payload, { routeKind });
         sendJson(response, 200, result);
         return;
@@ -44,6 +37,23 @@ export function createVoxWeaveServer({ service = createVoxWeaveService() } = {})
       sendJson(response, safe.statusCode, safe.body);
     }
   });
+}
+
+function isAllowedPostRoute(pathname) {
+  return [
+    "/v1/orchestrate",
+    "/orchestrate",
+    "/v1/adapter",
+    "/v1/adapter/tts",
+    "/v1/adapter/subtitle",
+    "/v1/adapter/live2d",
+    "/adapter/tts",
+    "/adapter/subtitle",
+    "/adapter/live2d",
+    "/tts",
+    "/subtitle",
+    "/live2d",
+  ].includes(pathname);
 }
 
 function assertAuthorizedWrite(request, requiredApiKey) {
