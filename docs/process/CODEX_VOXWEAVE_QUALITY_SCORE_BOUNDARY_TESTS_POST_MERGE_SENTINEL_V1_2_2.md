@@ -7,7 +7,10 @@ This docs-only sentinel records post-merge evidence for VOXWEAVE quality score b
 candidatePR: #276
 candidateMergeCommitSha: defdb37b8476372c00e9d5cd8523663a8fdac11e
 postMergeMainHeadSha: defdb37b8476372c00e9d5cd8523663a8fdac11e
-postMergeSentinelEvidenceStatus: initial_post_merge_sentinel_evidence
+postMergeSentinelEvidenceStatus: completed_post_merge_sentinel_evidence
+sentinelNaturalQualityGateTerminalStatus: completed
+sentinelNaturalQualityGateConclusion: COMPLETED / SUCCESS
+manualRerunStatus: no_manual_rerun
 mergeReadinessForRemainingPRs: no
 
 ## Main Harness Preservation
@@ -87,6 +90,13 @@ qualityScoreBoundaryTestsPresentOnMain: yes
 npmTestStatus: pass
 manualRerunStatus: no_manual_rerun
 mergeReadiness: no
+
+## Sentinel Completion Persistence
+
+sentinelNaturalQualityGateTerminalStatus: completed
+sentinelNaturalQualityGateConclusion: COMPLETED / SUCCESS
+manualRerunStatus: no_manual_rerun
+postMergeSentinelEvidenceStatus: completed_post_merge_sentinel_evidence
 
 ## Risk Register
 
