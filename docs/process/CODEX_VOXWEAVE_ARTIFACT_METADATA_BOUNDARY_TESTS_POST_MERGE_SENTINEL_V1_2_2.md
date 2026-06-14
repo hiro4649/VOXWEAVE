@@ -12,9 +12,9 @@ postMergeMainHeadSha: d181c0861241aa6aec4e2906bc21479c4ee212b8
 currentActiveHarness: v1.2.2
 activeSelfTestSuite: v122
 terminalAction: create_pr_only
-postMergeSentinelEvidenceStatus: initial_post_merge_sentinel_evidence
-sentinelNaturalQualityGateTerminalStatus: pending
-sentinelNaturalQualityGateConclusion: pending
+postMergeSentinelEvidenceStatus: completed_post_merge_sentinel_evidence
+sentinelNaturalQualityGateTerminalStatus: completed
+sentinelNaturalQualityGateConclusion: COMPLETED / SUCCESS
 manualRerunStatus: no_manual_rerun
 mergeReadinessForRemainingPrs: no
 
