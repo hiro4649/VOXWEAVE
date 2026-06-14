@@ -61,10 +61,10 @@ Acceptance audit PR #257 remains evidence only and is not merged by this sentine
 
 ## Sentinel Natural Quality Gate
 
-- sentinelNaturalQualityGateTerminalStatus: pending.
-- sentinelNaturalQualityGateConclusion: pending.
+- sentinelNaturalQualityGateTerminalStatus: completed.
+- sentinelNaturalQualityGateConclusion: COMPLETED / SUCCESS.
 - manualRerunStatus: no_manual_rerun.
-- postMergeSentinelEvidenceStatus: initial_post_merge_sentinel_evidence.
+- postMergeSentinelEvidenceStatus: completed_post_merge_sentinel_evidence.
 
 ## Safe Next Action
 
