@@ -540,13 +540,22 @@ test("Live2D forwarder blocks external renderer URL", async () => {
   assert.equal(called, false);
 });
 
-test("Live2D forwarder allows private network scope label without leaking URL", async () => {
+test("Live2D forwarder blocks private network scope without leaking URL", async () => {
+  let called = false;
   const forwarder = createLive2dForwarder({
     endpoint: "http://192.168.1.10/cue",
-    fetchImpl: async () => ({ ok: true }),
+    fetchImpl: async () => {
+      called = true;
+      return { ok: true };
+    },
   });
   const result = await forwarder.forward({ schema: "iris_live2d_renderer_cue_delivery_v1" });
-  assert.equal(result.renderer_forward_scope, "private");
+  assert.equal(result.renderer_forward_configured, true);
+  assert.equal(result.renderer_forward_scope, "blocked");
+  assert.equal(result.renderer_forward_attempted, false);
+  assert.equal(result.renderer_forward_ok, false);
+  assert.equal(result.renderer_forward_status, "configured_unusable");
+  assert.equal(called, false);
   assert.equal(JSON.stringify(result).includes("192.168.1.10"), false);
 });
 

@@ -100,8 +100,7 @@ function isLoopbackHost(hostname) {
     host === "127.0.0.1" ||
     host === "::1" ||
     host === "[::1]" ||
-    host.startsWith("127.") ||
-    isPrivateIpv4(host);
+    host.startsWith("127.");
 }
 
 function endpointScope(hostname) {
@@ -115,16 +114,5 @@ function endpointScope(hostname) {
   ) {
     return "loopback";
   }
-  if (isPrivateIpv4(host)) return "private";
   return "blocked";
-}
-
-function isPrivateIpv4(host) {
-  const parts = host.split(".").map((part) => Number(part));
-  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
-    return false;
-  }
-  return parts[0] === 10 ||
-    (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
-    (parts[0] === 192 && parts[1] === 168);
 }
