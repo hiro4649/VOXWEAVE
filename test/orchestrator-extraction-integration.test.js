@@ -976,6 +976,134 @@ test("orchestrator regression matrix rejects unsafe contract before safe summari
   );
 });
 
+const EXPECTED_AI_CHARACTER_CONTRACTS = [
+  {
+    payloadKey: "character_identity_contract",
+    presenceFlag: "character_identity_contract_present",
+    makeContract: characterIdentityContract,
+    unsafeContract: () => characterIdentityContract({ voice_identity_id: "voice.model3.json" }),
+  },
+  {
+    payloadKey: "realtime_interaction_contract",
+    presenceFlag: "realtime_interaction_contract_present",
+    makeContract: realtimeInteractionContract,
+    unsafeContract: () => realtimeInteractionContract({ avatar_motion_hint: "motion.motion3.json" }),
+  },
+  {
+    payloadKey: "human_oversight_consent_contract",
+    presenceFlag: "human_oversight_consent_contract_present",
+    makeContract: humanOversightConsentContract,
+    unsafeContract: () => humanOversightConsentContract({ access_token: "blocked" }),
+  },
+  {
+    payloadKey: "structured_context_contract",
+    presenceFlag: "structured_context_contract_present",
+    makeContract: structuredContextContract,
+    unsafeContract: () => structuredContextContract({ app_or_game_state_summary: "state.motion3.json" }),
+  },
+  {
+    payloadKey: "avatar_feedback_contract",
+    presenceFlag: "avatar_feedback_contract_present",
+    makeContract: avatarFeedbackContract,
+    unsafeContract: () => avatarFeedbackContract({ motion_hint: "pose.motion3.json" }),
+  },
+  {
+    payloadKey: "multilingual_personalization_contract",
+    presenceFlag: "multilingual_personalization_contract_present",
+    makeContract: multilingualPersonalizationContract,
+    unsafeContract: () => multilingualPersonalizationContract({ locale_out: "https://example.invalid/locale" }),
+  },
+];
+
+test("orchestrator drift guard accepts each expected contract family independently", async () => {
+  for (const contract of EXPECTED_AI_CHARACTER_CONTRACTS) {
+    const result = await makeService().orchestrate(
+      packet({ [contract.payloadKey]: contract.makeContract() }),
+      { routeKind: "tts" }
+    );
+
+    assertOrchestratorBoundaryMatrix(result, "tts", 1);
+    assert.equal(
+      result.response_summary.ai_character_contracts[contract.presenceFlag],
+      true,
+      contract.presenceFlag
+    );
+  }
+});
+
+test("orchestrator drift guard aligns safe summary and adapter metadata for each single contract", async () => {
+  for (const contract of EXPECTED_AI_CHARACTER_CONTRACTS) {
+    const result = await makeService().orchestrate(
+      packet({ [contract.payloadKey]: contract.makeContract() }),
+      { routeKind: "tts" }
+    );
+
+    assert.equal(result.ai_character_contract_summary.contract_presence_count, 1);
+    assert.equal(
+      result.ai_character_contract_summary.contract_presence_count,
+      result.response_summary.ai_character_adapter_metadata.contract_presence_count
+    );
+    assert.equal(
+      result.response_summary.ai_character_contract_summary.contract_presence_count,
+      result.response_summary.ai_character_adapter_metadata.contract_presence_count
+    );
+    assertNoAiCharacterRawProjection(result);
+  }
+});
+
+test("orchestrator drift guard aligns safe summary and adapter metadata for all expected contracts", async () => {
+  const result = await makeService().orchestrate(packet(makeExpectedAllContracts()), {
+    routeKind: "tts",
+  });
+
+  assertOrchestratorBoundaryMatrix(result, "tts", EXPECTED_AI_CHARACTER_CONTRACTS.length);
+  assert.equal(
+    result.ai_character_contract_summary.contract_presence_count,
+    EXPECTED_AI_CHARACTER_CONTRACTS.length
+  );
+  assert.equal(
+    result.ai_character_contract_summary.contract_presence_count,
+    result.response_summary.ai_character_adapter_metadata.contract_presence_count
+  );
+});
+
+test("orchestrator drift guard keeps cache hit metadata aligned for all expected contracts", async () => {
+  const service = makeService();
+  const payload = packet({
+    text: "thanks",
+    ...makeExpectedAllContracts(),
+  });
+
+  const first = await service.orchestrate(payload, { routeKind: "tts" });
+  const second = await service.orchestrate(payload, { routeKind: "tts" });
+
+  assert.equal(first.cache.status, "miss");
+  assert.equal(second.cache.status, "hit");
+  assertOrchestratorBoundaryMatrix(second, "tts", EXPECTED_AI_CHARACTER_CONTRACTS.length);
+});
+
+test("orchestrator drift guard keeps unsafe contract rejection before metadata for each expected contract family", async () => {
+  for (const contract of EXPECTED_AI_CHARACTER_CONTRACTS) {
+    await assert.rejects(
+      () =>
+        makeService().orchestrate(
+          packet({ [contract.payloadKey]: contract.unsafeContract() }),
+          { routeKind: "tts" }
+        ),
+      { code: "unsafe_payload" }
+    );
+  }
+});
+
+function makeExpectedAllContracts() {
+  return Object.fromEntries(
+    EXPECTED_AI_CHARACTER_CONTRACTS.map((contract) => [
+      contract.payloadKey,
+      contract.makeContract(),
+    ])
+  );
+}
+
 function characterIdentityContract(overrides = {}) {
   return {
     schema: "voxweave_character_identity_contract_v1",

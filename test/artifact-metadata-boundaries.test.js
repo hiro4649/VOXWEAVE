@@ -1048,6 +1048,151 @@ test("artifact boundary matrix rejects unsafe contract before artifact metadata 
   );
 });
 
+const EXPECTED_AI_CHARACTER_CONTRACTS = [
+  {
+    payloadKey: "character_identity_contract",
+    presenceFlag: "character_identity_contract_present",
+    makeContract: characterIdentityContract,
+    unsafeContract: () => characterIdentityContract({ voice_identity_id: "voice.model3.json" }),
+  },
+  {
+    payloadKey: "realtime_interaction_contract",
+    presenceFlag: "realtime_interaction_contract_present",
+    makeContract: realtimeInteractionContract,
+    unsafeContract: () => realtimeInteractionContract({ avatar_motion_hint: "motion.motion3.json" }),
+  },
+  {
+    payloadKey: "human_oversight_consent_contract",
+    presenceFlag: "human_oversight_consent_contract_present",
+    makeContract: humanOversightConsentContract,
+    unsafeContract: () => humanOversightConsentContract({ access_token: "blocked" }),
+  },
+  {
+    payloadKey: "structured_context_contract",
+    presenceFlag: "structured_context_contract_present",
+    makeContract: structuredContextContract,
+    unsafeContract: () => structuredContextContract({ app_or_game_state_summary: "state.motion3.json" }),
+  },
+  {
+    payloadKey: "avatar_feedback_contract",
+    presenceFlag: "avatar_feedback_contract_present",
+    makeContract: avatarFeedbackContract,
+    unsafeContract: () => avatarFeedbackContract({ motion_hint: "pose.motion3.json" }),
+  },
+  {
+    payloadKey: "multilingual_personalization_contract",
+    presenceFlag: "multilingual_personalization_contract_present",
+    makeContract: multilingualPersonalizationContract,
+    unsafeContract: () => multilingualPersonalizationContract({ locale_out: "https://example.invalid/locale" }),
+  },
+];
+
+test("metadata drift guard reports every expected contract presence flag for all-contract payload", async () => {
+  const result = await makeService().orchestrate(
+    makePacket("tts", makeExpectedAllContracts()),
+    { routeKind: "tts" }
+  );
+
+  assertPresenceFlags(result.response_summary.ai_character_contracts, 6);
+});
+
+test("metadata drift guard keeps contract presence count equal to expected payload contract count", async () => {
+  const result = await makeService().orchestrate(
+    makePacket("subtitle", makeExpectedAllContracts()),
+    { routeKind: "subtitle" }
+  );
+
+  assert.equal(
+    result.response_summary.ai_character_contracts.contract_presence_count,
+    EXPECTED_AI_CHARACTER_CONTRACTS.length
+  );
+});
+
+test("metadata drift guard excludes safe TTS foundation from contract presence count", async () => {
+  const result = await makeService().orchestrate(
+    makePacket("tts", makeExpectedAllContracts()),
+    { routeKind: "tts" }
+  );
+
+  assert.equal(
+    result.response_summary.ai_character_contracts.safe_tts_normalization_foundation_present,
+    true
+  );
+  assert.equal(
+    result.response_summary.ai_character_contracts.contract_presence_count,
+    EXPECTED_AI_CHARACTER_CONTRACTS.length
+  );
+});
+
+test("metadata drift guard keeps artifact metadata, response summary, and adapter metadata contract counts aligned", async () => {
+  for (const adapterKind of ["tts", "subtitle", "live2d"]) {
+    const result = await makeService().orchestrate(
+      makePacket(adapterKind, makeExpectedAllContracts()),
+      { routeKind: adapterKind }
+    );
+
+    assertArtifactBoundaryMatrix(result, adapterKind, EXPECTED_AI_CHARACTER_CONTRACTS.length);
+    assert.equal(
+      result.response_summary.ai_character_contracts.contract_presence_count,
+      result.response_summary.ai_character_adapter_metadata.contract_presence_count
+    );
+    assert.equal(
+      result.response_summary.ai_character_contract_summary.contract_presence_count,
+      result.response_summary.ai_character_adapter_metadata.contract_presence_count
+    );
+  }
+});
+
+test("metadata drift guard keeps response guard applied when all expected contracts are present", async () => {
+  const result = await makeService().orchestrate(
+    makePacket("live2d", makeExpectedAllContracts()),
+    { routeKind: "live2d" }
+  );
+
+  assertResponseGuard(result.response_summary.ai_character_contract_response_guard);
+  assertArtifactBoundaryMatrix(result, "live2d", EXPECTED_AI_CHARACTER_CONTRACTS.length);
+});
+
+test("metadata drift guard keeps no-contract payload at count zero", async () => {
+  const result = await makeService().orchestrate(makePacket("tts"), {
+    routeKind: "tts",
+  });
+
+  assertArtifactBoundaryMatrix(result, "tts", 0);
+  assert.equal(result.response_summary.ai_character_contracts.contract_presence_count, 0);
+});
+
+test("metadata drift guard rejects unexpected raw contract projection keys recursively", async () => {
+  for (const contract of EXPECTED_AI_CHARACTER_CONTRACTS) {
+    await assert.rejects(
+      () =>
+        makeService().orchestrate(
+          makePacket("tts", {
+            [contract.payloadKey]: contract.unsafeContract(),
+          }),
+          { routeKind: "tts" }
+        ),
+      { code: "unsafe_payload" }
+    );
+  }
+});
+
+function makeExpectedAllContracts() {
+  return Object.fromEntries(
+    EXPECTED_AI_CHARACTER_CONTRACTS.map((contract) => [
+      contract.payloadKey,
+      contract.makeContract(),
+    ])
+  );
+}
+
+function assertPresenceFlags(value, expectedCount) {
+  assertPresence(value, expectedCount);
+  for (const contract of EXPECTED_AI_CHARACTER_CONTRACTS) {
+    assert.equal(value[contract.presenceFlag], true, contract.presenceFlag);
+  }
+}
+
 function makeService() {
   return createVoxWeaveService({
     now: () => 1_777_500_000_000,
