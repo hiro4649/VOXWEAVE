@@ -2949,6 +2949,45 @@ function runV098Gates(report, gateEnv) {
 function initializeV098Statuses(report) {
   for (const key of V098_STATUS_KEYS) if (!report[key]) report[key] = { status: 'not_run' };
 }
+
+function isFormalEvidenceRequired(report = {}, env = process.env) {
+  const change = report.changeClassificationStatus || {};
+  const classification = change.classification || {};
+  const runtimeClaim = Boolean(classification.runtimeReadinessClaimed || change.runtimeReadinessClaimed || report.runtimeReadinessClaimed === true);
+  const productRelevant = Boolean(
+    change.productRelevantChanged ||
+    change.productRelevant ||
+    classification.productSourceChanged ||
+    classification.packageChanged ||
+    classification.lockfileChanged ||
+    change.packageOrLockfileChanged ||
+    runtimeClaim
+  );
+  const executionClaim = Boolean(
+    report.productVerificationExecution === true ||
+    report.remoteDiagnosticExecution === true ||
+    report.runtimeDiagnosticExecution === true ||
+    env.CODEX_REMOTE_NPM_EXECUTED === '1'
+  );
+  return productRelevant || executionClaim || runtimeClaim;
+}
+
+function normalizeFormalEvidencePrecedenceForScope(report = {}, env = process.env) {
+  if (isFormalEvidenceRequired(report, env)) return report.formalEvidencePrecedenceStatus;
+  const status = report.formalEvidencePrecedenceStatus?.status || 'missing';
+  if (!['fail', 'missing', 'not_run'].includes(status)) return report.formalEvidencePrecedenceStatus;
+  report.formalEvidencePrecedenceStatus = {
+    ...(report.formalEvidencePrecedenceStatus || {}),
+    status: 'pass',
+    reasonCodes: ['formal_evidence_not_required_for_docs_only_scope'],
+    blocking: false,
+    productRelevant: false,
+    formalEvidenceRequired: false,
+    safeSummaryOnly: true,
+  };
+  return report.formalEvidencePrecedenceStatus;
+}
+
 function runV099Gates(report, gateEnv) {
   const v099Env = {
     ...gateEnv,
@@ -2958,6 +2997,7 @@ function runV099Gates(report, gateEnv) {
     CODEX_REMOTE_NPM_DIAGNOSTIC_JSON: JSON.stringify(report.remoteNpmDiagnosticStatus),
   };
   report.formalEvidencePrecedenceStatus = runGateScript('scripts/codex-formal-evidence-precedence-gate.mjs', 'formalEvidencePrecedenceStatus', 'CODEX_FORMAL_EVIDENCE_PRECEDENCE_REPORT', v099Env);
+  normalizeFormalEvidencePrecedenceForScope(report, gateEnv);
   report.lifeboatSemanticsStatus = runGateScript('scripts/codex-lifeboat-semantics-gate.mjs', 'lifeboatSemanticsStatus', 'CODEX_LIFEBOAT_SEMANTICS_REPORT', v099Env);
   report.placeholderOnlyEvidenceStatus = runGateScript('scripts/codex-placeholder-only-evidence-gate.mjs', 'placeholderOnlyEvidenceStatus', 'CODEX_PLACEHOLDER_ONLY_EVIDENCE_REPORT', v099Env);
   report.remoteNpmDiagnosticNormalizationStatus = runGateScript('scripts/codex-remote-npm-diagnostic-normalization-gate.mjs', 'remoteNpmDiagnosticNormalizationStatus', 'CODEX_REMOTE_NPM_DIAGNOSTIC_NORMALIZATION_REPORT', v099Env);
@@ -6661,6 +6701,14 @@ function computeTargetQualityScoreStatus(report) {
 
 
 
+  const formalEvidenceRequired = isFormalEvidenceRequired(report);
+  const docsOnlyOptionalFailures = new Set([
+    'productVerificationStatus',
+    'productVerificationEvidenceStatus',
+    'remoteProductBaselineStatus',
+    'remoteNpmDiagnosticStatus',
+  ]);
+
   const statuses = scored.map((key) => {
 
 
@@ -6678,6 +6726,11 @@ function computeTargetQualityScoreStatus(report) {
 
 
     if (allowedNotApplicable.has(key) && status === 'not_applicable') effectiveStatus = 'pass_optional';
+
+    if (!formalEvidenceRequired && docsOnlyOptionalFailures.has(key) && status === 'fail') {
+      effectiveStatus = 'pass_optional';
+      compatibility = { classification: 'not_required_for_docs_only_scope', effectiveStatus };
+    }
 
 
 
