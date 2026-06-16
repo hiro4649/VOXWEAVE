@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   assertSafeResponse,
+  AVATAR_FEEDBACK_CONTRACT_SCHEMA,
   CHARACTER_IDENTITY_CONTRACT_SCHEMA,
   clamp,
+  extractAvatarFeedbackContract,
   extractCharacterIdentityContract,
   extractHumanOversightConsentContract,
   extractRealtimeInteractionContract,
@@ -15,6 +17,7 @@ import {
   safeId,
   safeText,
   STRUCTURED_CONTEXT_CONTRACT_SCHEMA,
+  validateAvatarFeedbackContract,
   validateCharacterIdentityContract,
   validateHumanOversightConsentContract,
   validateRealtimeInteractionContract,
@@ -90,6 +93,19 @@ function minimalStructuredContextContract(overrides = {}) {
     context_confidence: "medium",
     risk_flags: ["none"],
     allowed_action_kinds: ["safe_metadata_only"],
+    ...overrides,
+  };
+}
+
+function minimalAvatarFeedbackContract(overrides = {}) {
+  return {
+    schema: AVATAR_FEEDBACK_CONTRACT_SCHEMA,
+    expression: "neutral",
+    gaze: "user",
+    gesture: "idle",
+    mouth_state: "closed",
+    attention_state: "focused",
+    intensity: "medium",
     ...overrides,
   };
 }
@@ -1323,6 +1339,216 @@ test("validateInputPayload still rejects existing adapter unsafe field command w
       validateInputPayload({
         ...minimalAdapterPacket("tts"),
         structured_context_contract: minimalStructuredContextContract(),
+        command: "blocked",
+      }),
+    "unsafe_payload"
+  );
+});
+
+test("avatar feedback contract accepts minimal safe contract", () => {
+  const contract = validateAvatarFeedbackContract(minimalAvatarFeedbackContract());
+
+  assert.equal(contract.schema, AVATAR_FEEDBACK_CONTRACT_SCHEMA);
+  assert.equal(contract.expression, "neutral");
+  assert.equal(contract.gaze, "user");
+  assert.equal(contract.gesture, "idle");
+  assert.equal(contract.mouth_state, "closed");
+  assert.equal(contract.attention_state, "focused");
+  assert.equal(contract.intensity, "medium");
+});
+
+test("avatar feedback contract defaults safe_summary_only to true", () => {
+  const contract = validateAvatarFeedbackContract(minimalAvatarFeedbackContract());
+
+  assert.equal(contract.safe_summary_only, true);
+});
+
+test("avatar feedback contract normalizes hint fields", () => {
+  const contract = validateAvatarFeedbackContract(
+    minimalAvatarFeedbackContract({
+      expression_hint: "  warm \n smile  ",
+      motion_hint: "gentle abstract motion ".repeat(20),
+      gaze_target_summary: "  user \t area  ",
+    })
+  );
+
+  assert.equal(contract.expression_hint, "warm smile");
+  assert.equal(contract.motion_hint.length, 120);
+  assert.equal(contract.gaze_target_summary, "user area");
+});
+
+test("extractAvatarFeedbackContract returns null when absent", () => {
+  assert.equal(extractAvatarFeedbackContract({ text: "safe sample" }), null);
+});
+
+test("extractAvatarFeedbackContract reads snake_case and camelCase field", () => {
+  assert.equal(
+    extractAvatarFeedbackContract({
+      avatar_feedback_contract: minimalAvatarFeedbackContract({ expression: "happy" }),
+    }).expression,
+    "happy"
+  );
+  assert.equal(
+    extractAvatarFeedbackContract({
+      avatarFeedbackContract: minimalAvatarFeedbackContract({ expression: "calm" }),
+    }).expression,
+    "calm"
+  );
+});
+
+test("avatar feedback contract rejects wrong schema", () => {
+  assertVoxWeaveError(
+    () => validateAvatarFeedbackContract(minimalAvatarFeedbackContract({ schema: "other" })),
+    "invalid_avatar_feedback_contract"
+  );
+});
+
+test("avatar feedback contract rejects safe_summary_only false", () => {
+  assertVoxWeaveError(
+    () => validateAvatarFeedbackContract(minimalAvatarFeedbackContract({ safe_summary_only: false })),
+    "invalid_avatar_feedback_contract"
+  );
+});
+
+test("avatar feedback contract rejects unknown expression", () => {
+  assertVoxWeaveError(
+    () => validateAvatarFeedbackContract(minimalAvatarFeedbackContract({ expression: "smirk" })),
+    "invalid_avatar_feedback_contract"
+  );
+});
+
+test("avatar feedback contract rejects unknown gaze", () => {
+  assertVoxWeaveError(
+    () => validateAvatarFeedbackContract(minimalAvatarFeedbackContract({ gaze: "camera_2" })),
+    "invalid_avatar_feedback_contract"
+  );
+});
+
+test("avatar feedback contract rejects unknown gesture", () => {
+  assertVoxWeaveError(
+    () => validateAvatarFeedbackContract(minimalAvatarFeedbackContract({ gesture: "jump" })),
+    "invalid_avatar_feedback_contract"
+  );
+});
+
+test("avatar feedback contract rejects unknown mouth_state", () => {
+  assertVoxWeaveError(
+    () => validateAvatarFeedbackContract(minimalAvatarFeedbackContract({ mouth_state: "phoneme_a" })),
+    "invalid_avatar_feedback_contract"
+  );
+});
+
+test("avatar feedback contract rejects unknown attention_state", () => {
+  assertVoxWeaveError(
+    () =>
+      validateAvatarFeedbackContract(
+        minimalAvatarFeedbackContract({ attention_state: "tracking_face" })
+      ),
+    "invalid_avatar_feedback_contract"
+  );
+});
+
+test("avatar feedback contract rejects unknown intensity", () => {
+  assertVoxWeaveError(
+    () => validateAvatarFeedbackContract(minimalAvatarFeedbackContract({ intensity: "extreme" })),
+    "invalid_avatar_feedback_contract"
+  );
+});
+
+test("avatar feedback contract rejects raw URL in motion_hint", () => {
+  assertVoxWeaveError(
+    () =>
+      validateAvatarFeedbackContract(
+        minimalAvatarFeedbackContract({ motion_hint: "https://example.invalid/motion" })
+      ),
+    "unsafe_payload"
+  );
+});
+
+test("avatar feedback contract rejects raw motion path in motion_hint", () => {
+  assertVoxWeaveError(
+    () => validateAvatarFeedbackContract(minimalAvatarFeedbackContract({ motion_hint: "pose.motion3.json" })),
+    "unsafe_payload"
+  );
+});
+
+test("avatar feedback contract rejects renderer_endpoint-like key", () => {
+  assertVoxWeaveError(
+    () =>
+      validateAvatarFeedbackContract(
+        minimalAvatarFeedbackContract({ renderer_endpoint: "blocked" })
+      ),
+    "unsafe_payload"
+  );
+});
+
+test("avatar feedback contract rejects raw_phoneme_debug-like key", () => {
+  assertVoxWeaveError(
+    () =>
+      validateAvatarFeedbackContract(
+        minimalAvatarFeedbackContract({ raw_phoneme_debug: "blocked" })
+      ),
+    "unsafe_payload"
+  );
+});
+
+test("avatar feedback contract rejects raw_audio-like field", () => {
+  assertVoxWeaveError(
+    () => validateAvatarFeedbackContract(minimalAvatarFeedbackContract({ raw_audio: "blocked" })),
+    "unsafe_payload"
+  );
+});
+
+test("avatar feedback contract rejects token-like field", () => {
+  assertVoxWeaveError(
+    () => validateAvatarFeedbackContract(minimalAvatarFeedbackContract({ access_token: "blocked" })),
+    "unsafe_payload"
+  );
+});
+
+test("validateInputPayload accepts safe avatar feedback contract on ordinary safe payload", () => {
+  assert.equal(
+    validateInputPayload({
+      text: "safe sample",
+      avatar_feedback_contract: minimalAvatarFeedbackContract(),
+    }),
+    undefined
+  );
+});
+
+test("validateInputPayload accepts safe character identity, realtime interaction, human oversight, structured context, and avatar feedback contracts together", () => {
+  assert.equal(
+    validateInputPayload({
+      text: "safe sample",
+      character_identity_contract: minimalCharacterIdentityContract(),
+      realtime_interaction_contract: minimalRealtimeInteractionContract(),
+      human_oversight_consent_contract: minimalHumanOversightConsentContract(),
+      structured_context_contract: minimalStructuredContextContract(),
+      avatar_feedback_contract: minimalAvatarFeedbackContract(),
+    }),
+    undefined
+  );
+});
+
+test("validateInputPayload rejects unsafe avatar feedback contract on ordinary payload", () => {
+  assertVoxWeaveError(
+    () =>
+      validateInputPayload({
+        text: "safe sample",
+        avatar_feedback_contract: minimalAvatarFeedbackContract({
+          motion_hint: "motion.motion3.json",
+        }),
+      }),
+    "unsafe_payload"
+  );
+});
+
+test("validateInputPayload still rejects existing adapter unsafe field command with avatar feedback contract", () => {
+  assertVoxWeaveError(
+    () =>
+      validateInputPayload({
+        ...minimalAdapterPacket("tts"),
+        avatar_feedback_contract: minimalAvatarFeedbackContract(),
         command: "blocked",
       }),
     "unsafe_payload"
