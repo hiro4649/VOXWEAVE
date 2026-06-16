@@ -130,6 +130,11 @@ export function createVoxWeaveService({
       const adapterKind =
         routeKind ||
         normalizeAdapterKind(payload.adapter_kind ?? payload.adapterKind ?? payload.mode);
+      const aiCharacterAdapterMetadata = buildAiCharacterContractAdapterMetadata(
+        aiCharacterContracts,
+        aiCharacterContractSummary,
+        adapterKind
+      );
       const text = extractInputText(payload);
       const { correctedText, repairs, dictionary_version } =
         repairPronunciationText(text);
@@ -148,6 +153,7 @@ export function createVoxWeaveService({
         motion_cue: payload.motion_cue ?? null,
         ai_character_contracts: aiCharacterContracts,
         ai_character_contract_summary: aiCharacterContractSummary,
+        ai_character_adapter_metadata: aiCharacterAdapterMetadata,
       });
       const cacheable = isCacheableReaction(correctedText);
       const cached = cacheable ? cache.get(cacheKey) : null;
@@ -219,6 +225,7 @@ export function createVoxWeaveService({
         live2dCue,
         localeStatus,
         aiCharacterContracts,
+        aiCharacterAdapterMetadata,
       });
       const live2dCueDelivery = {
         schema: LIVE2D_RENDERER_DELIVERY_SCHEMA,
@@ -227,6 +234,9 @@ export function createVoxWeaveService({
           renderer_cue_only: true,
           safe_transport_only: true,
           file_refs_summary: true,
+          ai_character_contract_adapter_metadata_present:
+            aiCharacterAdapterMetadata.ai_character_contracts_present,
+          raw_ai_character_contracts_excluded: true,
         },
         adapter_validation_required: true,
       };
@@ -254,6 +264,7 @@ export function createVoxWeaveService({
         mouthCues,
         aiCharacterContracts,
         aiCharacterContractSummary,
+        aiCharacterAdapterMetadata,
       });
 
       const response = {
@@ -550,6 +561,7 @@ function buildAdapterArtifact({
   subtitleTiming,
   localeStatus,
   aiCharacterContracts,
+  aiCharacterAdapterMetadata,
 }) {
   if (adapterKind === "subtitle") {
     return {
@@ -557,6 +569,7 @@ function buildAdapterArtifact({
       artifact_url: `artifact://voxweave/subtitle/${safeId(requestId)}.vtt`,
       artifact_status: "dry_run_subtitle",
       ai_character_contracts: aiCharacterContracts,
+      ai_character_adapter_metadata: aiCharacterAdapterMetadata,
     };
   }
   if (adapterKind === "live2d") {
@@ -565,6 +578,7 @@ function buildAdapterArtifact({
       artifact_url: `artifact://voxweave/live2d/${safeId(requestId)}.json`,
       artifact_status: "dry_run_live2d_cue",
       ai_character_contracts: aiCharacterContracts,
+      ai_character_adapter_metadata: aiCharacterAdapterMetadata,
     };
   }
   return {
@@ -573,6 +587,7 @@ function buildAdapterArtifact({
     artifact_status: mockTts.mode,
     subtitle_preview_count: subtitleTiming.chunks.length,
     ai_character_contracts: aiCharacterContracts,
+    ai_character_adapter_metadata: aiCharacterAdapterMetadata,
   };
 }
 
@@ -585,6 +600,7 @@ function buildIrisResponseSummary({
   mouthCues,
   aiCharacterContracts,
   aiCharacterContractSummary,
+  aiCharacterAdapterMetadata,
 }) {
   return {
     status: 200,
@@ -607,6 +623,7 @@ function buildIrisResponseSummary({
     viseme_count: mouthCues.length,
     ai_character_contracts: aiCharacterContracts,
     ai_character_contract_summary: aiCharacterContractSummary,
+    ai_character_adapter_metadata: aiCharacterAdapterMetadata,
   };
 }
 
@@ -687,6 +704,49 @@ function buildAiCharacterContractSafeSummary(payload, presence) {
       Array.isArray(multilingualPersonalization?.approved_profile_facts) &&
       multilingualPersonalization.approved_profile_facts.length > 0,
     safe_summary_only: true,
+  };
+}
+
+function buildAiCharacterContractAdapterMetadata(presence, safeSummary, adapterKind) {
+  return {
+    schema: "voxweave_ai_character_contract_adapter_metadata_v1",
+    adapter_kind: normalizeAdapterKind(adapterKind),
+    ai_character_contracts_present: presence.ai_character_contracts_present,
+    contract_presence_count: presence.contract_presence_count,
+    safe_summary_available: safeSummary.safe_summary_only === true,
+    human_review_required_present: safeSummary.human_review_required_present,
+    blocked_status_present: safeSummary.blocked_status_present,
+    sensitive_context_present: safeSummary.sensitive_context_present,
+    external_action_or_command_risk_present:
+      safeSummary.external_action_or_command_risk_present,
+    approved_profile_fact_reference_present:
+      safeSummary.approved_profile_fact_reference_present,
+    raw_contract_projection: false,
+    raw_contract_values_excluded: true,
+    raw_identity_values_excluded: true,
+    raw_consent_values_excluded: true,
+    raw_context_values_excluded: true,
+    raw_avatar_values_excluded: true,
+    raw_personalization_values_excluded: true,
+    adapter_execution_required: false,
+    runtime_execution_required: false,
+    transport_required: false,
+    provider_required: false,
+    renderer_required: false,
+    safe_summary_only: true,
+    boundary_policy: {
+      presence_flags_only: true,
+      aggregate_summary_only: true,
+      no_raw_contract_values: true,
+      no_identity_values: true,
+      no_consent_values: true,
+      no_structured_context_text: true,
+      no_avatar_hint_text: true,
+      no_personalization_fact_ids: true,
+      no_adapter_execution: true,
+      no_runtime_execution: true,
+      no_transport_material: true,
+    },
   };
 }
 
