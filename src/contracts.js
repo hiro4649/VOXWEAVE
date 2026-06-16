@@ -17,6 +17,8 @@ export const STRUCTURED_CONTEXT_CONTRACT_SCHEMA =
   "voxweave_structured_context_contract_v1";
 export const AVATAR_FEEDBACK_CONTRACT_SCHEMA =
   "voxweave_avatar_feedback_contract_v1";
+export const MULTILINGUAL_PERSONALIZATION_CONTRACT_SCHEMA =
+  "voxweave_multilingual_personalization_contract_v1";
 
 const ADAPTER_KINDS = new Set(["tts", "subtitle", "live2d"]);
 const MAX_TEXT_LENGTH = 4000;
@@ -211,6 +213,30 @@ const AVATAR_ATTENTION_STATES = new Set([
   "unknown",
 ]);
 const AVATAR_INTENSITIES = new Set(["low", "medium", "high", "unknown"]);
+const MULTILINGUAL_TRANSLATION_MODES = new Set([
+  "none",
+  "literal",
+  "localized",
+  "guardian_friendly",
+  "child_friendly",
+  "operator_summary",
+]);
+const MULTILINGUAL_RECIPIENT_PROFILE_KINDS = new Set([
+  "user",
+  "parent",
+  "guardian",
+  "learner",
+  "viewer",
+  "operator",
+  "developer",
+  "unknown",
+]);
+const MULTILINGUAL_PERSONALIZATION_SCOPES = new Set([
+  "none",
+  "name_only",
+  "session_context",
+  "approved_profile_facts",
+]);
 
 const FORBIDDEN_KEYS = new Set([
   "world_command",
@@ -259,6 +285,13 @@ const FORBIDDEN_KEYS = new Set([
   "raw_image",
   "raw_ocr",
   "raw_ocr_text_dump",
+  "raw_profile",
+  "raw_memory",
+  "raw_user_fact_text",
+  "raw_transcript",
+  "raw_translation_prompt",
+  "raw_translation_provider_payload",
+  "raw_locale_provider_payload",
   "raw_app_state",
   "raw_game_state",
   "raw_stream_body",
@@ -293,6 +326,9 @@ const FORBIDDEN_KEYS = new Set([
   "direct_memory_write",
   "approved_memory_record",
   "approved_relationship_record",
+  "profile_write",
+  "translation_execution_command",
+  "postal_address",
   "obs_command",
   "game_input",
   "os_command",
@@ -344,6 +380,7 @@ export function validateInputPayload(payload, { routeKind = "" } = {}) {
   extractHumanOversightConsentContract(payload);
   extractStructuredContextContract(payload);
   extractAvatarFeedbackContract(payload);
+  extractMultilingualPersonalizationContract(payload);
   scanUnsafeInput(payload, "root");
 
   if (payload.schema === IRIS_ADAPTER_PACKET_SCHEMA) {
@@ -778,6 +815,74 @@ export function extractAvatarFeedbackContract(payload) {
   return validateAvatarFeedbackContract(contract);
 }
 
+export function validateMultilingualPersonalizationContract(contract) {
+  if (!isPlainObject(contract)) {
+    throw new VoxWeaveError(
+      "multilingual personalization contract object required",
+      "invalid_multilingual_personalization_contract"
+    );
+  }
+
+  scanUnsafeInput(contract, "root.multilingual_personalization_contract");
+
+  const normalized = {
+    schema: safeText(contract.schema, 80),
+    locale_in: normalizeLocale(contract.locale_in),
+    locale_out: normalizeLocale(contract.locale_out),
+    translation_mode: safeText(contract.translation_mode, 40),
+    recipient_profile_kind: safeText(contract.recipient_profile_kind, 40),
+    personalization_scope: safeText(contract.personalization_scope, 40),
+    approved_profile_facts: normalizeApprovedProfileFacts(contract.approved_profile_facts),
+    safe_summary_only: contract.safe_summary_only !== undefined
+      ? contract.safe_summary_only
+      : true,
+  };
+
+  if (normalized.schema !== MULTILINGUAL_PERSONALIZATION_CONTRACT_SCHEMA) {
+    throw new VoxWeaveError(
+      "invalid multilingual personalization contract schema",
+      "invalid_multilingual_personalization_contract"
+    );
+  }
+  if (!MULTILINGUAL_TRANSLATION_MODES.has(normalized.translation_mode)) {
+    throw new VoxWeaveError(
+      "invalid multilingual personalization translation mode",
+      "invalid_multilingual_personalization_contract"
+    );
+  }
+  if (!MULTILINGUAL_RECIPIENT_PROFILE_KINDS.has(normalized.recipient_profile_kind)) {
+    throw new VoxWeaveError(
+      "invalid multilingual personalization recipient profile kind",
+      "invalid_multilingual_personalization_contract"
+    );
+  }
+  if (!MULTILINGUAL_PERSONALIZATION_SCOPES.has(normalized.personalization_scope)) {
+    throw new VoxWeaveError(
+      "invalid multilingual personalization scope",
+      "invalid_multilingual_personalization_contract"
+    );
+  }
+  if (normalized.safe_summary_only !== true) {
+    throw new VoxWeaveError(
+      "multilingual personalization contract must be summary only",
+      "invalid_multilingual_personalization_contract"
+    );
+  }
+
+  validateMultilingualPersonalizationGuards(normalized);
+
+  return normalized;
+}
+
+export function extractMultilingualPersonalizationContract(payload) {
+  if (!isPlainObject(payload)) return null;
+  const contract =
+    payload.multilingual_personalization_contract ??
+    payload.multilingualPersonalizationContract;
+  if (contract === undefined || contract === null) return null;
+  return validateMultilingualPersonalizationContract(contract);
+}
+
 export function assertSafeResponse(payload) {
   scanUnsafeResponse(payload, "root");
   return payload;
@@ -1107,6 +1212,95 @@ function normalizeEnumList(value, allowed, maxLength, label) {
   }
 
   return normalized;
+}
+
+function normalizeLocale(value) {
+  const locale = safeText(value, 35);
+  if (!locale || !/^(?:und|[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8}){0,3})$/u.test(locale)) {
+    throw new VoxWeaveError(
+      "invalid multilingual personalization locale",
+      "invalid_multilingual_personalization_contract"
+    );
+  }
+  return locale;
+}
+
+function normalizeApprovedProfileFacts(value) {
+  if (!Array.isArray(value) || value.length > 12) {
+    throw new VoxWeaveError(
+      "multilingual personalization approved profile facts array required",
+      "invalid_multilingual_personalization_contract"
+    );
+  }
+
+  const normalized = [];
+  for (const item of value) {
+    if (typeof item !== "string") {
+      throw new VoxWeaveError(
+        "multilingual personalization approved profile fact id required",
+        "invalid_multilingual_personalization_contract"
+      );
+    }
+    const factId = safeId(item);
+    if (!factId) {
+      throw new VoxWeaveError(
+        "multilingual personalization approved profile fact id required",
+        "invalid_multilingual_personalization_contract"
+      );
+    }
+    if (!normalized.includes(factId)) normalized.push(factId);
+  }
+  return normalized;
+}
+
+function validateMultilingualPersonalizationGuards(contract) {
+  const hasApprovedFacts = contract.approved_profile_facts.length > 0;
+
+  if (contract.personalization_scope === "approved_profile_facts") {
+    if (!hasApprovedFacts || contract.recipient_profile_kind === "unknown") {
+      throw new VoxWeaveError(
+        "approved profile fact scope requires approved fact ids and known recipient",
+        "invalid_multilingual_personalization_contract"
+      );
+    }
+  } else if (hasApprovedFacts) {
+    throw new VoxWeaveError(
+      "approved profile facts require approved profile fact scope",
+      "invalid_multilingual_personalization_contract"
+    );
+  }
+
+  if (
+    contract.translation_mode === "child_friendly" &&
+    !["learner", "user", "parent", "guardian", "operator"].includes(
+      contract.recipient_profile_kind
+    )
+  ) {
+    throw new VoxWeaveError(
+      "child friendly translation mode requires child-safe recipient profile kind",
+      "invalid_multilingual_personalization_contract"
+    );
+  }
+
+  if (
+    contract.translation_mode === "guardian_friendly" &&
+    !["parent", "guardian", "operator"].includes(contract.recipient_profile_kind)
+  ) {
+    throw new VoxWeaveError(
+      "guardian friendly translation mode requires guardian recipient profile kind",
+      "invalid_multilingual_personalization_contract"
+    );
+  }
+
+  if (
+    contract.translation_mode === "operator_summary" &&
+    !["operator", "developer"].includes(contract.recipient_profile_kind)
+  ) {
+    throw new VoxWeaveError(
+      "operator summary translation mode requires operator recipient profile kind",
+      "invalid_multilingual_personalization_contract"
+    );
+  }
 }
 
 function validateStructuredContextRiskActionGuards(contract) {
