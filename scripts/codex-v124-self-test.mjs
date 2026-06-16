@@ -98,6 +98,16 @@ const evidenceAndFootprintCases = [
   ['repo_specific_visual_surface_requires_redaction', () => failed(validateTargetHarnessFootprintPolicy(buildOrchestrationCapsule({
     targetHarnessFootprintPolicy: { repoSpecificVisualProofSurface: { enabled: true, privateImageRedactionRequired: false } },
   }).targetHarnessFootprintPolicy))],
+  ['docs_only_scope_skips_formal_evidence_requirement', () => {
+    const text = fs.readFileSync('scripts/codex-local-quality-gate.mjs', 'utf8');
+    return text.includes('function isFormalEvidenceRequired') &&
+      text.includes('formal_evidence_not_required_for_docs_only_scope');
+  }],
+  ['docs_only_scope_keeps_target_quality_nonblocking', () => {
+    const text = fs.readFileSync('scripts/codex-local-quality-gate.mjs', 'utf8');
+    return text.includes('not_required_for_docs_only_scope') &&
+      text.includes('docsOnlyOptionalFailures');
+  }],
 ];
 
 const expertLoopCases = [
