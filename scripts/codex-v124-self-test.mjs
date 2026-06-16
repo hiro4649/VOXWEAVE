@@ -32,6 +32,10 @@ function passed(status) {
   return status?.status === 'pass';
 }
 
+function localQualityGateSource() {
+  return fs.readFileSync('scripts/codex-local-quality-gate.mjs', 'utf8');
+}
+
 const compatibilityCases = [
   ['v124_self_test_must_pass', () => true],
   ['v124_adds_no_new_p0_artifact', () => V124_P0_ARTIFACTS.length === 3 && !V124_P0_ARTIFACTS.includes('codex-v124-delegation.safe.json')],
@@ -171,12 +175,54 @@ const ownerBriefCases = [
   }],
 ];
 
+const prePushProductEvidenceCases = [
+  ['prepush_product_source_defers_remote_evidence_until_after_push', () => {
+    const source = localQualityGateSource();
+    return source.includes('function normalizePrePushRemoteEvidenceRequirement') &&
+      source.includes('product_verification_evidence_required_after_push') &&
+      source.includes('remote_product_baseline_required_after_push') &&
+      source.includes('remote_product_evidence_required_after_push') &&
+      source.includes('formal_evidence_required_after_push') &&
+      source.includes('remote_npm_diagnostic_required_after_push') &&
+      source.includes('prePushRemoteEvidenceRequiredAfterPush');
+  }],
+  ['prepush_product_source_preserves_remote_same_head_merge_boundary', () => {
+    const source = localQualityGateSource();
+    return source.includes("mergeReadiness: 'no_until_remote_same_head_qg'") &&
+      source.includes('!report.prePushRemoteEvidenceRequiredAfterPush && failures.length === 0');
+  }],
+  ['prepush_product_source_keeps_restricted_surface_guards', () => {
+    const source = localQualityGateSource();
+    return source.includes('function hasRestrictedSurfaceChange') &&
+      source.includes('classification.workflowChanged') &&
+      source.includes('classification.packageChanged') &&
+      source.includes('classification.lockfileChanged') &&
+      source.includes('!hasRestrictedSurfaceChange(report)');
+  }],
+  ['prepush_product_source_keeps_readiness_and_execution_guards', () => {
+    const source = localQualityGateSource();
+    return source.includes('function hasRuntimeOrReadinessClaim') &&
+      source.includes('function hasExecutionClaim') &&
+      source.includes('!hasRuntimeOrReadinessClaim(report)') &&
+      source.includes('!hasExecutionClaim(report, env)') &&
+      source.includes("env.CODEX_REMOTE_NPM_EXECUTED === '1'");
+  }],
+  ['prepush_product_source_keeps_remote_observed_evidence_blocking', () => {
+    const source = localQualityGateSource();
+    return source.includes('function isRemoteEvidenceObservable') &&
+      source.includes('!isRemoteEvidenceObservable(env)') &&
+      source.includes("env.GITHUB_ACTIONS === 'true'") &&
+      source.includes('Boolean(env.CODEX_PR_HEAD_SHA)');
+  }],
+];
+
 const cases = [
   ...compatibilityCases,
   ...goalAndDelegationCases,
   ...evidenceAndFootprintCases,
   ...expertLoopCases,
   ...ownerBriefCases,
+  ...prePushProductEvidenceCases,
 ].map(([name, fn]) => test(name, fn));
 
 const fixtureGroups = [
@@ -190,6 +236,7 @@ const fixtureGroups = [
   'safe_failure_digest_matrix',
   'owner_burden_reducer_matrix',
   'safe_session_learning_matrix',
+  'prepush_product_evidence_classification_matrix',
 ];
 
 const failures = cases.filter((item) => item.status !== 'pass');

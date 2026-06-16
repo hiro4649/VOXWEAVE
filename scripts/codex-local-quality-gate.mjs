@@ -2972,6 +2972,126 @@ function isFormalEvidenceRequired(report = {}, env = process.env) {
   return productRelevant || executionClaim || runtimeClaim;
 }
 
+function isLocalPrePushContext(env = process.env) {
+  const eventName = String(env.CODEX_EVENT_NAME || env.GITHUB_EVENT_NAME || '').toLowerCase();
+  const hasPullRequestContext = eventName === 'pull_request' ||
+    Boolean(env.CODEX_PR_NUMBER || env.CODEX_PR_HEAD_SHA || env.GITHUB_HEAD_REF || String(env.GITHUB_REF || '').includes('/pull/'));
+  const hasRemoteCiContext = env.CI === 'true' || env.GITHUB_ACTIONS === 'true' || Boolean(env.GITHUB_SHA);
+  return !hasPullRequestContext && !hasRemoteCiContext;
+}
+
+function isRemoteEvidenceObservable(env = process.env) {
+  return env.CODEX_REMOTE_NPM_EXECUTED === '1' ||
+    Boolean(env.CODEX_PRODUCT_VERIFICATION_EVIDENCE_PATH) ||
+    Boolean(env.CODEX_REMOTE_PRODUCT_BASELINE_PATH) ||
+    Boolean(env.CODEX_NPM_TEST_SAFE_SUMMARY_PATH) ||
+    Boolean(env.CODEX_PR_HEAD_SHA) ||
+    env.GITHUB_ACTIONS === 'true';
+}
+
+function isProductRelevantLocalChange(report = {}) {
+  const change = report.changeClassificationStatus || {};
+  const classification = change.classification || {};
+  return Boolean(
+    change.productRelevantChanged ||
+    change.productRelevant ||
+    classification.productSourceChanged ||
+    classification.testsChanged ||
+    classification.specsChanged ||
+    classification.configChanged
+  );
+}
+
+function hasRestrictedSurfaceChange(report = {}) {
+  const change = report.changeClassificationStatus || {};
+  const classification = change.classification || {};
+  return Boolean(
+    classification.workflowChanged ||
+    classification.packageChanged ||
+    classification.lockfileChanged ||
+    change.packageOrLockfileChanged ||
+    change.workflowChanged
+  );
+}
+
+function hasRuntimeOrReadinessClaim(report = {}) {
+  const change = report.changeClassificationStatus || {};
+  const classification = change.classification || {};
+  return Boolean(
+    classification.runtimeReadinessClaimed ||
+    classification.productionReadinessClaimed ||
+    classification.realTtsReadinessClaimed ||
+    change.runtimeReadinessClaimed ||
+    change.productionReadinessClaimed ||
+    change.realTtsReadinessClaimed ||
+    report.runtimeReadinessClaimed === true ||
+    report.productionReadinessClaimed === true
+  );
+}
+
+function hasExecutionClaim(report = {}, env = process.env) {
+  return Boolean(
+    report.productVerificationExecution === true ||
+    report.remoteDiagnosticExecution === true ||
+    report.runtimeDiagnosticExecution === true ||
+    env.CODEX_REMOTE_NPM_EXECUTED === '1'
+  );
+}
+
+function shouldDeferRemoteEvidenceUntilAfterPush(report = {}, env = process.env) {
+  return isLocalPrePushContext(env) &&
+    isProductRelevantLocalChange(report) &&
+    !hasRestrictedSurfaceChange(report) &&
+    !hasRuntimeOrReadinessClaim(report) &&
+    !hasExecutionClaim(report, env) &&
+    !isRemoteEvidenceObservable(env);
+}
+
+function deferFailingStatusUntilAfterPush(status = {}, reasonCode) {
+  if (!['fail', 'manual_confirmation_required', 'warning'].includes(status?.status)) return status;
+  const reasonCodes = Array.isArray(status.reasonCodes) ? [...status.reasonCodes] : [];
+  if (!reasonCodes.includes(reasonCode)) reasonCodes.push(reasonCode);
+  return {
+    ...status,
+    status: 'pass',
+    blocking: false,
+    remoteFormalEvidencePhase: 'required_after_push',
+    mergeReadiness: 'no_until_remote_same_head_qg',
+    reasonCodes,
+    safeSummaryOnly: true,
+  };
+}
+
+function normalizePrePushRemoteEvidenceRequirement(report = {}, env = process.env) {
+  if (!shouldDeferRemoteEvidenceUntilAfterPush(report, env)) return report;
+  report.productVerificationStatus = deferFailingStatusUntilAfterPush(
+    report.productVerificationStatus,
+    'product_verification_evidence_required_after_push'
+  );
+  report.productVerificationEvidenceStatus = deferFailingStatusUntilAfterPush(
+    report.productVerificationEvidenceStatus,
+    'product_verification_evidence_required_after_push'
+  );
+  report.remoteProductBaselineStatus = deferFailingStatusUntilAfterPush(
+    report.remoteProductBaselineStatus,
+    'remote_product_baseline_required_after_push'
+  );
+  report.remoteProductEvidenceRunnerStatus = deferFailingStatusUntilAfterPush(
+    report.remoteProductEvidenceRunnerStatus,
+    'remote_product_evidence_required_after_push'
+  );
+  report.formalEvidencePrecedenceStatus = deferFailingStatusUntilAfterPush(
+    report.formalEvidencePrecedenceStatus,
+    'formal_evidence_required_after_push'
+  );
+  report.remoteNpmDiagnosticNormalizationStatus = deferFailingStatusUntilAfterPush(
+    report.remoteNpmDiagnosticNormalizationStatus,
+    'remote_npm_diagnostic_required_after_push'
+  );
+  report.prePushRemoteEvidenceRequiredAfterPush = true;
+  return report;
+}
+
 function normalizeFormalEvidencePrecedenceForScope(report = {}, env = process.env) {
   if (isFormalEvidenceRequired(report, env)) return report.formalEvidencePrecedenceStatus;
   const status = report.formalEvidencePrecedenceStatus?.status || 'missing';
@@ -3001,6 +3121,7 @@ function runV099Gates(report, gateEnv) {
   report.lifeboatSemanticsStatus = runGateScript('scripts/codex-lifeboat-semantics-gate.mjs', 'lifeboatSemanticsStatus', 'CODEX_LIFEBOAT_SEMANTICS_REPORT', v099Env);
   report.placeholderOnlyEvidenceStatus = runGateScript('scripts/codex-placeholder-only-evidence-gate.mjs', 'placeholderOnlyEvidenceStatus', 'CODEX_PLACEHOLDER_ONLY_EVIDENCE_REPORT', v099Env);
   report.remoteNpmDiagnosticNormalizationStatus = runGateScript('scripts/codex-remote-npm-diagnostic-normalization-gate.mjs', 'remoteNpmDiagnosticNormalizationStatus', 'CODEX_REMOTE_NPM_DIAGNOSTIC_NORMALIZATION_REPORT', v099Env);
+  normalizePrePushRemoteEvidenceRequirement(report, gateEnv);
   report.legacySelfTestAdvisoryStatus = runGateScript('scripts/codex-legacy-self-test-advisory-gate.mjs', 'legacySelfTestAdvisoryStatus', 'CODEX_LEGACY_SELF_TEST_ADVISORY_REPORT', v099Env);
   report.authSurfaceClassifierRefinementStatus = runGateScript('scripts/codex-auth-surface-classifier-refinement-gate.mjs', 'authSurfaceClassifierRefinementStatus', 'CODEX_AUTH_SURFACE_CLASSIFIER_REFINEMENT_REPORT', v099Env);
   report.targetQualityBlockerDigestStatus = runGateScript('scripts/codex-target-quality-blocker-digest-gate.mjs', 'targetQualityBlockerDigestStatus', 'CODEX_TARGET_QUALITY_BLOCKER_DIGEST_REPORT', v099Env);
@@ -12397,7 +12518,7 @@ async function runTargetHarnessGate() {
 
 
 
-  report.mergeReady = failures.length === 0 && warnings.length === 0;
+  report.mergeReady = !report.prePushRemoteEvidenceRequiredAfterPush && failures.length === 0 && warnings.length === 0;
 
 
 
@@ -13048,7 +13169,7 @@ async function runSourceHarnessCoreContractGate() {
       safeSummaryOnly: true,
     };
   }
-  report.mergeReady = failures.length === 0 && warnings.length === 0;
+  report.mergeReady = !report.prePushRemoteEvidenceRequiredAfterPush && failures.length === 0 && warnings.length === 0;
   report.localGate = { status: report.status };
   writeV117LoadBearingArtifacts(report);
 
