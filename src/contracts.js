@@ -9,6 +9,8 @@ export const LIVE2D_RENDERER_DELIVERY_SCHEMA =
   "iris_live2d_renderer_cue_delivery_v1";
 export const CHARACTER_IDENTITY_CONTRACT_SCHEMA =
   "voxweave_character_identity_contract_v1";
+export const REALTIME_INTERACTION_CONTRACT_SCHEMA =
+  "voxweave_realtime_interaction_contract_v1";
 
 const ADAPTER_KINDS = new Set(["tts", "subtitle", "live2d"]);
 const MAX_TEXT_LENGTH = 4000;
@@ -38,6 +40,39 @@ const IDENTITY_ASSET_LICENSE_STATUSES = new Set([
   "unknown",
 ]);
 const IDENTITY_DRIFT_RISKS = new Set(["low", "medium", "high", "unknown"]);
+const REALTIME_INPUT_MODES = new Set([
+  "text",
+  "voice",
+  "event",
+  "vision_summary",
+  "structured_context",
+]);
+const REALTIME_OUTPUT_MODES = new Set([
+  "text",
+  "tts",
+  "avatar_motion",
+  "mixed",
+  "none",
+]);
+const REALTIME_SPEECH_STATES = new Set([
+  "idle",
+  "listening",
+  "thinking",
+  "speaking",
+  "interrupted",
+  "failed",
+]);
+const REALTIME_INTERRUPT_POLICIES = new Set([
+  "allow_user_barge_in",
+  "finish_sentence",
+  "no_interrupt",
+]);
+const REALTIME_LATENCY_CLASSES = new Set([
+  "realtime",
+  "interactive",
+  "delayed_sync",
+  "batch",
+]);
 
 const FORBIDDEN_KEYS = new Set([
   "world_command",
@@ -142,6 +177,7 @@ export function validateInputPayload(payload, { routeKind = "" } = {}) {
   }
 
   extractCharacterIdentityContract(payload);
+  extractRealtimeInteractionContract(payload);
   scanUnsafeInput(payload, "root");
 
   if (payload.schema === IRIS_ADAPTER_PACKET_SCHEMA) {
@@ -245,6 +281,93 @@ export function extractCharacterIdentityContract(payload) {
   const contract = payload.character_identity_contract ?? payload.characterIdentityContract;
   if (contract === undefined || contract === null) return null;
   return validateCharacterIdentityContract(contract);
+}
+
+export function validateRealtimeInteractionContract(contract) {
+  if (!isPlainObject(contract)) {
+    throw new VoxWeaveError(
+      "realtime interaction contract object required",
+      "invalid_realtime_interaction_contract"
+    );
+  }
+
+  scanUnsafeInput(contract, "root.realtime_interaction_contract");
+
+  const normalized = {
+    schema: safeText(contract.schema, 80),
+    session_id: safeId(contract.session_id),
+    turn_id: safeId(contract.turn_id),
+    utterance_id: safeId(contract.utterance_id),
+    input_mode: safeText(contract.input_mode, 40),
+    output_mode: safeText(contract.output_mode, 40),
+    speech_state: safeText(contract.speech_state, 40),
+    interrupt_policy: safeText(contract.interrupt_policy, 40),
+    latency_class: safeText(contract.latency_class, 40),
+    avatar_expression_hint: safeText(contract.avatar_expression_hint, 120),
+    avatar_motion_hint: safeText(contract.avatar_motion_hint, 120),
+    tts_emotion_hint: safeText(contract.tts_emotion_hint, 120),
+    safe_summary_only: contract.safe_summary_only !== undefined
+      ? contract.safe_summary_only
+      : true,
+  };
+
+  if (normalized.schema !== REALTIME_INTERACTION_CONTRACT_SCHEMA) {
+    throw new VoxWeaveError(
+      "invalid realtime interaction contract schema",
+      "invalid_realtime_interaction_contract"
+    );
+  }
+  if (!normalized.session_id || !normalized.turn_id || !normalized.utterance_id) {
+    throw new VoxWeaveError(
+      "realtime interaction contract required field missing",
+      "invalid_realtime_interaction_contract"
+    );
+  }
+  if (!REALTIME_INPUT_MODES.has(normalized.input_mode)) {
+    throw new VoxWeaveError(
+      "invalid realtime input mode",
+      "invalid_realtime_interaction_contract"
+    );
+  }
+  if (!REALTIME_OUTPUT_MODES.has(normalized.output_mode)) {
+    throw new VoxWeaveError(
+      "invalid realtime output mode",
+      "invalid_realtime_interaction_contract"
+    );
+  }
+  if (!REALTIME_SPEECH_STATES.has(normalized.speech_state)) {
+    throw new VoxWeaveError(
+      "invalid realtime speech state",
+      "invalid_realtime_interaction_contract"
+    );
+  }
+  if (!REALTIME_INTERRUPT_POLICIES.has(normalized.interrupt_policy)) {
+    throw new VoxWeaveError(
+      "invalid realtime interrupt policy",
+      "invalid_realtime_interaction_contract"
+    );
+  }
+  if (!REALTIME_LATENCY_CLASSES.has(normalized.latency_class)) {
+    throw new VoxWeaveError(
+      "invalid realtime latency class",
+      "invalid_realtime_interaction_contract"
+    );
+  }
+  if (normalized.safe_summary_only !== true) {
+    throw new VoxWeaveError(
+      "realtime interaction contract must be summary only",
+      "invalid_realtime_interaction_contract"
+    );
+  }
+
+  return normalized;
+}
+
+export function extractRealtimeInteractionContract(payload) {
+  if (!isPlainObject(payload)) return null;
+  const contract = payload.realtime_interaction_contract ?? payload.realtimeInteractionContract;
+  if (contract === undefined || contract === null) return null;
+  return validateRealtimeInteractionContract(contract);
 }
 
 export function assertSafeResponse(payload) {
