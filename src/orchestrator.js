@@ -23,6 +23,7 @@ import {
   safeText,
   validateInputPayload,
 } from "./contracts.js";
+import { VoxWeaveError } from "./errors.js";
 import { repairPronunciationText } from "./pronunciationDictionary.js";
 import { ReactionCache } from "./cache.js";
 import { RenderGroupStore } from "./renderGroupStore.js";
@@ -165,7 +166,7 @@ export function createVoxWeaveService({
           utteranceId: trace.utteranceId,
           qualityWarningCount: cached.quality?.deductions?.length ?? 0,
         });
-        return assertSafeResponse({
+        const cachedResponse = {
           ...cached,
           request_id: requestId,
           render_group: renderGroup,
@@ -173,7 +174,9 @@ export function createVoxWeaveService({
             status: "hit",
             key: cacheKey,
           },
-        });
+        };
+        assertSafeResponse(cachedResponse);
+        return assertAiCharacterResponseSafeSummary(cachedResponse);
       }
 
       const fallbackAllowed = extractFallbackAllowed(payload);
@@ -237,6 +240,7 @@ export function createVoxWeaveService({
           ai_character_contract_adapter_metadata_present:
             aiCharacterAdapterMetadata.ai_character_contracts_present,
           raw_ai_character_contracts_excluded: true,
+          ai_character_contract_response_safe_summary_guard: true,
         },
         adapter_validation_required: true,
       };
@@ -265,6 +269,7 @@ export function createVoxWeaveService({
         aiCharacterContracts,
         aiCharacterContractSummary,
         aiCharacterAdapterMetadata,
+        aiCharacterResponseGuard: buildAiCharacterContractResponseGuard(),
       });
 
       const response = {
@@ -316,20 +321,26 @@ export function createVoxWeaveService({
           binary_content_excluded: true,
           live2d_renderer_not_replaced: true,
           iris_core_not_replaced: true,
+          ai_character_contract_response_safe_summary_guard: true,
+          raw_ai_character_contracts_excluded: true,
+          ai_character_contract_values_excluded: true,
         },
         adapter_validation_required: true,
       };
 
       assertSafeResponse(response);
+      assertAiCharacterResponseSafeSummary(response);
       if (cacheable) {
-        cache.set(cacheKey, {
+        const cachedResponse = {
           ...response,
           request_id: "cached",
           cache: {
             status: "stored",
             key: cacheKey,
           },
-        });
+        };
+        assertAiCharacterResponseSafeSummary(cachedResponse);
+        cache.set(cacheKey, cachedResponse);
       }
       return response;
     },
@@ -601,6 +612,7 @@ function buildIrisResponseSummary({
   aiCharacterContracts,
   aiCharacterContractSummary,
   aiCharacterAdapterMetadata,
+  aiCharacterResponseGuard,
 }) {
   return {
     status: 200,
@@ -624,6 +636,7 @@ function buildIrisResponseSummary({
     ai_character_contracts: aiCharacterContracts,
     ai_character_contract_summary: aiCharacterContractSummary,
     ai_character_adapter_metadata: aiCharacterAdapterMetadata,
+    ai_character_contract_response_guard: aiCharacterResponseGuard,
   };
 }
 
@@ -748,6 +761,138 @@ function buildAiCharacterContractAdapterMetadata(presence, safeSummary, adapterK
       no_transport_material: true,
     },
   };
+}
+
+function buildAiCharacterContractResponseGuard() {
+  return {
+    schema: "voxweave_ai_character_contract_response_guard_v1",
+    safe_summary_only: true,
+    raw_contract_projection: false,
+    raw_contract_values_excluded: true,
+    raw_identity_values_excluded: true,
+    raw_consent_values_excluded: true,
+    raw_context_values_excluded: true,
+    raw_avatar_values_excluded: true,
+    raw_personalization_values_excluded: true,
+    response_guard_applied: true,
+  };
+}
+
+const AI_CHARACTER_RAW_CONTRACT_KEYS = new Set([
+  "raw_contract",
+  "contract",
+  "contracts",
+  "character_identity_contract",
+  "characterIdentityContract",
+  "realtime_interaction_contract",
+  "realtimeInteractionContract",
+  "human_oversight_consent_contract",
+  "humanOversightConsentContract",
+  "structured_context_contract",
+  "structuredContextContract",
+  "avatar_feedback_contract",
+  "avatarFeedbackContract",
+  "multilingual_personalization_contract",
+  "multilingualPersonalizationContract",
+]);
+
+const AI_CHARACTER_METADATA_UNSAFE_KEYS = new Set([
+  "character_profile_id",
+  "persona_version",
+  "visual_identity_id",
+  "voice_identity_id",
+  "consent_scope_id",
+  "review_ticket_id",
+  "policy_profile_id",
+  "approved_profile_facts",
+  "scene_id",
+  "user_intent",
+  "visible_objects_summary",
+  "app_or_game_state_summary",
+  "actor_state_summaries",
+  "expression_hint",
+  "motion_hint",
+  "gaze_target_summary",
+  "locale_in",
+  "locale_out",
+]);
+
+const AI_CHARACTER_UNSAFE_VALUE_PATTERNS = [
+  /\bhttps?:\/\//i,
+  /\btoken\b/i,
+  /\bsecret\b/i,
+  /\bauthorization\b/i,
+  /\bendpoint\b/i,
+  /(?:^|[A-Za-z]):[\\/]/,
+  /(?:^|[\\/])(?:models?|motions?|private)(?:[\\/]|$)/i,
+  /\.(?:wav|mp3|ogg|moc3|motion3\.json)$/i,
+];
+
+export function assertAiCharacterResponseSafeSummary(response) {
+  assertNoRawAiCharacterContractKeys(response);
+  for (const subtree of collectAiCharacterMetadataSubtrees(response)) {
+    assertAiCharacterMetadataSubtreeSafe(subtree);
+  }
+  return response;
+}
+
+function assertNoRawAiCharacterContractKeys(value) {
+  const stack = [value];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current || typeof current !== "object") continue;
+    if (Array.isArray(current)) {
+      for (const child of current) stack.push(child);
+      continue;
+    }
+    for (const [key, child] of Object.entries(current)) {
+      if (AI_CHARACTER_RAW_CONTRACT_KEYS.has(key)) throwUnsafeAiCharacterResponse();
+      stack.push(child);
+    }
+  }
+}
+
+function collectAiCharacterMetadataSubtrees(response) {
+  return [
+    response?.ai_character_contract_summary,
+    response?.response_summary?.ai_character_contract_summary,
+    response?.response_summary?.ai_character_adapter_metadata,
+    response?.response_summary?.ai_character_contracts,
+    response?.response_summary?.ai_character_contract_response_guard,
+    response?.artifact?.ai_character_contracts,
+    response?.artifact?.ai_character_adapter_metadata,
+  ].filter((value) => value && typeof value === "object");
+}
+
+function assertAiCharacterMetadataSubtreeSafe(value) {
+  const stack = [value];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (typeof current === "string") {
+      assertAiCharacterMetadataStringSafe(current);
+      continue;
+    }
+    if (!current || typeof current !== "object") continue;
+    if (Array.isArray(current)) {
+      for (const child of current) stack.push(child);
+      continue;
+    }
+    for (const [key, child] of Object.entries(current)) {
+      if (AI_CHARACTER_METADATA_UNSAFE_KEYS.has(key)) throwUnsafeAiCharacterResponse();
+      stack.push(child);
+    }
+  }
+}
+
+function assertAiCharacterMetadataStringSafe(value) {
+  if (value.startsWith("artifact://voxweave/")) return;
+  if (AI_CHARACTER_UNSAFE_VALUE_PATTERNS.some((pattern) => pattern.test(value))) {
+    throwUnsafeAiCharacterResponse();
+  }
+}
+
+function throwUnsafeAiCharacterResponse() {
+  throw new VoxWeaveError("Unsafe response metadata", "unsafe_response", 500);
 }
 
 function isHumanReviewRequiredPresent(contract) {
