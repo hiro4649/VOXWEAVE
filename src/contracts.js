@@ -15,6 +15,8 @@ export const HUMAN_OVERSIGHT_CONSENT_CONTRACT_SCHEMA =
   "voxweave_human_oversight_consent_contract_v1";
 export const STRUCTURED_CONTEXT_CONTRACT_SCHEMA =
   "voxweave_structured_context_contract_v1";
+export const AVATAR_FEEDBACK_CONTRACT_SCHEMA =
+  "voxweave_avatar_feedback_contract_v1";
 
 const ADAPTER_KINDS = new Set(["tts", "subtitle", "live2d"]);
 const MAX_TEXT_LENGTH = 4000;
@@ -159,6 +161,56 @@ const STRUCTURED_CONTEXT_ACTOR_FIELDS = new Set([
   "emotion_hint",
   "attention_hint",
 ]);
+const AVATAR_EXPRESSIONS = new Set([
+  "neutral",
+  "happy",
+  "sad",
+  "angry",
+  "confused",
+  "thinking",
+  "apologetic",
+  "excited",
+  "concerned",
+  "surprised",
+  "calm",
+  "unknown",
+]);
+const AVATAR_GAZES = new Set([
+  "user",
+  "screen",
+  "away",
+  "object",
+  "down",
+  "up",
+  "unknown",
+]);
+const AVATAR_GESTURES = new Set([
+  "idle",
+  "nod",
+  "shake_head",
+  "wave",
+  "point",
+  "listening",
+  "thinking",
+  "none",
+  "unknown",
+]);
+const AVATAR_MOUTH_STATES = new Set([
+  "closed",
+  "speaking",
+  "interrupted",
+  "failed",
+  "unknown",
+]);
+const AVATAR_ATTENTION_STATES = new Set([
+  "focused",
+  "passive",
+  "background",
+  "listening",
+  "thinking",
+  "unknown",
+]);
+const AVATAR_INTENSITIES = new Set(["low", "medium", "high", "unknown"]);
 
 const FORBIDDEN_KEYS = new Set([
   "world_command",
@@ -210,6 +262,11 @@ const FORBIDDEN_KEYS = new Set([
   "raw_app_state",
   "raw_game_state",
   "raw_stream_body",
+  "face_tracking_payload",
+  "gaze_tracking_payload",
+  "mouth_tracking_payload",
+  "tts_timing_payload",
+  "asr_stream_payload",
   "signature",
   "email_address",
   "phone_number",
@@ -286,6 +343,7 @@ export function validateInputPayload(payload, { routeKind = "" } = {}) {
   extractRealtimeInteractionContract(payload);
   extractHumanOversightConsentContract(payload);
   extractStructuredContextContract(payload);
+  extractAvatarFeedbackContract(payload);
   scanUnsafeInput(payload, "root");
 
   if (payload.schema === IRIS_ADAPTER_PACKET_SCHEMA) {
@@ -636,6 +694,88 @@ export function extractStructuredContextContract(payload) {
     payload.structured_context_contract ?? payload.structuredContextContract;
   if (contract === undefined || contract === null) return null;
   return validateStructuredContextContract(contract);
+}
+
+export function validateAvatarFeedbackContract(contract) {
+  if (!isPlainObject(contract)) {
+    throw new VoxWeaveError(
+      "avatar feedback contract object required",
+      "invalid_avatar_feedback_contract"
+    );
+  }
+
+  scanUnsafeInput(contract, "root.avatar_feedback_contract");
+
+  const normalized = {
+    schema: safeText(contract.schema, 80),
+    expression: safeText(contract.expression, 40),
+    gaze: safeText(contract.gaze, 40),
+    gesture: safeText(contract.gesture, 40),
+    mouth_state: safeText(contract.mouth_state, 40),
+    attention_state: safeText(contract.attention_state, 40),
+    intensity: safeText(contract.intensity, 40),
+    expression_hint: safeText(contract.expression_hint, 120),
+    motion_hint: safeText(contract.motion_hint, 120),
+    gaze_target_summary: safeText(contract.gaze_target_summary, 120),
+    safe_summary_only: contract.safe_summary_only !== undefined
+      ? contract.safe_summary_only
+      : true,
+  };
+
+  if (normalized.schema !== AVATAR_FEEDBACK_CONTRACT_SCHEMA) {
+    throw new VoxWeaveError(
+      "invalid avatar feedback contract schema",
+      "invalid_avatar_feedback_contract"
+    );
+  }
+  if (!AVATAR_EXPRESSIONS.has(normalized.expression)) {
+    throw new VoxWeaveError(
+      "invalid avatar feedback expression",
+      "invalid_avatar_feedback_contract"
+    );
+  }
+  if (!AVATAR_GAZES.has(normalized.gaze)) {
+    throw new VoxWeaveError("invalid avatar feedback gaze", "invalid_avatar_feedback_contract");
+  }
+  if (!AVATAR_GESTURES.has(normalized.gesture)) {
+    throw new VoxWeaveError(
+      "invalid avatar feedback gesture",
+      "invalid_avatar_feedback_contract"
+    );
+  }
+  if (!AVATAR_MOUTH_STATES.has(normalized.mouth_state)) {
+    throw new VoxWeaveError(
+      "invalid avatar feedback mouth state",
+      "invalid_avatar_feedback_contract"
+    );
+  }
+  if (!AVATAR_ATTENTION_STATES.has(normalized.attention_state)) {
+    throw new VoxWeaveError(
+      "invalid avatar feedback attention state",
+      "invalid_avatar_feedback_contract"
+    );
+  }
+  if (!AVATAR_INTENSITIES.has(normalized.intensity)) {
+    throw new VoxWeaveError(
+      "invalid avatar feedback intensity",
+      "invalid_avatar_feedback_contract"
+    );
+  }
+  if (normalized.safe_summary_only !== true) {
+    throw new VoxWeaveError(
+      "avatar feedback contract must be summary only",
+      "invalid_avatar_feedback_contract"
+    );
+  }
+
+  return normalized;
+}
+
+export function extractAvatarFeedbackContract(payload) {
+  if (!isPlainObject(payload)) return null;
+  const contract = payload.avatar_feedback_contract ?? payload.avatarFeedbackContract;
+  if (contract === undefined || contract === null) return null;
+  return validateAvatarFeedbackContract(contract);
 }
 
 export function assertSafeResponse(payload) {
