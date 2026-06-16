@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createVoxWeaveService } from "../src/orchestrator.js";
+import {
+  assertAiCharacterResponseSafeSummary,
+  createVoxWeaveService,
+} from "../src/orchestrator.js";
 
 const FORBIDDEN_RESPONSE_KEYS = new Set([
   "canonical_envelope",
@@ -725,6 +728,206 @@ test("adapter metadata rejects unsafe contract before response generation", asyn
   );
 });
 
+test("response safe summary guard metadata is present without raw values", async () => {
+  const result = await makeService().orchestrate(
+    makePacket("tts", allAiCharacterContracts()),
+    { routeKind: "tts" }
+  );
+
+  assertResponseGuard(result.response_summary.ai_character_contract_response_guard);
+  assertNoRawContractValues(result);
+  assertNoForbiddenFields(result);
+});
+
+test("response safe summary guard keeps boundary policy aggregate-only", async () => {
+  const result = await makeService().orchestrate(
+    makePacket("live2d", allAiCharacterContracts()),
+    { routeKind: "live2d" }
+  );
+
+  assert.equal(
+    result.boundary_policy.ai_character_contract_response_safe_summary_guard,
+    true
+  );
+  assert.equal(result.boundary_policy.raw_ai_character_contracts_excluded, true);
+  assert.equal(result.boundary_policy.ai_character_contract_values_excluded, true);
+  assert.equal(
+    result.live2d_cue_delivery.boundary_policy
+      .ai_character_contract_response_safe_summary_guard,
+    true
+  );
+  assert.equal(hasKeyRecursive(result.boundary_policy, "allowed_action_kinds"), false);
+  assertNoForbiddenFields(result);
+});
+
+test("response safe summary guard does not project raw contract keys", async () => {
+  const result = await makeService().orchestrate(
+    makePacket("subtitle", allAiCharacterContracts()),
+    { routeKind: "subtitle" }
+  );
+
+  for (const key of [
+    "character_identity_contract",
+    "structured_context_contract",
+    "avatar_feedback_contract",
+    "multilingual_personalization_contract",
+  ]) {
+    assert.equal(hasKeyRecursive(result, key), false);
+  }
+  assertNoForbiddenFields(result);
+});
+
+test("response safe summary guard does not project character identity IDs", async () => {
+  const result = await makeService().orchestrate(
+    makePacket("tts", {
+      character_identity_contract: characterIdentityContract({
+        character_profile_id: "identity-guard-profile",
+        persona_version: "identity-guard-persona",
+      }),
+    }),
+    { routeKind: "tts" }
+  );
+
+  assertResponseGuard(result.response_summary.ai_character_contract_response_guard);
+  assertResultExcludes(result, ["identity-guard-profile", "identity-guard-persona"]);
+  assertNoForbiddenFields(result);
+});
+
+test("response safe summary guard does not project consent or review IDs", async () => {
+  const result = await makeService().orchestrate(
+    makePacket("tts", {
+      human_oversight_consent_contract: humanOversightConsentContract({
+        consent_scope_id: "consent-guard-scope",
+        review_ticket_id: "review-guard-ticket",
+        policy_profile_id: "policy-guard-profile",
+      }),
+    }),
+    { routeKind: "tts" }
+  );
+
+  assertResponseGuard(result.response_summary.ai_character_contract_response_guard);
+  assertResultExcludes(result, [
+    "consent-guard-scope",
+    "review-guard-ticket",
+    "policy-guard-profile",
+  ]);
+  assertNoForbiddenFields(result);
+});
+
+test("response safe summary guard does not project structured context text", async () => {
+  const result = await makeService().orchestrate(
+    makePacket("tts", {
+      structured_context_contract: structuredContextContract({
+        user_intent: "structured guard intent text",
+        visible_objects_summary: "structured guard visible objects",
+        app_or_game_state_summary: "structured guard app state",
+        actor_state_summaries: [
+          {
+            actor_id: "actor-guard",
+            state_summary: "structured guard actor state",
+          },
+        ],
+      }),
+    }),
+    { routeKind: "tts" }
+  );
+
+  assertResponseGuard(result.response_summary.ai_character_contract_response_guard);
+  assertResultExcludes(result, [
+    "structured guard intent text",
+    "structured guard visible objects",
+    "structured guard app state",
+    "structured guard actor state",
+  ]);
+  assertNoForbiddenFields(result);
+});
+
+test("response safe summary guard does not project avatar hints", async () => {
+  const result = await makeService().orchestrate(
+    makePacket("live2d", {
+      avatar_feedback_contract: avatarFeedbackContract({
+        expression_hint: "avatar guard expression",
+        motion_hint: "avatar guard motion",
+        gaze_target_summary: "avatar guard gaze",
+      }),
+    }),
+    { routeKind: "live2d" }
+  );
+
+  assertResponseGuard(result.response_summary.ai_character_contract_response_guard);
+  assertResultExcludes(result, [
+    "avatar guard expression",
+    "avatar guard motion",
+    "avatar guard gaze",
+  ]);
+  assertNoForbiddenFields(result);
+});
+
+test("response safe summary guard does not project multilingual profile fact IDs", async () => {
+  const result = await makeService().orchestrate(
+    makePacket("tts", {
+      multilingual_personalization_contract: multilingualPersonalizationContract({
+        recipient_profile_kind: "guardian",
+        personalization_scope: "approved_profile_facts",
+        approved_profile_facts: ["guard-fact-one", "guard-fact-two"],
+      }),
+    }),
+    { routeKind: "tts" }
+  );
+
+  assertResponseGuard(result.response_summary.ai_character_contract_response_guard);
+  assertResultExcludes(result, ["guard-fact-one", "guard-fact-two"]);
+  assertNoForbiddenFields(result);
+});
+
+test("response safe summary guard is preserved on cache hit", async () => {
+  const service = makeService();
+  const packetWithContract = makePacket("tts", {
+    text: "thanks",
+    final_text: "thanks",
+    character_identity_contract: characterIdentityContract({
+      character_profile_id: "response-guard-cache-profile",
+    }),
+  });
+
+  const first = await service.orchestrate(packetWithContract, { routeKind: "tts" });
+  const second = await service.orchestrate(packetWithContract, { routeKind: "tts" });
+
+  assert.equal(first.cache.status, "miss");
+  assert.equal(second.cache.status, "hit");
+  assertResponseGuard(second.response_summary.ai_character_contract_response_guard);
+  assertResultExcludes(second, ["response-guard-cache-profile"]);
+  assertNoForbiddenFields(second);
+});
+
+test("response safe summary guard rejects injected raw contract metadata before return if helper is reachable", () => {
+  assert.throws(
+    () =>
+      assertAiCharacterResponseSafeSummary({
+        response_summary: {
+          ai_character_contract_summary: {
+            schema: "voxweave_ai_character_contract_safe_summary_v1",
+            character_profile_id: "injected-profile",
+          },
+        },
+      }),
+    { code: "unsafe_response" }
+  );
+
+  assert.throws(
+    () =>
+      assertAiCharacterResponseSafeSummary({
+        response_summary: {
+          ai_character_adapter_metadata: {
+            schema: "voxweave_ai_character_contract_adapter_metadata_v1",
+            raw_contract: {},
+          },
+        },
+      }),
+    { code: "unsafe_response" }
+  );
+});
+
 function makeService() {
   return createVoxWeaveService({
     now: () => 1_777_500_000_000,
@@ -931,6 +1134,19 @@ function assertAdapterMetadata(value, adapterKind, expectedCount, expectedFlags 
   for (const [key, expected] of Object.entries(expectedFlags)) {
     assert.equal(value[key], expected);
   }
+}
+
+function assertResponseGuard(value) {
+  assert.equal(value.schema, "voxweave_ai_character_contract_response_guard_v1");
+  assert.equal(value.safe_summary_only, true);
+  assert.equal(value.raw_contract_projection, false);
+  assert.equal(value.raw_contract_values_excluded, true);
+  assert.equal(value.raw_identity_values_excluded, true);
+  assert.equal(value.raw_consent_values_excluded, true);
+  assert.equal(value.raw_context_values_excluded, true);
+  assert.equal(value.raw_avatar_values_excluded, true);
+  assert.equal(value.raw_personalization_values_excluded, true);
+  assert.equal(value.response_guard_applied, true);
 }
 
 function assertNoRawContractValues(result) {
