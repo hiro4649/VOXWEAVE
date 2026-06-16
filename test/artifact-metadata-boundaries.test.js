@@ -928,6 +928,126 @@ test("response safe summary guard rejects injected raw contract metadata before 
   );
 });
 
+test("artifact boundary matrix keeps no-contract response free of AI raw metadata", async () => {
+  const result = await makeService().orchestrate(makePacket("tts"), {
+    routeKind: "tts",
+  });
+
+  assertArtifactBoundaryMatrix(result, "tts", 0);
+});
+
+test("artifact boundary matrix keeps tts all-contract response aggregate-only", async () => {
+  const result = await makeService().orchestrate(
+    makePacket("tts", allAiCharacterContracts()),
+    { routeKind: "tts" }
+  );
+
+  assertArtifactBoundaryMatrix(result, "tts", 6);
+});
+
+test("artifact boundary matrix keeps subtitle all-contract response aggregate-only", async () => {
+  const result = await makeService().orchestrate(
+    makePacket("subtitle", allAiCharacterContracts()),
+    { routeKind: "subtitle" }
+  );
+
+  assertArtifactBoundaryMatrix(result, "subtitle", 6);
+});
+
+test("artifact boundary matrix keeps live2d all-contract response aggregate-only", async () => {
+  const result = await makeService().orchestrate(
+    makePacket("live2d", allAiCharacterContracts()),
+    { routeKind: "live2d" }
+  );
+
+  assertArtifactBoundaryMatrix(result, "live2d", 6);
+});
+
+test("artifact boundary matrix keeps single-contract presence counts correct", async () => {
+  for (const { contract, expectedFlag } of singleAiCharacterContractCases()) {
+    const result = await makeService().orchestrate(makePacket("tts", contract), {
+      routeKind: "tts",
+    });
+
+    assertArtifactBoundaryMatrix(result, "tts", 1);
+    assert.equal(
+      result.response_summary.ai_character_contracts[expectedFlag],
+      true
+    );
+  }
+});
+
+test("artifact boundary matrix keeps response summary and adapter metadata counts aligned", async () => {
+  for (const adapterKind of ["tts", "subtitle", "live2d"]) {
+    const result = await makeService().orchestrate(
+      makePacket(adapterKind, allAiCharacterContracts()),
+      { routeKind: adapterKind }
+    );
+
+    assert.equal(
+      result.response_summary.ai_character_contracts.contract_presence_count,
+      result.response_summary.ai_character_adapter_metadata.contract_presence_count
+    );
+    assert.equal(
+      result.response_summary.ai_character_contract_summary.contract_presence_count,
+      result.response_summary.ai_character_adapter_metadata.contract_presence_count
+    );
+    assertArtifactBoundaryMatrix(result, adapterKind, 6);
+  }
+});
+
+test("artifact boundary matrix keeps Live2D delivery boundary policy flags only", async () => {
+  const result = await makeService().orchestrate(
+    makePacket("live2d", allAiCharacterContracts()),
+    { routeKind: "live2d" }
+  );
+
+  assert.equal(
+    result.live2d_cue_delivery.boundary_policy
+      .ai_character_contract_adapter_metadata_present,
+    true
+  );
+  assert.equal(
+    result.live2d_cue_delivery.boundary_policy
+      .ai_character_contract_response_safe_summary_guard,
+    true
+  );
+  assert.equal(hasKeyRecursive(result.live2d_cue_delivery, "ai_character_contract_summary"), false);
+  assert.equal(hasKeyRecursive(result.live2d_cue_delivery, "ai_character_adapter_metadata"), false);
+  assertArtifactBoundaryMatrix(result, "live2d", 6);
+});
+
+test("artifact boundary matrix keeps cache hit aggregate-only after all-contract request", async () => {
+  const service = makeService();
+  const packetWithContracts = makePacket("tts", {
+    text: "thanks",
+    final_text: "thanks",
+    ...allAiCharacterContracts(),
+  });
+
+  const first = await service.orchestrate(packetWithContracts, { routeKind: "tts" });
+  const second = await service.orchestrate(packetWithContracts, { routeKind: "tts" });
+
+  assert.equal(first.cache.status, "miss");
+  assert.equal(second.cache.status, "hit");
+  assertArtifactBoundaryMatrix(second, "tts", 6);
+});
+
+test("artifact boundary matrix rejects unsafe contract before artifact metadata is produced", async () => {
+  await assert.rejects(
+    () =>
+      makeService().orchestrate(
+        makePacket("tts", {
+          avatar_feedback_contract: avatarFeedbackContract({
+            motion_hint: "https://example.invalid/motion",
+          }),
+        }),
+        { routeKind: "tts" }
+      ),
+    { code: "unsafe_payload" }
+  );
+});
+
 function makeService() {
   return createVoxWeaveService({
     now: () => 1_777_500_000_000,
@@ -1034,6 +1154,37 @@ function allAiCharacterContracts() {
     avatar_feedback_contract: avatarFeedbackContract(),
     multilingual_personalization_contract: multilingualPersonalizationContract(),
   };
+}
+
+function singleAiCharacterContractCases() {
+  return [
+    {
+      contract: { character_identity_contract: characterIdentityContract() },
+      expectedFlag: "character_identity_contract_present",
+    },
+    {
+      contract: { realtime_interaction_contract: realtimeInteractionContract() },
+      expectedFlag: "realtime_interaction_contract_present",
+    },
+    {
+      contract: { human_oversight_consent_contract: humanOversightConsentContract() },
+      expectedFlag: "human_oversight_consent_contract_present",
+    },
+    {
+      contract: { structured_context_contract: structuredContextContract() },
+      expectedFlag: "structured_context_contract_present",
+    },
+    {
+      contract: { avatar_feedback_contract: avatarFeedbackContract() },
+      expectedFlag: "avatar_feedback_contract_present",
+    },
+    {
+      contract: {
+        multilingual_personalization_contract: multilingualPersonalizationContract(),
+      },
+      expectedFlag: "multilingual_personalization_contract_present",
+    },
+  ];
 }
 
 function makePacket(adapterKind, overrides = {}) {
@@ -1147,6 +1298,56 @@ function assertResponseGuard(value) {
   assert.equal(value.raw_avatar_values_excluded, true);
   assert.equal(value.raw_personalization_values_excluded, true);
   assert.equal(value.response_guard_applied, true);
+}
+
+function assertArtifactBoundaryMatrix(result, adapterKind, expectedCount) {
+  assertSafeSuccess(result, adapterKind);
+  assertSafeArtifact(result, result.artifact_kind);
+  assertPresence(result.response_summary.ai_character_contracts, expectedCount);
+  assertSafeSummary(result.ai_character_contract_summary, expectedCount);
+  assertSafeSummary(result.response_summary.ai_character_contract_summary, expectedCount);
+  assertAdapterMetadata(
+    result.response_summary.ai_character_adapter_metadata,
+    adapterKind,
+    expectedCount
+  );
+  assertResponseGuard(result.response_summary.ai_character_contract_response_guard);
+  assert.equal(result.runtime_readiness_claimed, false);
+  assertNoAiCharacterRawProjection(result);
+  assertNoForbiddenFields(result);
+}
+
+function assertNoAiCharacterRawProjection(result) {
+  for (const key of [
+    "raw_contract",
+    "character_identity_contract",
+    "realtime_interaction_contract",
+    "human_oversight_consent_contract",
+    "structured_context_contract",
+    "avatar_feedback_contract",
+    "multilingual_personalization_contract",
+    "character_profile_id",
+    "persona_version",
+    "visual_identity_id",
+    "voice_identity_id",
+    "consent_scope_id",
+    "review_ticket_id",
+    "policy_profile_id",
+    "scene_id",
+    "user_intent",
+    "visible_objects_summary",
+    "app_or_game_state_summary",
+    "actor_state_summaries",
+    "expression_hint",
+    "motion_hint",
+    "gaze_target_summary",
+    "locale_in",
+    "locale_out",
+    "approved_profile_facts",
+  ]) {
+    assert.equal(hasKeyRecursive(result, key), false, `raw AI metadata key leaked: ${key}`);
+  }
+  assertNoRawContractValues(result);
 }
 
 function assertNoRawContractValues(result) {

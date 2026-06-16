@@ -826,6 +826,156 @@ test("orchestrate keeps response free of forbidden keys after response guard", a
   assertNoForbiddenFields(result);
 });
 
+test("orchestrator regression matrix accepts every single AI character contract independently", async () => {
+  for (const { contract, expectedFlag } of singleAiCharacterContractCases()) {
+    const result = await makeService().orchestrate(packet(contract), {
+      routeKind: "tts",
+    });
+
+    assertOrchestratorBoundaryMatrix(result, "tts", 1);
+    assert.equal(
+      result.response_summary.ai_character_contracts[expectedFlag],
+      true
+    );
+  }
+});
+
+test("orchestrator regression matrix accepts all AI character contracts together", async () => {
+  const result = await makeService().orchestrate(packet(allAiCharacterContracts()), {
+    routeKind: "tts",
+  });
+
+  assertOrchestratorBoundaryMatrix(result, "tts", 6);
+});
+
+test("orchestrator regression matrix reports zero presence without contracts", async () => {
+  const result = await makeService().orchestrate(packet(), { routeKind: "tts" });
+
+  assertOrchestratorBoundaryMatrix(result, "tts", 0);
+  assert.equal(result.ai_character_contract_summary.ai_character_contracts_present, false);
+});
+
+test("orchestrator regression matrix never projects raw identity fields", async () => {
+  const result = await makeService().orchestrate(
+    packet({
+      character_identity_contract: characterIdentityContract({
+        character_profile_id: "matrix-identity-profile",
+        persona_version: "matrix-persona-version",
+      }),
+    }),
+    { routeKind: "tts" }
+  );
+
+  assertOrchestratorBoundaryMatrix(result, "tts", 1);
+  assertResultExcludes(result, ["matrix-identity-profile", "matrix-persona-version"]);
+});
+
+test("orchestrator regression matrix never projects raw consent fields", async () => {
+  const result = await makeService().orchestrate(
+    packet({
+      human_oversight_consent_contract: humanOversightConsentContract({
+        consent_scope_id: "matrix-consent-scope",
+        review_ticket_id: "matrix-review-ticket",
+        policy_profile_id: "matrix-policy-profile",
+      }),
+    }),
+    { routeKind: "tts" }
+  );
+
+  assertOrchestratorBoundaryMatrix(result, "tts", 1);
+  assertResultExcludes(result, [
+    "matrix-consent-scope",
+    "matrix-review-ticket",
+    "matrix-policy-profile",
+  ]);
+});
+
+test("orchestrator regression matrix never projects structured context text", async () => {
+  const result = await makeService().orchestrate(
+    packet({
+      structured_context_contract: structuredContextContract({
+        user_intent: "matrix intent text",
+        visible_objects_summary: "matrix visible summary",
+        app_or_game_state_summary: "matrix state summary",
+      }),
+    }),
+    { routeKind: "tts" }
+  );
+
+  assertOrchestratorBoundaryMatrix(result, "tts", 1);
+  assertResultExcludes(result, [
+    "matrix intent text",
+    "matrix visible summary",
+    "matrix state summary",
+  ]);
+});
+
+test("orchestrator regression matrix never projects avatar hints", async () => {
+  const result = await makeService().orchestrate(
+    packet({
+      avatar_feedback_contract: avatarFeedbackContract({
+        expression_hint: "matrix expression hint",
+        motion_hint: "matrix motion hint",
+        gaze_target_summary: "matrix gaze hint",
+      }),
+    }),
+    { routeKind: "tts" }
+  );
+
+  assertOrchestratorBoundaryMatrix(result, "tts", 1);
+  assertResultExcludes(result, [
+    "matrix expression hint",
+    "matrix motion hint",
+    "matrix gaze hint",
+  ]);
+});
+
+test("orchestrator regression matrix never projects multilingual fact IDs", async () => {
+  const result = await makeService().orchestrate(
+    packet({
+      multilingual_personalization_contract: multilingualPersonalizationContract({
+        recipient_profile_kind: "guardian",
+        personalization_scope: "approved_profile_facts",
+        approved_profile_facts: ["matrix-fact-one", "matrix-fact-two"],
+      }),
+    }),
+    { routeKind: "tts" }
+  );
+
+  assertOrchestratorBoundaryMatrix(result, "tts", 1);
+  assertResultExcludes(result, ["matrix-fact-one", "matrix-fact-two"]);
+});
+
+test("orchestrator regression matrix preserves runtime and provider false boundaries", async () => {
+  for (const adapterKind of ["tts", "subtitle", "live2d"]) {
+    const result = await makeService().orchestrate(
+      packet({ adapter_kind: adapterKind, ...allAiCharacterContracts() }),
+      { routeKind: adapterKind }
+    );
+
+    assertOrchestratorBoundaryMatrix(result, adapterKind, 6);
+    assert.equal(result.mock_tts.provider_connected, false);
+    assert.equal(result.tts_routing.real_tts_connected, false);
+    assert.equal(result.response_summary.ai_character_adapter_metadata.provider_required, false);
+    assert.equal(result.response_summary.ai_character_adapter_metadata.renderer_required, false);
+  }
+});
+
+test("orchestrator regression matrix rejects unsafe contract before safe summaries exist", async () => {
+  await assert.rejects(
+    () =>
+      makeService().orchestrate(
+        packet({
+          multilingual_personalization_contract: multilingualPersonalizationContract({
+            locale_out: "https://example.invalid/locale",
+          }),
+        }),
+        { routeKind: "tts" }
+      ),
+    { code: "unsafe_payload" }
+  );
+});
+
 function characterIdentityContract(overrides = {}) {
   return {
     schema: "voxweave_character_identity_contract_v1",
@@ -918,6 +1068,37 @@ function allAiCharacterContracts() {
   };
 }
 
+function singleAiCharacterContractCases() {
+  return [
+    {
+      contract: { character_identity_contract: characterIdentityContract() },
+      expectedFlag: "character_identity_contract_present",
+    },
+    {
+      contract: { realtime_interaction_contract: realtimeInteractionContract() },
+      expectedFlag: "realtime_interaction_contract_present",
+    },
+    {
+      contract: { human_oversight_consent_contract: humanOversightConsentContract() },
+      expectedFlag: "human_oversight_consent_contract_present",
+    },
+    {
+      contract: { structured_context_contract: structuredContextContract() },
+      expectedFlag: "structured_context_contract_present",
+    },
+    {
+      contract: { avatar_feedback_contract: avatarFeedbackContract() },
+      expectedFlag: "avatar_feedback_contract_present",
+    },
+    {
+      contract: {
+        multilingual_personalization_contract: multilingualPersonalizationContract(),
+      },
+      expectedFlag: "multilingual_personalization_contract_present",
+    },
+  ];
+}
+
 function assertAiCharacterPresence(value, expectedCount, expectedFlags = {}) {
   assert.equal(value.schema, "voxweave_ai_character_contract_presence_v1");
   assert.equal(value.ai_character_contracts_present, expectedCount > 0);
@@ -993,6 +1174,60 @@ function assertAiCharacterResponseGuard(value) {
   assert.equal(value.raw_avatar_values_excluded, true);
   assert.equal(value.raw_personalization_values_excluded, true);
   assert.equal(value.response_guard_applied, true);
+}
+
+function assertOrchestratorBoundaryMatrix(result, adapterKind, expectedCount) {
+  assert.equal(result.schema, "voxweave_orchestration_result_v1");
+  assert.equal(result.ok, true);
+  assert.equal(result.adapter_kind, adapterKind);
+  assert.equal(result.runtime_readiness_claimed, false);
+  assertAiCharacterPresence(result.response_summary.ai_character_contracts, expectedCount);
+  assertAiCharacterSummary(result.ai_character_contract_summary, expectedCount);
+  assertAiCharacterSummary(
+    result.response_summary.ai_character_contract_summary,
+    expectedCount
+  );
+  assertAiCharacterAdapterMetadata(
+    result.response_summary.ai_character_adapter_metadata,
+    adapterKind,
+    expectedCount
+  );
+  assertAiCharacterResponseGuard(result.response_summary.ai_character_contract_response_guard);
+  assertNoAiCharacterRawProjection(result);
+  assertNoForbiddenFields(result);
+}
+
+function assertNoAiCharacterRawProjection(result) {
+  for (const key of [
+    "raw_contract",
+    "character_identity_contract",
+    "realtime_interaction_contract",
+    "human_oversight_consent_contract",
+    "structured_context_contract",
+    "avatar_feedback_contract",
+    "multilingual_personalization_contract",
+    "character_profile_id",
+    "persona_version",
+    "visual_identity_id",
+    "voice_identity_id",
+    "consent_scope_id",
+    "review_ticket_id",
+    "policy_profile_id",
+    "scene_id",
+    "user_intent",
+    "visible_objects_summary",
+    "app_or_game_state_summary",
+    "actor_state_summaries",
+    "expression_hint",
+    "motion_hint",
+    "gaze_target_summary",
+    "locale_in",
+    "locale_out",
+    "approved_profile_facts",
+  ]) {
+    assert.equal(hasKeyRecursive(result, key), false, `raw AI metadata key leaked: ${key}`);
+  }
+  assertNoRawProjection(result);
 }
 
 function assertNoRawProjection(result) {
