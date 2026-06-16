@@ -554,6 +554,158 @@ test("orchestrate keeps response free of forbidden keys after safe summary proje
   assertNoForbiddenFields(result);
 });
 
+test("orchestrate with all safe AI character contracts returns adapter metadata presence count", async () => {
+  const result = await makeService().orchestrate(packet(allAiCharacterContracts()), {
+    routeKind: "tts",
+  });
+
+  assertAiCharacterAdapterMetadata(
+    result.response_summary.ai_character_adapter_metadata,
+    "tts",
+    6
+  );
+  assert.equal(Object.hasOwn(result, "ai_character_adapter_metadata"), false);
+  assertNoRawProjection(result);
+  assertNoForbiddenFields(result);
+});
+
+test("orchestrate with only character identity contract returns adapter metadata count one", async () => {
+  const result = await makeService().orchestrate(
+    packet({ character_identity_contract: characterIdentityContract() }),
+    { routeKind: "tts" }
+  );
+
+  assertAiCharacterAdapterMetadata(
+    result.response_summary.ai_character_adapter_metadata,
+    "tts",
+    1
+  );
+  assertNoRawProjection(result);
+  assertNoForbiddenFields(result);
+});
+
+test("orchestrate with human oversight blocked status returns adapter metadata blocked aggregate only", async () => {
+  const result = await makeService().orchestrate(
+    packet({
+      human_oversight_consent_contract: humanOversightConsentContract({
+        consent_status: "blocked",
+      }),
+    }),
+    { routeKind: "tts" }
+  );
+
+  assertAiCharacterAdapterMetadata(
+    result.response_summary.ai_character_adapter_metadata,
+    "tts",
+    1,
+    { blocked_status_present: true }
+  );
+  assert.equal(
+    hasKeyRecursive(result.response_summary.ai_character_adapter_metadata, "consent_status"),
+    false
+  );
+  assertNoForbiddenFields(result);
+});
+
+test("orchestrate with structured context command risk returns adapter metadata external action aggregate only", async () => {
+  const result = await makeService().orchestrate(
+    packet({
+      structured_context_contract: structuredContextContract({
+        risk_flags: ["command_risk"],
+        allowed_action_kinds: ["safe_metadata_only"],
+      }),
+    }),
+    { routeKind: "tts" }
+  );
+
+  assertAiCharacterAdapterMetadata(
+    result.response_summary.ai_character_adapter_metadata,
+    "tts",
+    1,
+    { external_action_or_command_risk_present: true }
+  );
+  assert.equal(
+    hasKeyRecursive(result.response_summary.ai_character_adapter_metadata, "risk_flags"),
+    false
+  );
+  assertNoForbiddenFields(result);
+});
+
+test("orchestrate with multilingual approved facts returns adapter metadata approved fact reference aggregate only", async () => {
+  const result = await makeService().orchestrate(
+    packet({
+      multilingual_personalization_contract: multilingualPersonalizationContract({
+        recipient_profile_kind: "guardian",
+        personalization_scope: "approved_profile_facts",
+        approved_profile_facts: ["adapter-integration-fact"],
+      }),
+    }),
+    { routeKind: "tts" }
+  );
+
+  assertAiCharacterAdapterMetadata(
+    result.response_summary.ai_character_adapter_metadata,
+    "tts",
+    1,
+    { approved_profile_fact_reference_present: true }
+  );
+  assertResultExcludes(result, ["adapter-integration-fact"]);
+  assertNoForbiddenFields(result);
+});
+
+test("orchestrate for live2d includes only boundary-policy flags in live2d cue delivery", async () => {
+  const result = await makeService().orchestrate(
+    packet({
+      adapter_kind: "live2d",
+      ...allAiCharacterContracts(),
+    }),
+    { routeKind: "live2d" }
+  );
+
+  assertAiCharacterAdapterMetadata(
+    result.response_summary.ai_character_adapter_metadata,
+    "live2d",
+    6
+  );
+  assert.equal(
+    result.live2d_cue_delivery.boundary_policy.ai_character_contract_adapter_metadata_present,
+    true
+  );
+  assert.equal(
+    result.live2d_cue_delivery.boundary_policy.raw_ai_character_contracts_excluded,
+    true
+  );
+  assert.equal(hasKeyRecursive(result.live2d_cue_delivery, "ai_character_adapter_metadata"), false);
+  assertNoRawProjection(result);
+  assertNoForbiddenFields(result);
+});
+
+test("orchestrate rejects unsafe contract before creating adapter metadata", async () => {
+  await assert.rejects(
+    () =>
+      makeService().orchestrate(
+        packet({
+          character_identity_contract: characterIdentityContract({
+            character_profile_id: "https://example.invalid/profile",
+          }),
+        }),
+        { routeKind: "tts" }
+      ),
+    { code: "unsafe_payload" }
+  );
+});
+
+test("orchestrate keeps response free of forbidden keys after adapter metadata", async () => {
+  const result = await makeService().orchestrate(packet(allAiCharacterContracts()), {
+    routeKind: "tts",
+  });
+
+  assert.equal(hasKeyRecursive(result, "raw_contract"), false);
+  assert.equal(hasKeyRecursive(result, "payload"), false);
+  assert.equal(hasKeyRecursive(result, "endpoint"), false);
+  assertNoForbiddenFields(result);
+});
+
 function characterIdentityContract(overrides = {}) {
   return {
     schema: "voxweave_character_identity_contract_v1",
@@ -675,6 +827,36 @@ function assertAiCharacterSummary(value, expectedCount, expectedFlags = {}) {
   assert.equal(value.runtime_execution_required, false);
   assert.equal(value.adapter_execution_required, false);
   assert.equal(value.safe_summary_only, true);
+  for (const [key, expected] of Object.entries(expectedFlags)) {
+    assert.equal(value[key], expected);
+  }
+}
+
+function assertAiCharacterAdapterMetadata(value, adapterKind, expectedCount, expectedFlags = {}) {
+  assert.equal(value.schema, "voxweave_ai_character_contract_adapter_metadata_v1");
+  assert.equal(value.adapter_kind, adapterKind);
+  assert.equal(value.ai_character_contracts_present, expectedCount > 0);
+  assert.equal(value.contract_presence_count, expectedCount);
+  assert.equal(value.safe_summary_available, true);
+  assert.equal(value.raw_contract_projection, false);
+  assert.equal(value.raw_contract_values_excluded, true);
+  assert.equal(value.raw_identity_values_excluded, true);
+  assert.equal(value.raw_consent_values_excluded, true);
+  assert.equal(value.raw_context_values_excluded, true);
+  assert.equal(value.raw_avatar_values_excluded, true);
+  assert.equal(value.raw_personalization_values_excluded, true);
+  assert.equal(value.adapter_execution_required, false);
+  assert.equal(value.runtime_execution_required, false);
+  assert.equal(value.transport_required, false);
+  assert.equal(value.provider_required, false);
+  assert.equal(value.renderer_required, false);
+  assert.equal(value.safe_summary_only, true);
+  assert.equal(value.boundary_policy.presence_flags_only, true);
+  assert.equal(value.boundary_policy.aggregate_summary_only, true);
+  assert.equal(value.boundary_policy.no_raw_contract_values, true);
+  assert.equal(value.boundary_policy.no_adapter_execution, true);
+  assert.equal(value.boundary_policy.no_runtime_execution, true);
+  assert.equal(value.boundary_policy.no_transport_material, true);
   for (const [key, expected] of Object.entries(expectedFlags)) {
     assert.equal(value[key], expected);
   }
