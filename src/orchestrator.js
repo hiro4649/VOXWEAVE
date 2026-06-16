@@ -6,10 +6,16 @@ import {
   assertSafeResponse,
   clamp,
   extractDurationMs,
+  extractAvatarFeedbackContract,
+  extractCharacterIdentityContract,
+  extractHumanOversightConsentContract,
   extractInputText,
   extractLanguage,
+  extractMultilingualPersonalizationContract,
   extractProsodyHints,
+  extractRealtimeInteractionContract,
   extractScriptDirection,
+  extractStructuredContextContract,
   extractTrace,
   hashPayload,
   normalizeAdapterKind,
@@ -115,6 +121,7 @@ export function createVoxWeaveService({
 
     async orchestrate(payload, { routeKind = "" } = {}) {
       validateInputPayload(payload, { routeKind });
+      const aiCharacterContracts = buildAiCharacterContractPresence(payload);
 
       const adapterKind =
         routeKind ||
@@ -135,6 +142,7 @@ export function createVoxWeaveService({
         language,
         speech_cue: payload.speech_cue ?? null,
         motion_cue: payload.motion_cue ?? null,
+        ai_character_contracts: aiCharacterContracts,
       });
       const cacheable = isCacheableReaction(correctedText);
       const cached = cacheable ? cache.get(cacheKey) : null;
@@ -205,6 +213,7 @@ export function createVoxWeaveService({
         subtitleTiming,
         live2dCue,
         localeStatus,
+        aiCharacterContracts,
       });
       const live2dCueDelivery = {
         schema: LIVE2D_RENDERER_DELIVERY_SCHEMA,
@@ -238,6 +247,7 @@ export function createVoxWeaveService({
         durationMs,
         mockTts,
         mouthCues,
+        aiCharacterContracts,
       });
 
       const response = {
@@ -532,12 +542,14 @@ function buildAdapterArtifact({
   mockTts,
   subtitleTiming,
   localeStatus,
+  aiCharacterContracts,
 }) {
   if (adapterKind === "subtitle") {
     return {
       artifact_kind: "subtitle_vtt",
       artifact_url: `artifact://voxweave/subtitle/${safeId(requestId)}.vtt`,
       artifact_status: "dry_run_subtitle",
+      ai_character_contracts: aiCharacterContracts,
     };
   }
   if (adapterKind === "live2d") {
@@ -545,6 +557,7 @@ function buildAdapterArtifact({
       artifact_kind: "live2d_cue_json",
       artifact_url: `artifact://voxweave/live2d/${safeId(requestId)}.json`,
       artifact_status: "dry_run_live2d_cue",
+      ai_character_contracts: aiCharacterContracts,
     };
   }
   return {
@@ -552,6 +565,7 @@ function buildAdapterArtifact({
     artifact_url: mockTts.artifact_url,
     artifact_status: mockTts.mode,
     subtitle_preview_count: subtitleTiming.chunks.length,
+    ai_character_contracts: aiCharacterContracts,
   };
 }
 
@@ -562,6 +576,7 @@ function buildIrisResponseSummary({
   durationMs,
   mockTts,
   mouthCues,
+  aiCharacterContracts,
 }) {
   return {
     status: 200,
@@ -582,6 +597,31 @@ function buildIrisResponseSummary({
     duration_ms: durationMs,
     sample_rate_hz: mockTts.sample_rate_hz,
     viseme_count: mouthCues.length,
+    ai_character_contracts: aiCharacterContracts,
+  };
+}
+
+function buildAiCharacterContractPresence(payload) {
+  const presence = {
+    character_identity_contract_present: extractCharacterIdentityContract(payload) !== null,
+    realtime_interaction_contract_present: extractRealtimeInteractionContract(payload) !== null,
+    human_oversight_consent_contract_present:
+      extractHumanOversightConsentContract(payload) !== null,
+    structured_context_contract_present: extractStructuredContextContract(payload) !== null,
+    avatar_feedback_contract_present: extractAvatarFeedbackContract(payload) !== null,
+    multilingual_personalization_contract_present:
+      extractMultilingualPersonalizationContract(payload) !== null,
+  };
+  const contractPresenceCount = Object.values(presence).filter(Boolean).length;
+  return {
+    schema: "voxweave_ai_character_contract_presence_v1",
+    ai_character_contracts_present: contractPresenceCount > 0,
+    contract_presence_count: contractPresenceCount,
+    ...presence,
+    safe_tts_normalization_foundation_present: true,
+    raw_contract_projection: false,
+    raw_contract_values_excluded: true,
+    safe_summary_only: true,
   };
 }
 

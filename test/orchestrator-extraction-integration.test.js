@@ -317,6 +317,255 @@ test("orchestrate output never includes forbidden fields recursively", async () 
   for (const result of results) assertNoForbiddenFields(result);
 });
 
+test("orchestrate accepts all safe AI character contracts and reports presence count", async () => {
+  const result = await makeService().orchestrate(packet(allAiCharacterContracts()), {
+    routeKind: "tts",
+  });
+
+  assertAiCharacterPresence(result.response_summary.ai_character_contracts, 6, {
+    character_identity_contract_present: true,
+    realtime_interaction_contract_present: true,
+    human_oversight_consent_contract_present: true,
+    structured_context_contract_present: true,
+    avatar_feedback_contract_present: true,
+    multilingual_personalization_contract_present: true,
+  });
+  assert.equal(Object.hasOwn(result, "ai_character_contracts"), false);
+  assertNoRawProjection(result);
+  assertNoForbiddenFields(result);
+});
+
+test("orchestrate accepts only character identity contract and reports one contract present", async () => {
+  const result = await makeService().orchestrate(
+    packet({ character_identity_contract: characterIdentityContract() }),
+    { routeKind: "tts" }
+  );
+
+  assertAiCharacterPresence(result.response_summary.ai_character_contracts, 1, {
+    character_identity_contract_present: true,
+    realtime_interaction_contract_present: false,
+  });
+  assertNoRawProjection(result);
+  assertNoForbiddenFields(result);
+});
+
+test("orchestrate accepts only realtime interaction contract and reports one contract present", async () => {
+  const result = await makeService().orchestrate(
+    packet({ realtime_interaction_contract: realtimeInteractionContract() }),
+    { routeKind: "tts" }
+  );
+
+  assertAiCharacterPresence(result.response_summary.ai_character_contracts, 1, {
+    character_identity_contract_present: false,
+    realtime_interaction_contract_present: true,
+  });
+  assertNoRawProjection(result);
+  assertNoForbiddenFields(result);
+});
+
+test("orchestrate accepts structured context with command risk and safe action metadata but projects only presence flags", async () => {
+  const result = await makeService().orchestrate(
+    packet({
+      structured_context_contract: structuredContextContract({
+        risk_flags: ["command_risk"],
+        allowed_action_kinds: ["safe_metadata_only"],
+        app_or_game_state_summary: "safe state summary",
+      }),
+    }),
+    { routeKind: "tts" }
+  );
+
+  assertAiCharacterPresence(result.response_summary.ai_character_contracts, 1, {
+    structured_context_contract_present: true,
+  });
+  assertResultExcludes(result, ["command_risk", "safe state summary"]);
+  assertNoForbiddenFields(result);
+});
+
+test("orchestrate accepts multilingual personalization approved fact IDs but does not project those IDs", async () => {
+  const result = await makeService().orchestrate(
+    packet({
+      multilingual_personalization_contract: multilingualPersonalizationContract({
+        recipient_profile_kind: "guardian",
+        personalization_scope: "approved_profile_facts",
+        approved_profile_facts: ["profile-fact-one", "profile-fact-two"],
+      }),
+    }),
+    { routeKind: "tts" }
+  );
+
+  assertAiCharacterPresence(result.response_summary.ai_character_contracts, 1, {
+    multilingual_personalization_contract_present: true,
+  });
+  assertResultExcludes(result, ["profile-fact-one", "profile-fact-two"]);
+  assertNoForbiddenFields(result);
+});
+
+test("orchestrate rejects unsafe AI character contract payload without producing response metadata", async () => {
+  await assert.rejects(
+    () =>
+      makeService().orchestrate(
+        packet({
+          character_identity_contract: characterIdentityContract({
+            voice_identity_id: "voice.model3.json",
+          }),
+        }),
+        { routeKind: "tts" }
+      ),
+    (error) => error?.code === "unsafe_payload"
+  );
+});
+
+test("orchestrate keeps response free of forbidden keys after presence flags", async () => {
+  const result = await makeService().orchestrate(packet(allAiCharacterContracts()), {
+    routeKind: "tts",
+  });
+
+  assert.equal(hasKeyRecursive(result, "canonical_envelope"), false);
+  assert.equal(hasKeyRecursive(result, "command"), false);
+  assert.equal(hasKeyRecursive(result, "token"), false);
+  assertNoForbiddenFields(result);
+});
+
+function characterIdentityContract(overrides = {}) {
+  return {
+    schema: "voxweave_character_identity_contract_v1",
+    character_profile_id: "iris-main",
+    persona_version: "v1-safe",
+    identity_lock_level: "soft",
+    identity_source_kind: "synthetic",
+    identity_consent_status: "not_required",
+    identity_asset_license_status: "not_required",
+    identity_drift_risk: "low",
+    ...overrides,
+  };
+}
+
+function realtimeInteractionContract(overrides = {}) {
+  return {
+    schema: "voxweave_realtime_interaction_contract_v1",
+    session_id: "session-main",
+    turn_id: "turn-1",
+    utterance_id: "utt-1",
+    input_mode: "text",
+    output_mode: "tts",
+    speech_state: "thinking",
+    interrupt_policy: "allow_user_barge_in",
+    latency_class: "interactive",
+    ...overrides,
+  };
+}
+
+function humanOversightConsentContract(overrides = {}) {
+  return {
+    schema: "voxweave_human_oversight_consent_contract_v1",
+    consent_status: "not_required",
+    human_review_status: "not_required",
+    brand_guard_status: "not_required",
+    voice_clone_allowed: false,
+    likeness_use_allowed: false,
+    commercial_use_allowed: false,
+    minor_or_sensitive_context: false,
+    ...overrides,
+  };
+}
+
+function structuredContextContract(overrides = {}) {
+  return {
+    schema: "voxweave_structured_context_contract_v1",
+    scene_id: "scene-main",
+    context_source_kind: "user_text",
+    context_confidence: "medium",
+    risk_flags: ["none"],
+    allowed_action_kinds: ["safe_metadata_only"],
+    ...overrides,
+  };
+}
+
+function avatarFeedbackContract(overrides = {}) {
+  return {
+    schema: "voxweave_avatar_feedback_contract_v1",
+    expression: "neutral",
+    gaze: "user",
+    gesture: "idle",
+    mouth_state: "closed",
+    attention_state: "focused",
+    intensity: "medium",
+    ...overrides,
+  };
+}
+
+function multilingualPersonalizationContract(overrides = {}) {
+  return {
+    schema: "voxweave_multilingual_personalization_contract_v1",
+    locale_in: "ja",
+    locale_out: "en-US",
+    translation_mode: "none",
+    recipient_profile_kind: "user",
+    personalization_scope: "none",
+    approved_profile_facts: [],
+    ...overrides,
+  };
+}
+
+function allAiCharacterContracts() {
+  return {
+    character_identity_contract: characterIdentityContract(),
+    realtime_interaction_contract: realtimeInteractionContract(),
+    human_oversight_consent_contract: humanOversightConsentContract(),
+    structured_context_contract: structuredContextContract(),
+    avatar_feedback_contract: avatarFeedbackContract(),
+    multilingual_personalization_contract: multilingualPersonalizationContract(),
+  };
+}
+
+function assertAiCharacterPresence(value, expectedCount, expectedFlags = {}) {
+  assert.equal(value.schema, "voxweave_ai_character_contract_presence_v1");
+  assert.equal(value.ai_character_contracts_present, expectedCount > 0);
+  assert.equal(value.contract_presence_count, expectedCount);
+  assert.equal(value.safe_tts_normalization_foundation_present, true);
+  assert.equal(value.raw_contract_projection, false);
+  assert.equal(value.raw_contract_values_excluded, true);
+  assert.equal(value.safe_summary_only, true);
+  for (const [key, expected] of Object.entries(expectedFlags)) {
+    assert.equal(value[key], expected);
+  }
+}
+
+function assertNoRawProjection(result) {
+  assertResultExcludes(result, [
+    "iris-main",
+    "session-main",
+    "scene-main",
+    "profile-fact-one",
+    "profile-fact-two",
+  ]);
+}
+
+function assertResultExcludes(result, values) {
+  const serialized = JSON.stringify(result);
+  for (const value of values) {
+    assert.equal(serialized.includes(value), false, `raw contract value leaked: ${value}`);
+  }
+}
+
+function hasKeyRecursive(value, searchedKey) {
+  const stack = [value];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current || typeof current !== "object") continue;
+    if (Array.isArray(current)) {
+      for (const child of current) stack.push(child);
+      continue;
+    }
+    for (const [key, child] of Object.entries(current)) {
+      if (key === searchedKey) return true;
+      stack.push(child);
+    }
+  }
+  return false;
+}
+
 function assertNoForbiddenFields(value) {
   const stack = [{ value, path: "root" }];
   while (stack.length) {
