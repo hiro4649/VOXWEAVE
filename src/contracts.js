@@ -13,6 +13,8 @@ export const REALTIME_INTERACTION_CONTRACT_SCHEMA =
   "voxweave_realtime_interaction_contract_v1";
 export const HUMAN_OVERSIGHT_CONSENT_CONTRACT_SCHEMA =
   "voxweave_human_oversight_consent_contract_v1";
+export const STRUCTURED_CONTEXT_CONTRACT_SCHEMA =
+  "voxweave_structured_context_contract_v1";
 
 const ADAPTER_KINDS = new Set(["tts", "subtitle", "live2d"]);
 const MAX_TEXT_LENGTH = 4000;
@@ -107,6 +109,56 @@ const HUMAN_ALLOWED_FLAG_FIELDS = [
   "likeness_use_allowed",
   "commercial_use_allowed",
 ];
+const STRUCTURED_CONTEXT_SOURCE_KINDS = new Set([
+  "user_text",
+  "app_state_summary",
+  "game_state_summary",
+  "vision_summary",
+  "operator_note",
+  "system_event",
+  "unknown",
+]);
+const STRUCTURED_CONTEXT_CONFIDENCES = new Set([
+  "low",
+  "medium",
+  "high",
+  "unknown",
+]);
+const STRUCTURED_CONTEXT_RISK_FLAGS = new Set([
+  "none",
+  "sensitive_context",
+  "minor_context",
+  "brand_sensitive",
+  "identity_sensitive",
+  "external_action_risk",
+  "memory_write_risk",
+  "command_risk",
+  "unsafe_source",
+  "unknown",
+]);
+const STRUCTURED_CONTEXT_ALLOWED_ACTION_KINDS = new Set([
+  "none",
+  "speak",
+  "summarize",
+  "ask_clarifying_question",
+  "handoff",
+  "wait",
+  "safe_metadata_only",
+]);
+const STRUCTURED_CONTEXT_SAFE_RISK_ACTIONS = new Set([
+  "none",
+  "ask_clarifying_question",
+  "handoff",
+  "wait",
+  "safe_metadata_only",
+]);
+const STRUCTURED_CONTEXT_ACTOR_FIELDS = new Set([
+  "actor_id",
+  "role",
+  "state_summary",
+  "emotion_hint",
+  "attention_hint",
+]);
 
 const FORBIDDEN_KEYS = new Set([
   "world_command",
@@ -116,6 +168,7 @@ const FORBIDDEN_KEYS = new Set([
   "execute",
   "command",
   "raw_command",
+  "browser_command",
   "raw_motion_command",
   "raw_renderer_payload",
   "raw_payload",
@@ -150,6 +203,13 @@ const FORBIDDEN_KEYS = new Set([
   "raw_identity_proof",
   "raw_face_image",
   "raw_voice_sample",
+  "raw_screenshot",
+  "raw_image",
+  "raw_ocr",
+  "raw_ocr_text_dump",
+  "raw_app_state",
+  "raw_game_state",
+  "raw_stream_body",
   "signature",
   "email_address",
   "phone_number",
@@ -225,6 +285,7 @@ export function validateInputPayload(payload, { routeKind = "" } = {}) {
   extractCharacterIdentityContract(payload);
   extractRealtimeInteractionContract(payload);
   extractHumanOversightConsentContract(payload);
+  extractStructuredContextContract(payload);
   scanUnsafeInput(payload, "root");
 
   if (payload.schema === IRIS_ADAPTER_PACKET_SCHEMA) {
@@ -496,6 +557,87 @@ export function extractHumanOversightConsentContract(payload) {
   return validateHumanOversightConsentContract(contract);
 }
 
+export function validateStructuredContextContract(contract) {
+  if (!isPlainObject(contract)) {
+    throw new VoxWeaveError(
+      "structured context contract object required",
+      "invalid_structured_context_contract"
+    );
+  }
+
+  scanUnsafeInput(contract, "root.structured_context_contract");
+
+  const normalized = {
+    schema: safeText(contract.schema, 80),
+    scene_id: safeId(contract.scene_id),
+    context_source_kind: safeText(contract.context_source_kind, 40),
+    context_confidence: safeText(contract.context_confidence, 40),
+    user_intent: safeText(contract.user_intent, 240),
+    last_user_action_summary: safeText(contract.last_user_action_summary, 240),
+    visible_objects_summary: safeText(contract.visible_objects_summary, 240),
+    app_or_game_state_summary: safeText(contract.app_or_game_state_summary, 240),
+    actor_state_summaries: normalizeActorStateSummaries(contract.actor_state_summaries),
+    risk_flags: normalizeEnumList(
+      contract.risk_flags,
+      STRUCTURED_CONTEXT_RISK_FLAGS,
+      12,
+      "risk flag"
+    ),
+    allowed_action_kinds: normalizeEnumList(
+      contract.allowed_action_kinds,
+      STRUCTURED_CONTEXT_ALLOWED_ACTION_KINDS,
+      8,
+      "allowed action kind"
+    ),
+    safe_summary_only: contract.safe_summary_only !== undefined
+      ? contract.safe_summary_only
+      : true,
+  };
+
+  if (normalized.schema !== STRUCTURED_CONTEXT_CONTRACT_SCHEMA) {
+    throw new VoxWeaveError(
+      "invalid structured context contract schema",
+      "invalid_structured_context_contract"
+    );
+  }
+  if (!normalized.scene_id) {
+    throw new VoxWeaveError(
+      "structured context contract required field missing",
+      "invalid_structured_context_contract"
+    );
+  }
+  if (!STRUCTURED_CONTEXT_SOURCE_KINDS.has(normalized.context_source_kind)) {
+    throw new VoxWeaveError(
+      "invalid structured context source kind",
+      "invalid_structured_context_contract"
+    );
+  }
+  if (!STRUCTURED_CONTEXT_CONFIDENCES.has(normalized.context_confidence)) {
+    throw new VoxWeaveError(
+      "invalid structured context confidence",
+      "invalid_structured_context_contract"
+    );
+  }
+  if (normalized.safe_summary_only !== true) {
+    throw new VoxWeaveError(
+      "structured context contract must be summary only",
+      "invalid_structured_context_contract"
+    );
+  }
+
+  validateStructuredContextRiskActionGuards(normalized);
+
+  return normalized;
+}
+
+export function extractStructuredContextContract(payload) {
+  if (!isPlainObject(payload)) return null;
+  const contract =
+    payload.structured_context_contract ?? payload.structuredContextContract;
+  if (contract === undefined || contract === null) return null;
+  return validateStructuredContextContract(contract);
+}
+
 export function assertSafeResponse(payload) {
   scanUnsafeResponse(payload, "root");
   return payload;
@@ -758,6 +900,103 @@ function validateHumanOversightPermissionGuards(contract) {
 
 function hasAnyAllowedFlag(contract) {
   return HUMAN_ALLOWED_FLAG_FIELDS.some((field) => contract[field] === true);
+}
+
+function normalizeActorStateSummaries(value) {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value) || value.length > 12) {
+    throw new VoxWeaveError(
+      "structured context actor state summaries array required",
+      "invalid_structured_context_contract"
+    );
+  }
+
+  return value.map((actor) => {
+    if (!isPlainObject(actor)) {
+      throw new VoxWeaveError(
+        "structured context actor state summary object required",
+        "invalid_structured_context_contract"
+      );
+    }
+    for (const field of Object.keys(actor)) {
+      if (!STRUCTURED_CONTEXT_ACTOR_FIELDS.has(field)) {
+        throw new VoxWeaveError(
+          "unknown structured context actor state field",
+          "invalid_structured_context_contract"
+        );
+      }
+    }
+
+    const normalized = {
+      actor_id: safeId(actor.actor_id),
+      role: safeText(actor.role, 120),
+      state_summary: safeText(actor.state_summary, 240),
+      emotion_hint: safeText(actor.emotion_hint, 120),
+      attention_hint: safeText(actor.attention_hint, 120),
+    };
+
+    if (!normalized.actor_id) {
+      throw new VoxWeaveError(
+        "structured context actor id required",
+        "invalid_structured_context_contract"
+      );
+    }
+
+    return normalized;
+  });
+}
+
+function normalizeEnumList(value, allowed, maxLength, label) {
+  if (!Array.isArray(value) || value.length === 0 || value.length > maxLength) {
+    throw new VoxWeaveError(
+      `structured context ${label} array required`,
+      "invalid_structured_context_contract"
+    );
+  }
+
+  const normalized = [];
+  for (const item of value) {
+    const text = safeText(item, 80);
+    if (!allowed.has(text)) {
+      throw new VoxWeaveError(
+        `invalid structured context ${label}`,
+        "invalid_structured_context_contract"
+      );
+    }
+    if (!normalized.includes(text)) normalized.push(text);
+  }
+
+  return normalized;
+}
+
+function validateStructuredContextRiskActionGuards(contract) {
+  if (contract.risk_flags.includes("none") && contract.risk_flags.length > 1) {
+    throw new VoxWeaveError(
+      "none risk flag cannot be mixed",
+      "invalid_structured_context_contract"
+    );
+  }
+  if (
+    contract.allowed_action_kinds.includes("none") &&
+    contract.allowed_action_kinds.length > 1
+  ) {
+    throw new VoxWeaveError(
+      "none allowed action cannot be mixed",
+      "invalid_structured_context_contract"
+    );
+  }
+  if (
+    (contract.risk_flags.includes("external_action_risk") ||
+      contract.risk_flags.includes("command_risk")) &&
+    contract.allowed_action_kinds.some(
+      (action) => !STRUCTURED_CONTEXT_SAFE_RISK_ACTIONS.has(action)
+    )
+  ) {
+    throw new VoxWeaveError(
+      "command or external action risk restricts response kind metadata",
+      "invalid_structured_context_contract"
+    );
+  }
 }
 
 function detectLanguage(text) {
