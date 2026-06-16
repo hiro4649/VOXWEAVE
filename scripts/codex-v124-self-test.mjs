@@ -43,7 +43,15 @@ const compatibilityCases = [
   ['v124_preserves_v118_final_decision', () => buildOrchestrationCapsule().finalAuthority === 'v1.1.8_final_decision_kernel'],
   ['v124_preserves_v119_orchestration_artifacts', () => V124_P0_ARTIFACTS.includes('codex-orchestration-capsule.safe.json')],
   ['v124_no_new_skill_daemon_or_visual_daemon', () => !fs.existsSync('scripts/codex-skill-daemon.mjs') && !fs.existsSync('scripts/codex-visual-proof-daemon.mjs')],
-  ['v124_active_authority_tuple_is_current', () => buildOrchestrationCapsule().skillContextRouting.activeAuthorityTuple.activeSelfTestSuite === 'v124'],
+  ['v124_active_authority_tuple_allows_current_or_compatibility_successor', () => {
+    const tuple = buildOrchestrationCapsule().skillContextRouting.activeAuthorityTuple;
+    if (tuple.activeSelfTestSuite === 'v124') return true;
+    return tuple.activeSelfTestSuite === 'v125' &&
+      tuple.agentsMarker === 'CODEX_QUALITY_HARNESS_FILE v1.2.5' &&
+      tuple.manifestActiveHarnessVersion === '1.2.5' &&
+      tuple.activeSpecPath === 'docs/process/CODEX_V125_SPEC.md' &&
+      tuple.finalAuthorityPointer === 'v1.1.8_final_decision_kernel';
+  }],
 ];
 
 const goalAndDelegationCases = [
