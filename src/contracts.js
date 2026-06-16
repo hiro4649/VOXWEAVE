@@ -11,6 +11,8 @@ export const CHARACTER_IDENTITY_CONTRACT_SCHEMA =
   "voxweave_character_identity_contract_v1";
 export const REALTIME_INTERACTION_CONTRACT_SCHEMA =
   "voxweave_realtime_interaction_contract_v1";
+export const HUMAN_OVERSIGHT_CONSENT_CONTRACT_SCHEMA =
+  "voxweave_human_oversight_consent_contract_v1";
 
 const ADAPTER_KINDS = new Set(["tts", "subtitle", "live2d"]);
 const MAX_TEXT_LENGTH = 4000;
@@ -73,6 +75,38 @@ const REALTIME_LATENCY_CLASSES = new Set([
   "delayed_sync",
   "batch",
 ]);
+const HUMAN_CONSENT_STATUSES = new Set([
+  "not_required",
+  "explicit_consent",
+  "licensed",
+  "owner_managed",
+  "blocked",
+  "unknown",
+]);
+const HUMAN_REVIEW_STATUSES = new Set([
+  "not_required",
+  "required",
+  "completed",
+  "blocked",
+  "unknown",
+]);
+const BRAND_GUARD_STATUSES = new Set([
+  "not_required",
+  "required",
+  "passed",
+  "blocked",
+  "unknown",
+]);
+const GRANTING_CONSENT_STATUSES = new Set([
+  "explicit_consent",
+  "licensed",
+  "owner_managed",
+]);
+const HUMAN_ALLOWED_FLAG_FIELDS = [
+  "voice_clone_allowed",
+  "likeness_use_allowed",
+  "commercial_use_allowed",
+];
 
 const FORBIDDEN_KEYS = new Set([
   "world_command",
@@ -110,6 +144,18 @@ const FORBIDDEN_KEYS = new Set([
   "modelPath",
   "internal_model_path",
   "dataset_path",
+  "raw_consent_document",
+  "raw_legal_document",
+  "raw_brand_approval_record",
+  "raw_identity_proof",
+  "raw_face_image",
+  "raw_voice_sample",
+  "signature",
+  "email_address",
+  "phone_number",
+  "address",
+  "government_id",
+  "approval_workflow_command",
   "motion_path",
   "raw_motion_path",
   "raw_phoneme_debug",
@@ -178,6 +224,7 @@ export function validateInputPayload(payload, { routeKind = "" } = {}) {
 
   extractCharacterIdentityContract(payload);
   extractRealtimeInteractionContract(payload);
+  extractHumanOversightConsentContract(payload);
   scanUnsafeInput(payload, "root");
 
   if (payload.schema === IRIS_ADAPTER_PACKET_SCHEMA) {
@@ -370,6 +417,85 @@ export function extractRealtimeInteractionContract(payload) {
   return validateRealtimeInteractionContract(contract);
 }
 
+export function validateHumanOversightConsentContract(contract) {
+  if (!isPlainObject(contract)) {
+    throw new VoxWeaveError(
+      "human oversight consent contract object required",
+      "invalid_human_oversight_consent_contract"
+    );
+  }
+
+  scanUnsafeInput(contract, "root.human_oversight_consent_contract");
+
+  const normalized = {
+    schema: safeText(contract.schema, 80),
+    consent_status: safeText(contract.consent_status, 40),
+    human_review_status: safeText(contract.human_review_status, 40),
+    brand_guard_status: safeText(contract.brand_guard_status, 40),
+    voice_clone_allowed: contract.voice_clone_allowed,
+    likeness_use_allowed: contract.likeness_use_allowed,
+    commercial_use_allowed: contract.commercial_use_allowed,
+    minor_or_sensitive_context: contract.minor_or_sensitive_context,
+    consent_scope_id: safeId(contract.consent_scope_id),
+    review_ticket_id: safeId(contract.review_ticket_id),
+    policy_profile_id: safeId(contract.policy_profile_id),
+    safe_summary_only: contract.safe_summary_only !== undefined
+      ? contract.safe_summary_only
+      : true,
+  };
+
+  if (normalized.schema !== HUMAN_OVERSIGHT_CONSENT_CONTRACT_SCHEMA) {
+    throw new VoxWeaveError(
+      "invalid human oversight consent contract schema",
+      "invalid_human_oversight_consent_contract"
+    );
+  }
+  if (!HUMAN_CONSENT_STATUSES.has(normalized.consent_status)) {
+    throw new VoxWeaveError(
+      "invalid consent status",
+      "invalid_human_oversight_consent_contract"
+    );
+  }
+  if (!HUMAN_REVIEW_STATUSES.has(normalized.human_review_status)) {
+    throw new VoxWeaveError(
+      "invalid human review status",
+      "invalid_human_oversight_consent_contract"
+    );
+  }
+  if (!BRAND_GUARD_STATUSES.has(normalized.brand_guard_status)) {
+    throw new VoxWeaveError(
+      "invalid brand guard status",
+      "invalid_human_oversight_consent_contract"
+    );
+  }
+  for (const field of [...HUMAN_ALLOWED_FLAG_FIELDS, "minor_or_sensitive_context"]) {
+    if (typeof normalized[field] !== "boolean") {
+      throw new VoxWeaveError(
+        "human oversight consent boolean field required",
+        "invalid_human_oversight_consent_contract"
+      );
+    }
+  }
+  if (normalized.safe_summary_only !== true) {
+    throw new VoxWeaveError(
+      "human oversight consent contract must be summary only",
+      "invalid_human_oversight_consent_contract"
+    );
+  }
+
+  validateHumanOversightPermissionGuards(normalized);
+
+  return normalized;
+}
+
+export function extractHumanOversightConsentContract(payload) {
+  if (!isPlainObject(payload)) return null;
+  const contract =
+    payload.human_oversight_consent_contract ?? payload.humanOversightConsentContract;
+  if (contract === undefined || contract === null) return null;
+  return validateHumanOversightConsentContract(contract);
+}
+
 export function assertSafeResponse(payload) {
   scanUnsafeResponse(payload, "root");
   return payload;
@@ -554,6 +680,84 @@ function isForbiddenField(field, forbidden) {
     if (compact === normalized.replace(/_/gu, "")) return true;
   }
   return false;
+}
+
+function validateHumanOversightPermissionGuards(contract) {
+  if (
+    (contract.consent_status === "blocked" || contract.human_review_status === "blocked") &&
+    hasAnyAllowedFlag(contract)
+  ) {
+    throw new VoxWeaveError(
+      "blocked human oversight status cannot allow use",
+      "invalid_human_oversight_consent_contract"
+    );
+  }
+  if (contract.brand_guard_status === "blocked" && contract.commercial_use_allowed) {
+    throw new VoxWeaveError(
+      "blocked brand guard status cannot allow commercial use",
+      "invalid_human_oversight_consent_contract"
+    );
+  }
+  if (
+    contract.voice_clone_allowed &&
+    (!GRANTING_CONSENT_STATUSES.has(contract.consent_status) ||
+      contract.human_review_status !== "completed")
+  ) {
+    throw new VoxWeaveError(
+      "voice clone metadata requires consent and completed human review",
+      "invalid_human_oversight_consent_contract"
+    );
+  }
+  if (
+    contract.likeness_use_allowed &&
+    (!GRANTING_CONSENT_STATUSES.has(contract.consent_status) ||
+      contract.human_review_status !== "completed")
+  ) {
+    throw new VoxWeaveError(
+      "likeness metadata requires consent and completed human review",
+      "invalid_human_oversight_consent_contract"
+    );
+  }
+  if (
+    contract.commercial_use_allowed &&
+    (!GRANTING_CONSENT_STATUSES.has(contract.consent_status) ||
+      contract.human_review_status !== "completed" ||
+      !["passed", "not_required"].includes(contract.brand_guard_status))
+  ) {
+    throw new VoxWeaveError(
+      "commercial use metadata requires consent, review, and brand guard boundary",
+      "invalid_human_oversight_consent_contract"
+    );
+  }
+  if (contract.minor_or_sensitive_context) {
+    if (contract.human_review_status === "not_required") {
+      throw new VoxWeaveError(
+        "minor or sensitive context requires human review status",
+        "invalid_human_oversight_consent_contract"
+      );
+    }
+    if (hasAnyAllowedFlag(contract) && contract.human_review_status !== "completed") {
+      throw new VoxWeaveError(
+        "minor or sensitive allowed use requires completed human review",
+        "invalid_human_oversight_consent_contract"
+      );
+    }
+  }
+  if (
+    (contract.consent_status === "unknown" ||
+      contract.human_review_status === "unknown" ||
+      contract.brand_guard_status === "unknown") &&
+    hasAnyAllowedFlag(contract)
+  ) {
+    throw new VoxWeaveError(
+      "unknown human oversight status cannot allow use",
+      "invalid_human_oversight_consent_contract"
+    );
+  }
+}
+
+function hasAnyAllowedFlag(contract) {
+  return HUMAN_ALLOWED_FLAG_FIELDS.some((field) => contract[field] === true);
 }
 
 function detectLanguage(text) {

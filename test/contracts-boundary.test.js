@@ -5,13 +5,16 @@ import {
   CHARACTER_IDENTITY_CONTRACT_SCHEMA,
   clamp,
   extractCharacterIdentityContract,
+  extractHumanOversightConsentContract,
   extractRealtimeInteractionContract,
+  HUMAN_OVERSIGHT_CONSENT_CONTRACT_SCHEMA,
   IRIS_ADAPTER_PACKET_SCHEMA,
   normalizeAdapterKind,
   REALTIME_INTERACTION_CONTRACT_SCHEMA,
   safeId,
   safeText,
   validateCharacterIdentityContract,
+  validateHumanOversightConsentContract,
   validateRealtimeInteractionContract,
   validateInputPayload,
 } from "../src/contracts.js";
@@ -58,6 +61,20 @@ function minimalRealtimeInteractionContract(overrides = {}) {
     speech_state: "thinking",
     interrupt_policy: "allow_user_barge_in",
     latency_class: "interactive",
+    ...overrides,
+  };
+}
+
+function minimalHumanOversightConsentContract(overrides = {}) {
+  return {
+    schema: HUMAN_OVERSIGHT_CONSENT_CONTRACT_SCHEMA,
+    consent_status: "not_required",
+    human_review_status: "not_required",
+    brand_guard_status: "not_required",
+    voice_clone_allowed: false,
+    likeness_use_allowed: false,
+    commercial_use_allowed: false,
+    minor_or_sensitive_context: false,
     ...overrides,
   };
 }
@@ -613,6 +630,355 @@ test("validateInputPayload preserves adapter unsafe field rejection with realtim
         command: "blocked",
       }),
     "unsafe_payload"
+  );
+});
+
+test("human oversight consent contract accepts minimal safe contract", () => {
+  const contract = validateHumanOversightConsentContract(
+    minimalHumanOversightConsentContract()
+  );
+
+  assert.equal(contract.schema, HUMAN_OVERSIGHT_CONSENT_CONTRACT_SCHEMA);
+  assert.equal(contract.consent_status, "not_required");
+  assert.equal(contract.human_review_status, "not_required");
+  assert.equal(contract.brand_guard_status, "not_required");
+  assert.equal(contract.voice_clone_allowed, false);
+  assert.equal(contract.likeness_use_allowed, false);
+  assert.equal(contract.commercial_use_allowed, false);
+  assert.equal(contract.minor_or_sensitive_context, false);
+});
+
+test("human oversight consent contract defaults safe_summary_only to true", () => {
+  const contract = validateHumanOversightConsentContract(
+    minimalHumanOversightConsentContract()
+  );
+
+  assert.equal(contract.safe_summary_only, true);
+});
+
+test("human oversight consent contract normalizes safe ids", () => {
+  const contract = validateHumanOversightConsentContract(
+    minimalHumanOversightConsentContract({
+      consent_scope_id: " scope/id ",
+      review_ticket_id: " review ticket ",
+      policy_profile_id: " policy/profile ",
+    })
+  );
+
+  assert.equal(contract.consent_scope_id, "scope-id");
+  assert.equal(contract.review_ticket_id, "review-ticket");
+  assert.equal(contract.policy_profile_id, "policy-profile");
+});
+
+test("extractHumanOversightConsentContract returns null when absent", () => {
+  assert.equal(extractHumanOversightConsentContract({ text: "safe sample" }), null);
+});
+
+test("extractHumanOversightConsentContract reads snake_case and camelCase field", () => {
+  assert.equal(
+    extractHumanOversightConsentContract({
+      human_oversight_consent_contract: minimalHumanOversightConsentContract({
+        consent_scope_id: "snake-case",
+      }),
+    }).consent_scope_id,
+    "snake-case"
+  );
+  assert.equal(
+    extractHumanOversightConsentContract({
+      humanOversightConsentContract: minimalHumanOversightConsentContract({
+        consent_scope_id: "camel-case",
+      }),
+    }).consent_scope_id,
+    "camel-case"
+  );
+});
+
+test("human oversight consent contract rejects wrong schema", () => {
+  assertVoxWeaveError(
+    () =>
+      validateHumanOversightConsentContract(
+        minimalHumanOversightConsentContract({ schema: "other" })
+      ),
+    "invalid_human_oversight_consent_contract"
+  );
+});
+
+test("human oversight consent contract rejects safe_summary_only false", () => {
+  assertVoxWeaveError(
+    () =>
+      validateHumanOversightConsentContract(
+        minimalHumanOversightConsentContract({ safe_summary_only: false })
+      ),
+    "invalid_human_oversight_consent_contract"
+  );
+});
+
+test("human oversight consent contract rejects unknown consent_status", () => {
+  assertVoxWeaveError(
+    () =>
+      validateHumanOversightConsentContract(
+        minimalHumanOversightConsentContract({ consent_status: "pending_contract" })
+      ),
+    "invalid_human_oversight_consent_contract"
+  );
+});
+
+test("human oversight consent contract rejects unknown human_review_status", () => {
+  assertVoxWeaveError(
+    () =>
+      validateHumanOversightConsentContract(
+        minimalHumanOversightConsentContract({ human_review_status: "reviewed" })
+      ),
+    "invalid_human_oversight_consent_contract"
+  );
+});
+
+test("human oversight consent contract rejects unknown brand_guard_status", () => {
+  assertVoxWeaveError(
+    () =>
+      validateHumanOversightConsentContract(
+        minimalHumanOversightConsentContract({ brand_guard_status: "approved" })
+      ),
+    "invalid_human_oversight_consent_contract"
+  );
+});
+
+test("human oversight consent contract rejects non-boolean voice_clone_allowed", () => {
+  assertVoxWeaveError(
+    () =>
+      validateHumanOversightConsentContract(
+        minimalHumanOversightConsentContract({ voice_clone_allowed: "true" })
+      ),
+    "invalid_human_oversight_consent_contract"
+  );
+});
+
+test("human oversight consent contract rejects non-boolean likeness_use_allowed", () => {
+  assertVoxWeaveError(
+    () =>
+      validateHumanOversightConsentContract(
+        minimalHumanOversightConsentContract({ likeness_use_allowed: "false" })
+      ),
+    "invalid_human_oversight_consent_contract"
+  );
+});
+
+test("human oversight consent contract rejects non-boolean commercial_use_allowed", () => {
+  assertVoxWeaveError(
+    () =>
+      validateHumanOversightConsentContract(
+        minimalHumanOversightConsentContract({ commercial_use_allowed: null })
+      ),
+    "invalid_human_oversight_consent_contract"
+  );
+});
+
+test("human oversight consent contract rejects non-boolean minor_or_sensitive_context", () => {
+  assertVoxWeaveError(
+    () =>
+      validateHumanOversightConsentContract(
+        minimalHumanOversightConsentContract({ minor_or_sensitive_context: "false" })
+      ),
+    "invalid_human_oversight_consent_contract"
+  );
+});
+
+test("human oversight consent contract permits blocked status with all allowed flags false", () => {
+  const contract = validateHumanOversightConsentContract(
+    minimalHumanOversightConsentContract({
+      consent_status: "blocked",
+      human_review_status: "blocked",
+      brand_guard_status: "blocked",
+    })
+  );
+
+  assert.equal(contract.consent_status, "blocked");
+  assert.equal(contract.human_review_status, "blocked");
+  assert.equal(contract.brand_guard_status, "blocked");
+});
+
+test("human oversight consent contract rejects voice clone allowed without explicit consent or license", () => {
+  assertVoxWeaveError(
+    () =>
+      validateHumanOversightConsentContract(
+        minimalHumanOversightConsentContract({
+          voice_clone_allowed: true,
+          human_review_status: "completed",
+        })
+      ),
+    "invalid_human_oversight_consent_contract"
+  );
+});
+
+test("human oversight consent contract rejects voice clone allowed without completed human review", () => {
+  assertVoxWeaveError(
+    () =>
+      validateHumanOversightConsentContract(
+        minimalHumanOversightConsentContract({
+          consent_status: "explicit_consent",
+          human_review_status: "required",
+          voice_clone_allowed: true,
+        })
+      ),
+    "invalid_human_oversight_consent_contract"
+  );
+});
+
+test("human oversight consent contract rejects likeness use allowed with blocked consent", () => {
+  assertVoxWeaveError(
+    () =>
+      validateHumanOversightConsentContract(
+        minimalHumanOversightConsentContract({
+          consent_status: "blocked",
+          human_review_status: "completed",
+          likeness_use_allowed: true,
+        })
+      ),
+    "invalid_human_oversight_consent_contract"
+  );
+});
+
+test("human oversight consent contract rejects commercial use with brand guard required", () => {
+  assertVoxWeaveError(
+    () =>
+      validateHumanOversightConsentContract(
+        minimalHumanOversightConsentContract({
+          consent_status: "licensed",
+          human_review_status: "completed",
+          brand_guard_status: "required",
+          commercial_use_allowed: true,
+        })
+      ),
+    "invalid_human_oversight_consent_contract"
+  );
+});
+
+test("human oversight consent contract rejects commercial use with brand guard blocked", () => {
+  assertVoxWeaveError(
+    () =>
+      validateHumanOversightConsentContract(
+        minimalHumanOversightConsentContract({
+          consent_status: "licensed",
+          human_review_status: "completed",
+          brand_guard_status: "blocked",
+          commercial_use_allowed: true,
+        })
+      ),
+    "invalid_human_oversight_consent_contract"
+  );
+});
+
+test("human oversight consent contract rejects minor sensitive context with human review not required", () => {
+  assertVoxWeaveError(
+    () =>
+      validateHumanOversightConsentContract(
+        minimalHumanOversightConsentContract({
+          minor_or_sensitive_context: true,
+        })
+      ),
+    "invalid_human_oversight_consent_contract"
+  );
+});
+
+test("human oversight consent contract accepts minor sensitive context with human review required and allowed flags false", () => {
+  const contract = validateHumanOversightConsentContract(
+    minimalHumanOversightConsentContract({
+      human_review_status: "required",
+      minor_or_sensitive_context: true,
+    })
+  );
+
+  assert.equal(contract.minor_or_sensitive_context, true);
+  assert.equal(contract.human_review_status, "required");
+});
+
+test("human oversight consent contract rejects raw URL in policy_profile_id", () => {
+  assertVoxWeaveError(
+    () =>
+      validateHumanOversightConsentContract(
+        minimalHumanOversightConsentContract({
+          policy_profile_id: "https://example.invalid/policy",
+        })
+      ),
+    "unsafe_payload"
+  );
+});
+
+test("human oversight consent contract rejects endpoint-like key", () => {
+  assertVoxWeaveError(
+    () =>
+      validateHumanOversightConsentContract(
+        minimalHumanOversightConsentContract({
+          endpoint: "blocked",
+        })
+      ),
+    "unsafe_payload"
+  );
+});
+
+test("human oversight consent contract rejects token-like field", () => {
+  assertVoxWeaveError(
+    () =>
+      validateHumanOversightConsentContract(
+        minimalHumanOversightConsentContract({
+          access_token: "blocked",
+        })
+      ),
+    "unsafe_payload"
+  );
+});
+
+test("validateInputPayload accepts safe human oversight consent contract on ordinary safe payload", () => {
+  assert.equal(
+    validateInputPayload({
+      text: "safe sample",
+      human_oversight_consent_contract: minimalHumanOversightConsentContract(),
+    }),
+    undefined
+  );
+});
+
+test("validateInputPayload accepts safe character identity, realtime interaction, and human oversight contracts together", () => {
+  assert.equal(
+    validateInputPayload({
+      text: "safe sample",
+      character_identity_contract: minimalCharacterIdentityContract(),
+      realtime_interaction_contract: minimalRealtimeInteractionContract(),
+      human_oversight_consent_contract: minimalHumanOversightConsentContract(),
+    }),
+    undefined
+  );
+});
+
+test("validateInputPayload rejects unsafe human oversight consent contract on ordinary payload", () => {
+  assertVoxWeaveError(
+    () =>
+      validateInputPayload({
+        text: "safe sample",
+        human_oversight_consent_contract: minimalHumanOversightConsentContract({
+          policy_profile_id: "policy.model3.json",
+        }),
+      }),
+    "unsafe_payload"
+  );
+});
+
+test("validateInputPayload still rejects existing adapter unsafe field command with human oversight contract", () => {
+  assertVoxWeaveError(
+    () =>
+      validateInputPayload({
+        ...minimalAdapterPacket("tts"),
+        human_oversight_consent_contract: minimalHumanOversightConsentContract(),
+        command: "blocked",
+      }),
+    "unsafe_payload"
+  );
+});
+
+test("assertSafeResponse remains unchanged and rejects unsafe response keys", () => {
+  assertVoxWeaveError(
+    () => assertSafeResponse({ response_summary: { approval_workflow_command: "blocked" } }),
+    "unsafe_response"
   );
 });
 
