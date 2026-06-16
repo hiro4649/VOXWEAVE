@@ -378,7 +378,8 @@ test("orchestrate accepts structured context with command risk and safe action m
   assertAiCharacterPresence(result.response_summary.ai_character_contracts, 1, {
     structured_context_contract_present: true,
   });
-  assertResultExcludes(result, ["command_risk", "safe state summary"]);
+  assertResultExcludes(result, ["safe state summary"]);
+  assert.equal(hasKeyRecursive(result.ai_character_contract_summary, "risk_flags"), false);
   assertNoForbiddenFields(result);
 });
 
@@ -417,6 +418,132 @@ test("orchestrate rejects unsafe AI character contract payload without producing
 });
 
 test("orchestrate keeps response free of forbidden keys after presence flags", async () => {
+  const result = await makeService().orchestrate(packet(allAiCharacterContracts()), {
+    routeKind: "tts",
+  });
+
+  assert.equal(hasKeyRecursive(result, "canonical_envelope"), false);
+  assert.equal(hasKeyRecursive(result, "command"), false);
+  assert.equal(hasKeyRecursive(result, "token"), false);
+  assertNoForbiddenFields(result);
+});
+
+test("orchestrate accepts all safe AI character contracts and returns safe summary count", async () => {
+  const result = await makeService().orchestrate(packet(allAiCharacterContracts()), {
+    routeKind: "tts",
+  });
+
+  assertAiCharacterSummary(result.ai_character_contract_summary, 6);
+  assert.deepEqual(
+    result.response_summary.ai_character_contract_summary,
+    result.ai_character_contract_summary
+  );
+  assertNoRawProjection(result);
+  assertNoForbiddenFields(result);
+});
+
+test("orchestrate with only character identity contract returns safe summary count one", async () => {
+  const result = await makeService().orchestrate(
+    packet({ character_identity_contract: characterIdentityContract() }),
+    { routeKind: "tts" }
+  );
+
+  assertAiCharacterSummary(result.ai_character_contract_summary, 1, {
+    ai_character_contracts_present: true,
+  });
+  assertNoRawProjection(result);
+  assertNoForbiddenFields(result);
+});
+
+test("orchestrate with human oversight required status returns human review required aggregate flag only", async () => {
+  const result = await makeService().orchestrate(
+    packet({
+      human_oversight_consent_contract: humanOversightConsentContract({
+        human_review_status: "required",
+      }),
+    }),
+    { routeKind: "tts" }
+  );
+
+  assertAiCharacterSummary(result.ai_character_contract_summary, 1, {
+    human_review_required_present: true,
+  });
+  assert.equal(hasKeyRecursive(result.ai_character_contract_summary, "human_review_status"), false);
+  assertNoForbiddenFields(result);
+});
+
+test("orchestrate with blocked consent returns blocked aggregate flag only", async () => {
+  const result = await makeService().orchestrate(
+    packet({
+      character_identity_contract: characterIdentityContract({
+        identity_consent_status: "blocked",
+      }),
+    }),
+    { routeKind: "tts" }
+  );
+
+  assertAiCharacterSummary(result.ai_character_contract_summary, 1, {
+    blocked_status_present: true,
+  });
+  assert.equal(hasKeyRecursive(result.ai_character_contract_summary, "identity_consent_status"), false);
+  assertNoForbiddenFields(result);
+});
+
+test("orchestrate with structured context command risk returns external action command risk aggregate flag only", async () => {
+  const result = await makeService().orchestrate(
+    packet({
+      structured_context_contract: structuredContextContract({
+        risk_flags: ["command_risk"],
+        allowed_action_kinds: ["safe_metadata_only"],
+      }),
+    }),
+    { routeKind: "tts" }
+  );
+
+  assertAiCharacterSummary(result.ai_character_contract_summary, 1, {
+    structured_context_risk_present: true,
+    external_action_or_command_risk_present: true,
+  });
+  assert.equal(hasKeyRecursive(result.ai_character_contract_summary, "risk_flags"), false);
+  assert.equal(hasKeyRecursive(result.ai_character_contract_summary, "allowed_action_kinds"), false);
+  assertNoForbiddenFields(result);
+});
+
+test("orchestrate with multilingual approved facts returns approved fact reference aggregate flag only", async () => {
+  const result = await makeService().orchestrate(
+    packet({
+      multilingual_personalization_contract: multilingualPersonalizationContract({
+        recipient_profile_kind: "guardian",
+        personalization_scope: "approved_profile_facts",
+        approved_profile_facts: ["summary-integration-fact"],
+      }),
+    }),
+    { routeKind: "tts" }
+  );
+
+  assertAiCharacterSummary(result.ai_character_contract_summary, 1, {
+    approved_profile_fact_reference_present: true,
+  });
+  assertResultExcludes(result, ["summary-integration-fact"]);
+  assertNoForbiddenFields(result);
+});
+
+test("orchestrate rejects unsafe contract before creating safe summary", async () => {
+  await assert.rejects(
+    () =>
+      makeService().orchestrate(
+        packet({
+          structured_context_contract: structuredContextContract({
+            app_or_game_state_summary: "state.motion3.json",
+          }),
+        }),
+        { routeKind: "tts" }
+      ),
+    (error) => error?.code === "unsafe_payload"
+  );
+});
+
+test("orchestrate keeps response free of forbidden keys after safe summary projection", async () => {
   const result = await makeService().orchestrate(packet(allAiCharacterContracts()), {
     routeKind: "tts",
   });
@@ -526,6 +653,27 @@ function assertAiCharacterPresence(value, expectedCount, expectedFlags = {}) {
   assert.equal(value.safe_tts_normalization_foundation_present, true);
   assert.equal(value.raw_contract_projection, false);
   assert.equal(value.raw_contract_values_excluded, true);
+  assert.equal(value.safe_summary_only, true);
+  for (const [key, expected] of Object.entries(expectedFlags)) {
+    assert.equal(value[key], expected);
+  }
+}
+
+function assertAiCharacterSummary(value, expectedCount, expectedFlags = {}) {
+  assert.equal(value.schema, "voxweave_ai_character_contract_safe_summary_v1");
+  assert.equal(value.ai_character_contracts_present, expectedCount > 0);
+  assert.equal(value.contract_presence_count, expectedCount);
+  assert.equal(value.contract_types_present_count, expectedCount);
+  assert.equal(value.all_contracts_summary_only, true);
+  assert.equal(value.raw_contract_projection, false);
+  assert.equal(value.raw_contract_values_excluded, true);
+  assert.equal(value.raw_identity_values_excluded, true);
+  assert.equal(value.raw_consent_values_excluded, true);
+  assert.equal(value.raw_context_values_excluded, true);
+  assert.equal(value.raw_avatar_values_excluded, true);
+  assert.equal(value.raw_personalization_values_excluded, true);
+  assert.equal(value.runtime_execution_required, false);
+  assert.equal(value.adapter_execution_required, false);
   assert.equal(value.safe_summary_only, true);
   for (const [key, expected] of Object.entries(expectedFlags)) {
     assert.equal(value[key], expected);
