@@ -335,6 +335,209 @@ test("artifact metadata rejects unsafe contract before response generation", asy
   );
 });
 
+test("orchestrator safe summary exposes aggregate AI character contract flags without raw values", async () => {
+  const result = await makeService().orchestrate(
+    makePacket("tts", allAiCharacterContracts()),
+    { routeKind: "tts" }
+  );
+
+  assertSafeSummary(result.ai_character_contract_summary, 6, {
+    ai_character_contracts_present: true,
+  });
+  assert.deepEqual(
+    result.response_summary.ai_character_contract_summary,
+    result.ai_character_contract_summary
+  );
+  assertNoRawContractValues(result);
+  assertNoForbiddenFields(result);
+});
+
+test("safe summary reports no contracts when no AI character contracts are supplied", async () => {
+  const result = await makeService().orchestrate(makePacket("tts"), {
+    routeKind: "tts",
+  });
+
+  assertSafeSummary(result.ai_character_contract_summary, 0, {
+    ai_character_contracts_present: false,
+  });
+  assertNoForbiddenFields(result);
+});
+
+test("safe summary does not project character profile id or persona version", async () => {
+  const result = await makeService().orchestrate(
+    makePacket("tts", {
+      character_identity_contract: characterIdentityContract({
+        character_profile_id: "summary-profile-raw",
+        persona_version: "summary-persona-raw",
+      }),
+    }),
+    { routeKind: "tts" }
+  );
+
+  assertSafeSummary(result.ai_character_contract_summary, 1);
+  assertResultExcludes(result, ["summary-profile-raw", "summary-persona-raw"]);
+  assertNoForbiddenFields(result);
+});
+
+test("safe summary does not project consent scope id or review ticket id", async () => {
+  const result = await makeService().orchestrate(
+    makePacket("tts", {
+      human_oversight_consent_contract: humanOversightConsentContract({
+        consent_scope_id: "consent-scope-raw",
+        review_ticket_id: "review-ticket-raw",
+      }),
+    }),
+    { routeKind: "tts" }
+  );
+
+  assertSafeSummary(result.ai_character_contract_summary, 1);
+  assertResultExcludes(result, ["consent-scope-raw", "review-ticket-raw"]);
+  assertNoForbiddenFields(result);
+});
+
+test("safe summary does not project structured context text", async () => {
+  const result = await makeService().orchestrate(
+    makePacket("tts", {
+      structured_context_contract: structuredContextContract({
+        app_or_game_state_summary: "structured context raw text",
+      }),
+    }),
+    { routeKind: "tts" }
+  );
+
+  assertSafeSummary(result.ai_character_contract_summary, 1);
+  assertResultExcludes(result, ["structured context raw text"]);
+  assertNoForbiddenFields(result);
+});
+
+test("safe summary does not project avatar hints", async () => {
+  const result = await makeService().orchestrate(
+    makePacket("tts", {
+      avatar_feedback_contract: avatarFeedbackContract({
+        motion_hint: "avatar raw hint",
+      }),
+    }),
+    { routeKind: "tts" }
+  );
+
+  assertSafeSummary(result.ai_character_contract_summary, 1);
+  assertResultExcludes(result, ["avatar raw hint"]);
+  assertNoForbiddenFields(result);
+});
+
+test("safe summary does not project approved profile fact ids", async () => {
+  const result = await makeService().orchestrate(
+    makePacket("tts", {
+      multilingual_personalization_contract: multilingualPersonalizationContract({
+        recipient_profile_kind: "guardian",
+        personalization_scope: "approved_profile_facts",
+        approved_profile_facts: ["summary-fact-one", "summary-fact-two"],
+      }),
+    }),
+    { routeKind: "tts" }
+  );
+
+  assertSafeSummary(result.ai_character_contract_summary, 1, {
+    approved_profile_fact_reference_present: true,
+  });
+  assertResultExcludes(result, ["summary-fact-one", "summary-fact-two"]);
+  assertNoForbiddenFields(result);
+});
+
+test("safe summary marks human review required present without exposing review status value", async () => {
+  const result = await makeService().orchestrate(
+    makePacket("tts", {
+      human_oversight_consent_contract: humanOversightConsentContract({
+        human_review_status: "required",
+      }),
+    }),
+    { routeKind: "tts" }
+  );
+
+  assertSafeSummary(result.ai_character_contract_summary, 1, {
+    human_review_required_present: true,
+  });
+  assert.equal(hasKeyRecursive(result.ai_character_contract_summary, "human_review_status"), false);
+  assertNoForbiddenFields(result);
+});
+
+test("safe summary marks blocked status present without exposing blocked field source", async () => {
+  const result = await makeService().orchestrate(
+    makePacket("tts", {
+      character_identity_contract: characterIdentityContract({
+        identity_consent_status: "blocked",
+      }),
+    }),
+    { routeKind: "tts" }
+  );
+
+  assertSafeSummary(result.ai_character_contract_summary, 1, {
+    blocked_status_present: true,
+  });
+  assert.equal(hasKeyRecursive(result.ai_character_contract_summary, "identity_consent_status"), false);
+  assertNoForbiddenFields(result);
+});
+
+test("safe summary marks structured context risk present without exposing risk flag array", async () => {
+  const result = await makeService().orchestrate(
+    makePacket("tts", {
+      structured_context_contract: structuredContextContract({
+        risk_flags: ["command_risk"],
+        allowed_action_kinds: ["safe_metadata_only"],
+      }),
+    }),
+    { routeKind: "tts" }
+  );
+
+  assertSafeSummary(result.ai_character_contract_summary, 1, {
+    structured_context_risk_present: true,
+    external_action_or_command_risk_present: true,
+  });
+  assert.equal(hasKeyRecursive(result.ai_character_contract_summary, "risk_flags"), false);
+  assert.equal(hasKeyRecursive(result.ai_character_contract_summary, "allowed_action_kinds"), false);
+  assertNoForbiddenFields(result);
+});
+
+test("safe summary marks approved profile fact reference present without exposing fact IDs", async () => {
+  const result = await makeService().orchestrate(
+    makePacket("tts", {
+      multilingual_personalization_contract: multilingualPersonalizationContract({
+        recipient_profile_kind: "guardian",
+        personalization_scope: "approved_profile_facts",
+        approved_profile_facts: ["summary-reference-one"],
+      }),
+    }),
+    { routeKind: "tts" }
+  );
+
+  assertSafeSummary(result.ai_character_contract_summary, 1, {
+    approved_profile_fact_reference_present: true,
+  });
+  assertResultExcludes(result, ["summary-reference-one"]);
+  assertNoForbiddenFields(result);
+});
+
+test("safe summary cache hit preserves aggregate flags without raw values", async () => {
+  const service = makeService();
+  const packetWithContract = makePacket("tts", {
+    text: "yes",
+    final_text: "yes",
+    character_identity_contract: characterIdentityContract({
+      character_profile_id: "summary-cache-profile",
+    }),
+  });
+  const first = await service.orchestrate(packetWithContract, { routeKind: "tts" });
+  const second = await service.orchestrate(packetWithContract, { routeKind: "tts" });
+
+  assert.equal(first.cache.status, "miss");
+  assert.equal(second.cache.status, "hit");
+  assertSafeSummary(second.ai_character_contract_summary, 1, {
+    ai_character_contracts_present: true,
+  });
+  assertResultExcludes(second, ["summary-cache-profile"]);
+  assertNoForbiddenFields(second);
+});
+
 function makeService() {
   return createVoxWeaveService({
     now: () => 1_777_500_000_000,
@@ -481,6 +684,27 @@ function assertPresence(value, expectedCount, expectedFlags = {}) {
   assert.equal(value.safe_tts_normalization_foundation_present, true);
   assert.equal(value.raw_contract_projection, false);
   assert.equal(value.raw_contract_values_excluded, true);
+  assert.equal(value.safe_summary_only, true);
+  for (const [key, expected] of Object.entries(expectedFlags)) {
+    assert.equal(value[key], expected);
+  }
+}
+
+function assertSafeSummary(value, expectedCount, expectedFlags = {}) {
+  assert.equal(value.schema, "voxweave_ai_character_contract_safe_summary_v1");
+  assert.equal(value.contract_presence_count, expectedCount);
+  assert.equal(value.contract_types_present_count, expectedCount);
+  assert.equal(value.ai_character_contracts_present, expectedCount > 0);
+  assert.equal(value.all_contracts_summary_only, true);
+  assert.equal(value.raw_contract_projection, false);
+  assert.equal(value.raw_contract_values_excluded, true);
+  assert.equal(value.raw_identity_values_excluded, true);
+  assert.equal(value.raw_consent_values_excluded, true);
+  assert.equal(value.raw_context_values_excluded, true);
+  assert.equal(value.raw_avatar_values_excluded, true);
+  assert.equal(value.raw_personalization_values_excluded, true);
+  assert.equal(value.runtime_execution_required, false);
+  assert.equal(value.adapter_execution_required, false);
   assert.equal(value.safe_summary_only, true);
   for (const [key, expected] of Object.entries(expectedFlags)) {
     assert.equal(value[key], expected);

@@ -122,6 +122,10 @@ export function createVoxWeaveService({
     async orchestrate(payload, { routeKind = "" } = {}) {
       validateInputPayload(payload, { routeKind });
       const aiCharacterContracts = buildAiCharacterContractPresence(payload);
+      const aiCharacterContractSummary = buildAiCharacterContractSafeSummary(
+        payload,
+        aiCharacterContracts
+      );
 
       const adapterKind =
         routeKind ||
@@ -143,6 +147,7 @@ export function createVoxWeaveService({
         speech_cue: payload.speech_cue ?? null,
         motion_cue: payload.motion_cue ?? null,
         ai_character_contracts: aiCharacterContracts,
+        ai_character_contract_summary: aiCharacterContractSummary,
       });
       const cacheable = isCacheableReaction(correctedText);
       const cached = cacheable ? cache.get(cacheKey) : null;
@@ -248,6 +253,7 @@ export function createVoxWeaveService({
         mockTts,
         mouthCues,
         aiCharacterContracts,
+        aiCharacterContractSummary,
       });
 
       const response = {
@@ -267,6 +273,7 @@ export function createVoxWeaveService({
         sample_rate_hz: mockTts.sample_rate_hz,
         viseme_count: mouthCues.length,
         runtime_readiness_claimed: false,
+        ai_character_contract_summary: aiCharacterContractSummary,
         response_summary: responseSummary,
         pronunciation: {
           dictionary_version,
@@ -577,6 +584,7 @@ function buildIrisResponseSummary({
   mockTts,
   mouthCues,
   aiCharacterContracts,
+  aiCharacterContractSummary,
 }) {
   return {
     status: 200,
@@ -598,6 +606,7 @@ function buildIrisResponseSummary({
     sample_rate_hz: mockTts.sample_rate_hz,
     viseme_count: mouthCues.length,
     ai_character_contracts: aiCharacterContracts,
+    ai_character_contract_summary: aiCharacterContractSummary,
   };
 }
 
@@ -623,6 +632,129 @@ function buildAiCharacterContractPresence(payload) {
     raw_contract_values_excluded: true,
     safe_summary_only: true,
   };
+}
+
+function buildAiCharacterContractSafeSummary(payload, presence) {
+  const characterIdentity = extractCharacterIdentityContract(payload);
+  const realtimeInteraction = extractRealtimeInteractionContract(payload);
+  const humanOversight = extractHumanOversightConsentContract(payload);
+  const structuredContext = extractStructuredContextContract(payload);
+  const avatarFeedback = extractAvatarFeedbackContract(payload);
+  const multilingualPersonalization = extractMultilingualPersonalizationContract(payload);
+  const contracts = [
+    characterIdentity,
+    realtimeInteraction,
+    humanOversight,
+    structuredContext,
+    avatarFeedback,
+    multilingualPersonalization,
+  ].filter((contract) => contract !== null);
+
+  return {
+    schema: "voxweave_ai_character_contract_safe_summary_v1",
+    ai_character_contracts_present: presence.ai_character_contracts_present,
+    contract_presence_count: presence.contract_presence_count,
+    contract_types_present_count: presence.contract_presence_count,
+    all_contracts_summary_only: contracts.every((contract) => contract.safe_summary_only === true),
+    raw_contract_projection: false,
+    raw_contract_values_excluded: true,
+    raw_identity_values_excluded: true,
+    raw_consent_values_excluded: true,
+    raw_context_values_excluded: true,
+    raw_avatar_values_excluded: true,
+    raw_personalization_values_excluded: true,
+    runtime_execution_required: false,
+    adapter_execution_required: false,
+    human_review_required_present: isHumanReviewRequiredPresent(humanOversight),
+    blocked_status_present: isBlockedStatusPresent({
+      characterIdentity,
+      humanOversight,
+      structuredContext,
+      multilingualPersonalization,
+    }),
+    unknown_status_present: isUnknownStatusPresent({
+      characterIdentity,
+      humanOversight,
+      structuredContext,
+      avatarFeedback,
+      multilingualPersonalization,
+    }),
+    sensitive_context_present: isSensitiveContextPresent(humanOversight, structuredContext),
+    structured_context_risk_present: hasStructuredContextRisk(structuredContext),
+    external_action_or_command_risk_present:
+      hasExternalActionOrCommandRisk(structuredContext),
+    approved_profile_fact_reference_present:
+      Array.isArray(multilingualPersonalization?.approved_profile_facts) &&
+      multilingualPersonalization.approved_profile_facts.length > 0,
+    safe_summary_only: true,
+  };
+}
+
+function isHumanReviewRequiredPresent(contract) {
+  return ["required", "completed", "blocked"].includes(contract?.human_review_status);
+}
+
+function isBlockedStatusPresent({
+  characterIdentity,
+  humanOversight,
+  structuredContext,
+  multilingualPersonalization,
+}) {
+  return [
+    characterIdentity?.identity_consent_status,
+    characterIdentity?.identity_asset_license_status,
+    humanOversight?.consent_status,
+    humanOversight?.human_review_status,
+    humanOversight?.brand_guard_status,
+    ...(structuredContext?.risk_flags ?? []),
+    multilingualPersonalization?.recipient_profile_kind,
+  ].includes("blocked");
+}
+
+function isUnknownStatusPresent({
+  characterIdentity,
+  humanOversight,
+  structuredContext,
+  avatarFeedback,
+  multilingualPersonalization,
+}) {
+  return [
+    characterIdentity?.identity_source_kind,
+    characterIdentity?.identity_consent_status,
+    characterIdentity?.identity_asset_license_status,
+    characterIdentity?.identity_drift_risk,
+    humanOversight?.consent_status,
+    humanOversight?.human_review_status,
+    humanOversight?.brand_guard_status,
+    structuredContext?.context_source_kind,
+    structuredContext?.context_confidence,
+    ...(structuredContext?.risk_flags ?? []),
+    avatarFeedback?.expression,
+    avatarFeedback?.gaze,
+    avatarFeedback?.gesture,
+    avatarFeedback?.mouth_state,
+    avatarFeedback?.attention_state,
+    avatarFeedback?.intensity,
+    multilingualPersonalization?.recipient_profile_kind,
+  ].includes("unknown");
+}
+
+function isSensitiveContextPresent(humanOversight, structuredContext) {
+  if (humanOversight?.minor_or_sensitive_context === true) return true;
+  const riskFlags = structuredContext?.risk_flags ?? [];
+  return riskFlags.some((flag) =>
+    ["sensitive_context", "minor_context", "identity_sensitive", "brand_sensitive"].includes(flag)
+  );
+}
+
+function hasStructuredContextRisk(contract) {
+  const riskFlags = contract?.risk_flags ?? [];
+  return riskFlags.some((flag) => flag !== "none");
+}
+
+function hasExternalActionOrCommandRisk(contract) {
+  const riskFlags = contract?.risk_flags ?? [];
+  return riskFlags.includes("external_action_risk") || riskFlags.includes("command_risk");
 }
 
 function scoreQuality({
