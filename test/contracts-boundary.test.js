@@ -5,11 +5,14 @@ import {
   CHARACTER_IDENTITY_CONTRACT_SCHEMA,
   clamp,
   extractCharacterIdentityContract,
+  extractRealtimeInteractionContract,
   IRIS_ADAPTER_PACKET_SCHEMA,
   normalizeAdapterKind,
+  REALTIME_INTERACTION_CONTRACT_SCHEMA,
   safeId,
   safeText,
   validateCharacterIdentityContract,
+  validateRealtimeInteractionContract,
   validateInputPayload,
 } from "../src/contracts.js";
 import { VoxWeaveError } from "../src/errors.js";
@@ -40,6 +43,21 @@ function minimalCharacterIdentityContract(overrides = {}) {
     identity_consent_status: "not_required",
     identity_asset_license_status: "not_required",
     identity_drift_risk: "low",
+    ...overrides,
+  };
+}
+
+function minimalRealtimeInteractionContract(overrides = {}) {
+  return {
+    schema: REALTIME_INTERACTION_CONTRACT_SCHEMA,
+    session_id: "session-main",
+    turn_id: "turn-1",
+    utterance_id: "utt-1",
+    input_mode: "text",
+    output_mode: "tts",
+    speech_state: "thinking",
+    interrupt_policy: "allow_user_barge_in",
+    latency_class: "interactive",
     ...overrides,
   };
 }
@@ -354,6 +372,246 @@ test("validateInputPayload rejects unsafe character identity contract on ordinar
 test("validateInputPayload still rejects existing adapter unsafe field command", () => {
   assertVoxWeaveError(
     () => validateInputPayload({ ...minimalAdapterPacket("tts"), command: "blocked" }),
+    "unsafe_payload"
+  );
+});
+
+test("realtime interaction contract accepts minimal safe contract", () => {
+  const contract = validateRealtimeInteractionContract(
+    minimalRealtimeInteractionContract()
+  );
+
+  assert.equal(contract.schema, REALTIME_INTERACTION_CONTRACT_SCHEMA);
+  assert.equal(contract.session_id, "session-main");
+  assert.equal(contract.turn_id, "turn-1");
+  assert.equal(contract.utterance_id, "utt-1");
+  assert.equal(contract.input_mode, "text");
+  assert.equal(contract.output_mode, "tts");
+  assert.equal(contract.speech_state, "thinking");
+  assert.equal(contract.interrupt_policy, "allow_user_barge_in");
+  assert.equal(contract.latency_class, "interactive");
+  assert.equal(contract.safe_summary_only, true);
+});
+
+test("realtime interaction contract normalizes ids and hints", () => {
+  const contract = validateRealtimeInteractionContract(
+    minimalRealtimeInteractionContract({
+      session_id: " session/main ",
+      turn_id: " turn id ",
+      utterance_id: " utterance/id ",
+      avatar_expression_hint: "  calm \n smile  ",
+      avatar_motion_hint: "gentle nod ".repeat(20),
+      tts_emotion_hint: "  warm \t focused  ",
+    })
+  );
+
+  assert.equal(contract.session_id, "session-main");
+  assert.equal(contract.turn_id, "turn-id");
+  assert.equal(contract.utterance_id, "utterance-id");
+  assert.equal(contract.avatar_expression_hint, "calm smile");
+  assert.equal(contract.avatar_motion_hint.length, 120);
+  assert.equal(contract.tts_emotion_hint, "warm focused");
+});
+
+test("extractRealtimeInteractionContract returns null when absent", () => {
+  assert.equal(extractRealtimeInteractionContract({ text: "safe sample" }), null);
+});
+
+test("extractRealtimeInteractionContract reads snake_case and camelCase field", () => {
+  assert.equal(
+    extractRealtimeInteractionContract({
+      realtime_interaction_contract: minimalRealtimeInteractionContract({
+        session_id: "snake-case",
+      }),
+    }).session_id,
+    "snake-case"
+  );
+  assert.equal(
+    extractRealtimeInteractionContract({
+      realtimeInteractionContract: minimalRealtimeInteractionContract({
+        session_id: "camel-case",
+      }),
+    }).session_id,
+    "camel-case"
+  );
+});
+
+test("realtime interaction contract rejects wrong schema", () => {
+  assertVoxWeaveError(
+    () => validateRealtimeInteractionContract(
+      minimalRealtimeInteractionContract({ schema: "other" })
+    ),
+    "invalid_realtime_interaction_contract"
+  );
+});
+
+test("realtime interaction contract rejects missing session_id", () => {
+  assertVoxWeaveError(
+    () => validateRealtimeInteractionContract(
+      minimalRealtimeInteractionContract({ session_id: "" })
+    ),
+    "invalid_realtime_interaction_contract"
+  );
+});
+
+test("realtime interaction contract rejects missing turn_id", () => {
+  assertVoxWeaveError(
+    () => validateRealtimeInteractionContract(
+      minimalRealtimeInteractionContract({ turn_id: "" })
+    ),
+    "invalid_realtime_interaction_contract"
+  );
+});
+
+test("realtime interaction contract rejects missing utterance_id", () => {
+  assertVoxWeaveError(
+    () => validateRealtimeInteractionContract(
+      minimalRealtimeInteractionContract({ utterance_id: "" })
+    ),
+    "invalid_realtime_interaction_contract"
+  );
+});
+
+test("realtime interaction contract rejects safe_summary_only false", () => {
+  assertVoxWeaveError(
+    () => validateRealtimeInteractionContract(
+      minimalRealtimeInteractionContract({ safe_summary_only: false })
+    ),
+    "invalid_realtime_interaction_contract"
+  );
+});
+
+test("realtime interaction contract rejects unknown input_mode", () => {
+  assertVoxWeaveError(
+    () => validateRealtimeInteractionContract(
+      minimalRealtimeInteractionContract({ input_mode: "stream" })
+    ),
+    "invalid_realtime_interaction_contract"
+  );
+});
+
+test("realtime interaction contract rejects unknown output_mode", () => {
+  assertVoxWeaveError(
+    () => validateRealtimeInteractionContract(
+      minimalRealtimeInteractionContract({ output_mode: "provider_call" })
+    ),
+    "invalid_realtime_interaction_contract"
+  );
+});
+
+test("realtime interaction contract rejects unknown speech_state", () => {
+  assertVoxWeaveError(
+    () => validateRealtimeInteractionContract(
+      minimalRealtimeInteractionContract({ speech_state: "recording" })
+    ),
+    "invalid_realtime_interaction_contract"
+  );
+});
+
+test("realtime interaction contract rejects unknown interrupt_policy", () => {
+  assertVoxWeaveError(
+    () => validateRealtimeInteractionContract(
+      minimalRealtimeInteractionContract({ interrupt_policy: "kill_stream" })
+    ),
+    "invalid_realtime_interaction_contract"
+  );
+});
+
+test("realtime interaction contract rejects unknown latency_class", () => {
+  assertVoxWeaveError(
+    () => validateRealtimeInteractionContract(
+      minimalRealtimeInteractionContract({ latency_class: "live_transport" })
+    ),
+    "invalid_realtime_interaction_contract"
+  );
+});
+
+test("realtime interaction contract rejects raw URL in avatar_motion_hint", () => {
+  assertVoxWeaveError(
+    () => validateRealtimeInteractionContract(
+      minimalRealtimeInteractionContract({
+        avatar_motion_hint: "https://example.invalid/motion",
+      })
+    ),
+    "unsafe_payload"
+  );
+});
+
+test("realtime interaction contract rejects renderer_endpoint-like key", () => {
+  assertVoxWeaveError(
+    () => validateRealtimeInteractionContract(
+      minimalRealtimeInteractionContract({
+        renderer_endpoint: "blocked",
+      })
+    ),
+    "unsafe_payload"
+  );
+});
+
+test("realtime interaction contract rejects raw_audio-like field", () => {
+  assertVoxWeaveError(
+    () => validateRealtimeInteractionContract(
+      minimalRealtimeInteractionContract({
+        raw_audio: "blocked",
+      })
+    ),
+    "unsafe_payload"
+  );
+});
+
+test("realtime interaction contract rejects token-like field", () => {
+  assertVoxWeaveError(
+    () => validateRealtimeInteractionContract(
+      minimalRealtimeInteractionContract({
+        access_token: "blocked",
+      })
+    ),
+    "unsafe_payload"
+  );
+});
+
+test("validateInputPayload accepts safe realtime interaction contract on ordinary safe payload", () => {
+  assert.equal(
+    validateInputPayload({
+      text: "safe sample",
+      realtime_interaction_contract: minimalRealtimeInteractionContract(),
+    }),
+    undefined
+  );
+});
+
+test("validateInputPayload accepts safe character identity and realtime interaction contracts together", () => {
+  assert.equal(
+    validateInputPayload({
+      text: "safe sample",
+      character_identity_contract: minimalCharacterIdentityContract(),
+      realtime_interaction_contract: minimalRealtimeInteractionContract(),
+    }),
+    undefined
+  );
+});
+
+test("validateInputPayload rejects unsafe realtime interaction contract on ordinary payload", () => {
+  assertVoxWeaveError(
+    () =>
+      validateInputPayload({
+        text: "safe sample",
+        realtime_interaction_contract: minimalRealtimeInteractionContract({
+          avatar_motion_hint: "motion.motion3.json",
+        }),
+      }),
+    "unsafe_payload"
+  );
+});
+
+test("validateInputPayload preserves adapter unsafe field rejection with realtime contract", () => {
+  assertVoxWeaveError(
+    () =>
+      validateInputPayload({
+        ...minimalAdapterPacket("tts"),
+        realtime_interaction_contract: minimalRealtimeInteractionContract(),
+        command: "blocked",
+      }),
     "unsafe_payload"
   );
 });
