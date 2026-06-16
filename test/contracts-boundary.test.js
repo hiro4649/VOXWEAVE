@@ -1961,3 +1961,135 @@ test("clamp clamps below and above ranges", () => {
   assert.equal(clamp(15, 0, 10), 10);
   assert.equal(clamp(5, 0, 10), 5);
 });
+
+const EXPECTED_AI_CHARACTER_CONTRACTS = [
+  {
+    key: "character_identity",
+    payloadKey: "character_identity_contract",
+    schema: CHARACTER_IDENTITY_CONTRACT_SCHEMA,
+    validator: validateCharacterIdentityContract,
+    extractor: extractCharacterIdentityContract,
+    makeContract: minimalCharacterIdentityContract,
+    unsafeOverride: { voice_identity_id: "voice.model3.json" },
+    errorCode: "unsafe_payload",
+  },
+  {
+    key: "realtime_interaction",
+    payloadKey: "realtime_interaction_contract",
+    schema: REALTIME_INTERACTION_CONTRACT_SCHEMA,
+    validator: validateRealtimeInteractionContract,
+    extractor: extractRealtimeInteractionContract,
+    makeContract: minimalRealtimeInteractionContract,
+    unsafeOverride: { avatar_motion_hint: "motion.motion3.json" },
+    errorCode: "unsafe_payload",
+  },
+  {
+    key: "human_oversight_consent",
+    payloadKey: "human_oversight_consent_contract",
+    schema: HUMAN_OVERSIGHT_CONSENT_CONTRACT_SCHEMA,
+    validator: validateHumanOversightConsentContract,
+    extractor: extractHumanOversightConsentContract,
+    makeContract: minimalHumanOversightConsentContract,
+    unsafeOverride: { access_token: "blocked" },
+    errorCode: "unsafe_payload",
+  },
+  {
+    key: "structured_context",
+    payloadKey: "structured_context_contract",
+    schema: STRUCTURED_CONTEXT_CONTRACT_SCHEMA,
+    validator: validateStructuredContextContract,
+    extractor: extractStructuredContextContract,
+    makeContract: minimalStructuredContextContract,
+    unsafeOverride: { app_or_game_state_summary: "state.motion3.json" },
+    errorCode: "unsafe_payload",
+  },
+  {
+    key: "avatar_feedback",
+    payloadKey: "avatar_feedback_contract",
+    schema: AVATAR_FEEDBACK_CONTRACT_SCHEMA,
+    validator: validateAvatarFeedbackContract,
+    extractor: extractAvatarFeedbackContract,
+    makeContract: minimalAvatarFeedbackContract,
+    unsafeOverride: { motion_hint: "pose.motion3.json" },
+    errorCode: "unsafe_payload",
+  },
+  {
+    key: "multilingual_personalization",
+    payloadKey: "multilingual_personalization_contract",
+    schema: MULTILINGUAL_PERSONALIZATION_CONTRACT_SCHEMA,
+    validator: validateMultilingualPersonalizationContract,
+    extractor: extractMultilingualPersonalizationContract,
+    makeContract: minimalMultilingualPersonalizationContract,
+    unsafeOverride: { locale_out: "https://example.invalid/locale" },
+    errorCode: "unsafe_payload",
+  },
+];
+
+test("AI character contract drift guard keeps expected schema constants exported", () => {
+  for (const contract of EXPECTED_AI_CHARACTER_CONTRACTS) {
+    assert.equal(typeof contract.schema, "string", contract.key);
+    assert.match(contract.schema, /^voxweave_.+_contract_v1$/u, contract.key);
+  }
+});
+
+test("AI character contract drift guard keeps expected validators exported", () => {
+  for (const contract of EXPECTED_AI_CHARACTER_CONTRACTS) {
+    assert.equal(typeof contract.validator, "function", contract.key);
+    assert.equal(contract.validator(contract.makeContract()).schema, contract.schema);
+  }
+});
+
+test("AI character contract drift guard keeps expected extractors exported", () => {
+  for (const contract of EXPECTED_AI_CHARACTER_CONTRACTS) {
+    assert.equal(typeof contract.extractor, "function", contract.key);
+    assert.equal(
+      contract.extractor({ [contract.payloadKey]: contract.makeContract() }).schema,
+      contract.schema
+    );
+  }
+});
+
+test("AI character contract drift guard validates every expected contract fixture independently", () => {
+  for (const contract of EXPECTED_AI_CHARACTER_CONTRACTS) {
+    assert.equal(
+      validateInputPayload({
+        text: "safe sample",
+        [contract.payloadKey]: contract.makeContract(),
+      }),
+      undefined,
+      contract.key
+    );
+  }
+});
+
+test("AI character contract drift guard validates all expected contract fixtures together", () => {
+  assert.equal(
+    validateInputPayload({
+      text: "safe sample",
+      ...makeExpectedAllContracts(),
+    }),
+    undefined
+  );
+});
+
+test("AI character contract drift guard rejects unsafe fixture for every expected contract family", () => {
+  for (const contract of EXPECTED_AI_CHARACTER_CONTRACTS) {
+    assertVoxWeaveError(
+      () =>
+        validateInputPayload({
+          text: "safe sample",
+          [contract.payloadKey]: contract.makeContract(contract.unsafeOverride),
+        }),
+      contract.errorCode
+    );
+  }
+});
+
+function makeExpectedAllContracts() {
+  return Object.fromEntries(
+    EXPECTED_AI_CHARACTER_CONTRACTS.map((contract) => [
+      contract.payloadKey,
+      contract.makeContract(),
+    ])
+  );
+}
