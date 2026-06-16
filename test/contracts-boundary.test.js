@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   assertSafeResponse,
+  CHARACTER_IDENTITY_CONTRACT_SCHEMA,
   clamp,
+  extractCharacterIdentityContract,
   IRIS_ADAPTER_PACKET_SCHEMA,
   normalizeAdapterKind,
   safeId,
   safeText,
+  validateCharacterIdentityContract,
   validateInputPayload,
 } from "../src/contracts.js";
 import { VoxWeaveError } from "../src/errors.js";
@@ -25,6 +28,20 @@ function assertVoxWeaveError(fn, code) {
     fn,
     (error) => error instanceof VoxWeaveError && error.code === code
   );
+}
+
+function minimalCharacterIdentityContract(overrides = {}) {
+  return {
+    schema: CHARACTER_IDENTITY_CONTRACT_SCHEMA,
+    character_profile_id: "iris-main",
+    persona_version: "v1-safe",
+    identity_lock_level: "soft",
+    identity_source_kind: "synthetic",
+    identity_consent_status: "not_required",
+    identity_asset_license_status: "not_required",
+    identity_drift_risk: "low",
+    ...overrides,
+  };
 }
 
 test("normalizeAdapterKind returns supported adapter kinds", () => {
@@ -155,6 +172,188 @@ test("validateInputPayload rejects canonical_envelope unsafe field", () => {
           command: "blocked",
         },
       }),
+    "unsafe_payload"
+  );
+});
+
+test("character identity contract accepts minimal safe contract", () => {
+  const contract = validateCharacterIdentityContract(minimalCharacterIdentityContract());
+
+  assert.equal(contract.schema, CHARACTER_IDENTITY_CONTRACT_SCHEMA);
+  assert.equal(contract.character_profile_id, "iris-main");
+  assert.equal(contract.persona_version, "v1-safe");
+  assert.equal(contract.identity_lock_level, "soft");
+  assert.equal(contract.identity_source_kind, "synthetic");
+  assert.equal(contract.identity_consent_status, "not_required");
+  assert.equal(contract.identity_asset_license_status, "not_required");
+  assert.equal(contract.identity_drift_risk, "low");
+  assert.equal(contract.safe_summary_only, true);
+});
+
+test("character identity contract normalizes safe ids and persona version", () => {
+  const contract = validateCharacterIdentityContract(
+    minimalCharacterIdentityContract({
+      character_profile_id: " iris main ",
+      persona_version: "  ".concat("v".repeat(100)),
+      visual_identity_id: " visual/id ",
+      voice_identity_id: " voice id ",
+      style_preset_id: " style/id ",
+    })
+  );
+
+  assert.equal(contract.character_profile_id, "iris-main");
+  assert.equal(contract.persona_version.length, 80);
+  assert.equal(contract.visual_identity_id, "visual-id");
+  assert.equal(contract.voice_identity_id, "voice-id");
+  assert.equal(contract.style_preset_id, "style-id");
+});
+
+test("extractCharacterIdentityContract returns null when absent", () => {
+  assert.equal(extractCharacterIdentityContract({ text: "safe sample" }), null);
+});
+
+test("extractCharacterIdentityContract reads snake_case and camelCase field", () => {
+  assert.equal(
+    extractCharacterIdentityContract({
+      character_identity_contract: minimalCharacterIdentityContract({
+        character_profile_id: "snake-case",
+      }),
+    }).character_profile_id,
+    "snake-case"
+  );
+  assert.equal(
+    extractCharacterIdentityContract({
+      characterIdentityContract: minimalCharacterIdentityContract({
+        character_profile_id: "camel-case",
+      }),
+    }).character_profile_id,
+    "camel-case"
+  );
+});
+
+test("character identity contract rejects wrong schema", () => {
+  assertVoxWeaveError(
+    () => validateCharacterIdentityContract(minimalCharacterIdentityContract({ schema: "other" })),
+    "invalid_character_identity_contract"
+  );
+});
+
+test("character identity contract rejects missing character_profile_id", () => {
+  assertVoxWeaveError(
+    () =>
+      validateCharacterIdentityContract(
+        minimalCharacterIdentityContract({ character_profile_id: "" })
+      ),
+    "invalid_character_identity_contract"
+  );
+});
+
+test("character identity contract rejects safe_summary_only false", () => {
+  assertVoxWeaveError(
+    () =>
+      validateCharacterIdentityContract(
+        minimalCharacterIdentityContract({ safe_summary_only: false })
+      ),
+    "invalid_character_identity_contract"
+  );
+});
+
+test("character identity contract rejects unknown identity_lock_level", () => {
+  assertVoxWeaveError(
+    () =>
+      validateCharacterIdentityContract(
+        minimalCharacterIdentityContract({ identity_lock_level: "locked" })
+      ),
+    "invalid_character_identity_contract"
+  );
+});
+
+test("character identity contract rejects unknown identity_source_kind", () => {
+  assertVoxWeaveError(
+    () =>
+      validateCharacterIdentityContract(
+        minimalCharacterIdentityContract({ identity_source_kind: "raw_asset" })
+      ),
+    "invalid_character_identity_contract"
+  );
+});
+
+test("character identity contract accepts blocked consent as status only", () => {
+  const contract = validateCharacterIdentityContract(
+    minimalCharacterIdentityContract({
+      identity_consent_status: "blocked",
+      identity_asset_license_status: "blocked",
+      identity_drift_risk: "high",
+    })
+  );
+
+  assert.equal(contract.identity_consent_status, "blocked");
+  assert.equal(contract.identity_asset_license_status, "blocked");
+  assert.equal(contract.identity_drift_risk, "high");
+});
+
+test("character identity contract rejects raw URL in visual_identity_id", () => {
+  assertVoxWeaveError(
+    () =>
+      validateCharacterIdentityContract(
+        minimalCharacterIdentityContract({
+          visual_identity_id: "https://example.invalid/avatar",
+        })
+      ),
+    "unsafe_payload"
+  );
+});
+
+test("character identity contract rejects endpoint-like key", () => {
+  assertVoxWeaveError(
+    () =>
+      validateCharacterIdentityContract(
+        minimalCharacterIdentityContract({
+          renderer_endpoint: "blocked",
+        })
+      ),
+    "unsafe_payload"
+  );
+});
+
+test("character identity contract rejects token-like field", () => {
+  assertVoxWeaveError(
+    () =>
+      validateCharacterIdentityContract(
+        minimalCharacterIdentityContract({
+          access_token: "blocked",
+        })
+      ),
+    "unsafe_payload"
+  );
+});
+
+test("validateInputPayload accepts safe character identity contract on ordinary safe payload", () => {
+  assert.equal(
+    validateInputPayload({
+      text: "safe sample",
+      character_identity_contract: minimalCharacterIdentityContract(),
+    }),
+    undefined
+  );
+});
+
+test("validateInputPayload rejects unsafe character identity contract on ordinary payload", () => {
+  assertVoxWeaveError(
+    () =>
+      validateInputPayload({
+        text: "safe sample",
+        character_identity_contract: minimalCharacterIdentityContract({
+          voice_identity_id: "voice.wav",
+        }),
+      }),
+    "unsafe_payload"
+  );
+});
+
+test("validateInputPayload still rejects existing adapter unsafe field command", () => {
+  assertVoxWeaveError(
+    () => validateInputPayload({ ...minimalAdapterPacket("tts"), command: "blocked" }),
     "unsafe_payload"
   );
 });

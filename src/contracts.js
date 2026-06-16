@@ -7,10 +7,37 @@ export const IRIS_ADAPTER_PACKET_SCHEMA = "iris_adapter_packet_v1";
 export const LIVE2D_RENDERER_CUE_SCHEMA = "iris_live2d_renderer_cue_v1";
 export const LIVE2D_RENDERER_DELIVERY_SCHEMA =
   "iris_live2d_renderer_cue_delivery_v1";
+export const CHARACTER_IDENTITY_CONTRACT_SCHEMA =
+  "voxweave_character_identity_contract_v1";
 
 const ADAPTER_KINDS = new Set(["tts", "subtitle", "live2d"]);
 const MAX_TEXT_LENGTH = 4000;
 const MAX_STRING_LENGTH = 8000;
+const MAX_PERSONA_VERSION_LENGTH = 80;
+
+const IDENTITY_LOCK_LEVELS = new Set(["none", "soft", "strict"]);
+const IDENTITY_SOURCE_KINDS = new Set([
+  "synthetic",
+  "user_owned",
+  "licensed",
+  "brand_owned",
+  "external_reference",
+  "unknown",
+]);
+const IDENTITY_CONSENT_STATUSES = new Set([
+  "not_required",
+  "explicit_consent",
+  "licensed",
+  "blocked",
+  "unknown",
+]);
+const IDENTITY_ASSET_LICENSE_STATUSES = new Set([
+  "not_required",
+  "licensed",
+  "blocked",
+  "unknown",
+]);
+const IDENTITY_DRIFT_RISKS = new Set(["low", "medium", "high", "unknown"]);
 
 const FORBIDDEN_KEYS = new Set([
   "world_command",
@@ -114,6 +141,7 @@ export function validateInputPayload(payload, { routeKind = "" } = {}) {
     throw new VoxWeaveError("JSON object payload required", "invalid_payload");
   }
 
+  extractCharacterIdentityContract(payload);
   scanUnsafeInput(payload, "root");
 
   if (payload.schema === IRIS_ADAPTER_PACKET_SCHEMA) {
@@ -131,6 +159,92 @@ export function validateInputPayload(payload, { routeKind = "" } = {}) {
       );
     }
   }
+}
+
+export function validateCharacterIdentityContract(contract) {
+  if (!isPlainObject(contract)) {
+    throw new VoxWeaveError(
+      "character identity contract object required",
+      "invalid_character_identity_contract"
+    );
+  }
+
+  scanUnsafeInput(contract, "root.character_identity_contract");
+
+  const normalized = {
+    schema: safeText(contract.schema, 80),
+    character_profile_id: safeId(contract.character_profile_id),
+    persona_version: safeText(contract.persona_version, MAX_PERSONA_VERSION_LENGTH),
+    visual_identity_id: safeId(contract.visual_identity_id),
+    voice_identity_id: safeId(contract.voice_identity_id),
+    style_preset_id: safeId(contract.style_preset_id),
+    identity_lock_level: safeText(contract.identity_lock_level, 32),
+    identity_source_kind: safeText(contract.identity_source_kind, 40),
+    identity_consent_status: safeText(contract.identity_consent_status, 40),
+    identity_asset_license_status: safeText(contract.identity_asset_license_status, 40),
+    identity_drift_risk: safeText(contract.identity_drift_risk, 32),
+    safe_summary_only: contract.safe_summary_only !== undefined
+      ? contract.safe_summary_only
+      : true,
+  };
+
+  if (normalized.schema !== CHARACTER_IDENTITY_CONTRACT_SCHEMA) {
+    throw new VoxWeaveError(
+      "invalid character identity contract schema",
+      "invalid_character_identity_contract"
+    );
+  }
+  if (!normalized.character_profile_id || !normalized.persona_version) {
+    throw new VoxWeaveError(
+      "character identity contract required field missing",
+      "invalid_character_identity_contract"
+    );
+  }
+  if (!IDENTITY_LOCK_LEVELS.has(normalized.identity_lock_level)) {
+    throw new VoxWeaveError(
+      "invalid identity lock level",
+      "invalid_character_identity_contract"
+    );
+  }
+  if (!IDENTITY_SOURCE_KINDS.has(normalized.identity_source_kind)) {
+    throw new VoxWeaveError(
+      "invalid identity source kind",
+      "invalid_character_identity_contract"
+    );
+  }
+  if (!IDENTITY_CONSENT_STATUSES.has(normalized.identity_consent_status)) {
+    throw new VoxWeaveError(
+      "invalid identity consent status",
+      "invalid_character_identity_contract"
+    );
+  }
+  if (!IDENTITY_ASSET_LICENSE_STATUSES.has(normalized.identity_asset_license_status)) {
+    throw new VoxWeaveError(
+      "invalid identity asset license status",
+      "invalid_character_identity_contract"
+    );
+  }
+  if (!IDENTITY_DRIFT_RISKS.has(normalized.identity_drift_risk)) {
+    throw new VoxWeaveError(
+      "invalid identity drift risk",
+      "invalid_character_identity_contract"
+    );
+  }
+  if (normalized.safe_summary_only !== true) {
+    throw new VoxWeaveError(
+      "character identity contract must be summary only",
+      "invalid_character_identity_contract"
+    );
+  }
+
+  return normalized;
+}
+
+export function extractCharacterIdentityContract(payload) {
+  if (!isPlainObject(payload)) return null;
+  const contract = payload.character_identity_contract ?? payload.characterIdentityContract;
+  if (contract === undefined || contract === null) return null;
+  return validateCharacterIdentityContract(contract);
 }
 
 export function assertSafeResponse(payload) {
