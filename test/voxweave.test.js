@@ -7,6 +7,12 @@ import { resolve } from "node:path";
 import { createVoxWeaveService } from "../src/orchestrator.js";
 import { createVoxWeaveServer } from "../src/server.js";
 import { createLive2dForwarder } from "../src/live2dForwarder.js";
+import { repairPronunciationText } from "../src/pronunciationDictionary.js";
+import {
+  isSafeTtsOutput,
+  isSafeUrlReplacement,
+  normalizeTtsSafeText,
+} from "../src/ttsSafeTextNormalization.js";
 
 const baseTtsPacket = {
   schema: "iris_adapter_packet_v1",
@@ -757,6 +763,84 @@ test("serves subtitle and live2d adapter mode endpoints over HTTP", async () => 
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
+});
+
+test("safe TTS text normalization removes unsafe values and preserves natural prose", () => {
+  const urlText = normalizeTtsSafeText("Read https://example.invalid/a and www.example.invalid/b.");
+  assert.equal(urlText.url_replacement_count, 2);
+  assert.equal(urlText.safe_output_only, true);
+  assert.doesNotMatch(urlText.normalized_text, /https?:\/\//iu);
+  assert.doesNotMatch(urlText.normalized_text, /www\./iu);
+
+  const customSafe = normalizeTtsSafeText("Visit https://example.invalid", {
+    urlReplacement: "[safe link]",
+  });
+  assert.equal(customSafe.normalized_text, "Visit [safe link]");
+
+  const unsafeCustomValues = [
+    { urlReplacement: "https://example.invalid" },
+    { urlReplacement: "token=sample" },
+    { urlReplacement: "authorization=Bearer sample" },
+  ];
+  for (const options of unsafeCustomValues) {
+    const result = normalizeTtsSafeText("Visit https://example.invalid", options);
+    assert.equal(result.safe_output_only, true);
+    assert.doesNotMatch(result.normalized_text, /https?:\/\/|token|authorization|Bearer|sample/iu);
+  }
+
+  const keyValueText = normalizeTtsSafeText(
+    "api_key=sample api-key=sample token=sample secret=sample endpoint=https://example.invalid/a",
+  );
+  assert.equal(keyValueText.configuration_marker_count, 5);
+  assert.equal(keyValueText.normalized_text, "");
+
+  for (const value of [
+    "authorization=sample",
+    "authorization: sample",
+    "authorization: Basic sample",
+    "authorization=Bearer sample",
+  ]) {
+    const result = normalizeTtsSafeText(value);
+    assert.equal(result.safe_output_only, true);
+    assert.doesNotMatch(result.normalized_text, /authorization|Basic|Bearer|sample/iu);
+  }
+
+  const naturalText = normalizeTtsSafeText(
+    "endpoint security is important. token economy is not authentication. secret base in a game story. authorization policy text stays readable.",
+  );
+  assert.match(naturalText.normalized_text, /endpoint security is important/u);
+  assert.match(naturalText.normalized_text, /token economy is not authentication/u);
+  assert.match(naturalText.normalized_text, /secret base in a game story/u);
+  assert.match(naturalText.normalized_text, /authorization policy text stays readable/u);
+
+  const symbolText = normalizeTtsSafeText("Hello   ,   world   !   Visit https://example.invalid");
+  assert.equal(symbolText.normalized_text, "Hello, world! Visit [URL removed]");
+
+  assert.equal(isSafeUrlReplacement("[safe link]"), true);
+  assert.equal(isSafeUrlReplacement("https://example.invalid"), false);
+  assert.equal(isSafeTtsOutput("plain safe text"), true);
+  assert.equal(isSafeTtsOutput("authorization=Bearer sample"), false);
+});
+
+test("safe TTS text normalization handles edge inputs without runtime wiring", () => {
+  assert.equal(normalizeTtsSafeText(null).normalized_text, "");
+  assert.equal(normalizeTtsSafeText(undefined).normalized_text, "");
+  assert.equal(normalizeTtsSafeText(12345).normalized_text, "12345");
+  assert.equal(normalizeTtsSafeText("").safe_output_only, true);
+
+  const multiLine = normalizeTtsSafeText("Line one\nendpoint=https://example.invalid/a\nLine three");
+  assert.equal(multiLine.safe_output_only, true);
+  assert.doesNotMatch(multiLine.normalized_text, /https?:\/\/|endpoint=/iu);
+  assert.match(multiLine.normalized_text, /Line one/u);
+  assert.match(multiLine.normalized_text, /Line three/u);
+
+  const dictionary = repairPronunciationText("Hiro Sora Airi 読み補正");
+  const readings = dictionary.repairs.map((repair) => repair.reading);
+  assert.deepEqual(readings.sort(), ["アイリ", "ソラ", "ヒロ", "よみほせい"].sort());
+
+  const result = normalizeTtsSafeText("safe voice text");
+  assert.equal(Object.hasOwn(result, "provider_endpoint"), false);
+  assert.equal(Object.hasOwn(result, "raw_audio"), false);
 });
 
 function makeSubtitlePacket(overrides = {}) {

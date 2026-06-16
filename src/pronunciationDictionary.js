@@ -12,6 +12,30 @@ const ENTRIES = [
     reason: "brand_case_repair",
   },
   {
+    pattern: /\bHiro\b/gu,
+    replacement: "Hiro",
+    reading: "ヒロ",
+    reason: "character_name_reading",
+  },
+  {
+    pattern: /\bSora\b/gu,
+    replacement: "Sora",
+    reading: "ソラ",
+    reason: "character_name_reading",
+  },
+  {
+    pattern: /\bAiri\b/gu,
+    replacement: "Airi",
+    reading: "アイリ",
+    reason: "character_name_reading",
+  },
+  {
+    pattern: /読み補正/gu,
+    replacement: "読み補正",
+    reading: "よみほせい",
+    reason: "japanese_term_reading",
+  },
+  {
     pattern: /\bIRIS\b/gu,
     replacement: "IRIS",
     reading: "アイリス",
