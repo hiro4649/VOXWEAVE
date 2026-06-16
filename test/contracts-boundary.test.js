@@ -7,15 +7,18 @@ import {
   extractCharacterIdentityContract,
   extractHumanOversightConsentContract,
   extractRealtimeInteractionContract,
+  extractStructuredContextContract,
   HUMAN_OVERSIGHT_CONSENT_CONTRACT_SCHEMA,
   IRIS_ADAPTER_PACKET_SCHEMA,
   normalizeAdapterKind,
   REALTIME_INTERACTION_CONTRACT_SCHEMA,
   safeId,
   safeText,
+  STRUCTURED_CONTEXT_CONTRACT_SCHEMA,
   validateCharacterIdentityContract,
   validateHumanOversightConsentContract,
   validateRealtimeInteractionContract,
+  validateStructuredContextContract,
   validateInputPayload,
 } from "../src/contracts.js";
 import { VoxWeaveError } from "../src/errors.js";
@@ -75,6 +78,18 @@ function minimalHumanOversightConsentContract(overrides = {}) {
     likeness_use_allowed: false,
     commercial_use_allowed: false,
     minor_or_sensitive_context: false,
+    ...overrides,
+  };
+}
+
+function minimalStructuredContextContract(overrides = {}) {
+  return {
+    schema: STRUCTURED_CONTEXT_CONTRACT_SCHEMA,
+    scene_id: "scene-main",
+    context_source_kind: "user_text",
+    context_confidence: "medium",
+    risk_flags: ["none"],
+    allowed_action_kinds: ["safe_metadata_only"],
     ...overrides,
   };
 }
@@ -979,6 +994,338 @@ test("assertSafeResponse remains unchanged and rejects unsafe response keys", ()
   assertVoxWeaveError(
     () => assertSafeResponse({ response_summary: { approval_workflow_command: "blocked" } }),
     "unsafe_response"
+  );
+});
+
+test("structured context contract accepts minimal safe contract", () => {
+  const contract = validateStructuredContextContract(minimalStructuredContextContract());
+
+  assert.equal(contract.schema, STRUCTURED_CONTEXT_CONTRACT_SCHEMA);
+  assert.equal(contract.scene_id, "scene-main");
+  assert.equal(contract.context_source_kind, "user_text");
+  assert.equal(contract.context_confidence, "medium");
+  assert.deepEqual(contract.risk_flags, ["none"]);
+  assert.deepEqual(contract.allowed_action_kinds, ["safe_metadata_only"]);
+});
+
+test("structured context contract defaults safe_summary_only to true", () => {
+  const contract = validateStructuredContextContract(minimalStructuredContextContract());
+
+  assert.equal(contract.safe_summary_only, true);
+});
+
+test("structured context contract normalizes scene id and text summaries", () => {
+  const contract = validateStructuredContextContract(
+    minimalStructuredContextContract({
+      scene_id: " scene/id ",
+      user_intent: "  ask \n question  ",
+      last_user_action_summary: "safe action ".repeat(40),
+      visible_objects_summary: "  object \t summary  ",
+      app_or_game_state_summary: "  safe state  ",
+    })
+  );
+
+  assert.equal(contract.scene_id, "scene-id");
+  assert.equal(contract.user_intent, "ask question");
+  assert.equal(contract.last_user_action_summary.length, 240);
+  assert.equal(contract.visible_objects_summary, "object summary");
+  assert.equal(contract.app_or_game_state_summary, "safe state");
+});
+
+test("extractStructuredContextContract returns null when absent", () => {
+  assert.equal(extractStructuredContextContract({ text: "safe sample" }), null);
+});
+
+test("extractStructuredContextContract reads snake_case and camelCase field", () => {
+  assert.equal(
+    extractStructuredContextContract({
+      structured_context_contract: minimalStructuredContextContract({
+        scene_id: "snake-case",
+      }),
+    }).scene_id,
+    "snake-case"
+  );
+  assert.equal(
+    extractStructuredContextContract({
+      structuredContextContract: minimalStructuredContextContract({
+        scene_id: "camel-case",
+      }),
+    }).scene_id,
+    "camel-case"
+  );
+});
+
+test("structured context contract accepts actor state summaries", () => {
+  const contract = validateStructuredContextContract(
+    minimalStructuredContextContract({
+      actor_state_summaries: [
+        {
+          actor_id: " actor/main ",
+          role: "guide",
+          state_summary: "calm and waiting",
+          emotion_hint: "focused",
+          attention_hint: "user",
+        },
+      ],
+    })
+  );
+
+  assert.equal(contract.actor_state_summaries.length, 1);
+  assert.equal(contract.actor_state_summaries[0].actor_id, "actor-main");
+  assert.equal(contract.actor_state_summaries[0].state_summary, "calm and waiting");
+});
+
+test("structured context contract rejects actor state with unknown field", () => {
+  assertVoxWeaveError(
+    () =>
+      validateStructuredContextContract(
+        minimalStructuredContextContract({
+          actor_state_summaries: [{ actor_id: "actor-1", extra_note: "blocked" }],
+        })
+      ),
+    "invalid_structured_context_contract"
+  );
+});
+
+test("structured context contract rejects actor state missing actor_id", () => {
+  assertVoxWeaveError(
+    () =>
+      validateStructuredContextContract(
+        minimalStructuredContextContract({
+          actor_state_summaries: [{ role: "guide" }],
+        })
+      ),
+    "invalid_structured_context_contract"
+  );
+});
+
+test("structured context contract rejects wrong schema", () => {
+  assertVoxWeaveError(
+    () => validateStructuredContextContract(minimalStructuredContextContract({ schema: "other" })),
+    "invalid_structured_context_contract"
+  );
+});
+
+test("structured context contract rejects missing scene_id", () => {
+  assertVoxWeaveError(
+    () => validateStructuredContextContract(minimalStructuredContextContract({ scene_id: "" })),
+    "invalid_structured_context_contract"
+  );
+});
+
+test("structured context contract rejects safe_summary_only false", () => {
+  assertVoxWeaveError(
+    () =>
+      validateStructuredContextContract(
+        minimalStructuredContextContract({ safe_summary_only: false })
+      ),
+    "invalid_structured_context_contract"
+  );
+});
+
+test("structured context contract rejects unknown context_source_kind", () => {
+  assertVoxWeaveError(
+    () =>
+      validateStructuredContextContract(
+        minimalStructuredContextContract({ context_source_kind: "raw_screen" })
+      ),
+    "invalid_structured_context_contract"
+  );
+});
+
+test("structured context contract rejects unknown context_confidence", () => {
+  assertVoxWeaveError(
+    () =>
+      validateStructuredContextContract(
+        minimalStructuredContextContract({ context_confidence: "certain" })
+      ),
+    "invalid_structured_context_contract"
+  );
+});
+
+test("structured context contract rejects risk_flags not array", () => {
+  assertVoxWeaveError(
+    () =>
+      validateStructuredContextContract(
+        minimalStructuredContextContract({ risk_flags: "none" })
+      ),
+    "invalid_structured_context_contract"
+  );
+});
+
+test("structured context contract rejects empty risk_flags", () => {
+  assertVoxWeaveError(
+    () => validateStructuredContextContract(minimalStructuredContextContract({ risk_flags: [] })),
+    "invalid_structured_context_contract"
+  );
+});
+
+test("structured context contract rejects unknown risk flag", () => {
+  assertVoxWeaveError(
+    () =>
+      validateStructuredContextContract(
+        minimalStructuredContextContract({ risk_flags: ["raw_control"] })
+      ),
+    "invalid_structured_context_contract"
+  );
+});
+
+test("structured context contract rejects none risk flag mixed with other risk", () => {
+  assertVoxWeaveError(
+    () =>
+      validateStructuredContextContract(
+        minimalStructuredContextContract({ risk_flags: ["none", "command_risk"] })
+      ),
+    "invalid_structured_context_contract"
+  );
+});
+
+test("structured context contract rejects allowed_action_kinds not array", () => {
+  assertVoxWeaveError(
+    () =>
+      validateStructuredContextContract(
+        minimalStructuredContextContract({ allowed_action_kinds: "speak" })
+      ),
+    "invalid_structured_context_contract"
+  );
+});
+
+test("structured context contract rejects empty allowed_action_kinds", () => {
+  assertVoxWeaveError(
+    () =>
+      validateStructuredContextContract(
+        minimalStructuredContextContract({ allowed_action_kinds: [] })
+      ),
+    "invalid_structured_context_contract"
+  );
+});
+
+test("structured context contract rejects unknown allowed action kind", () => {
+  assertVoxWeaveError(
+    () =>
+      validateStructuredContextContract(
+        minimalStructuredContextContract({ allowed_action_kinds: ["execute"] })
+      ),
+    "invalid_structured_context_contract"
+  );
+});
+
+test("structured context contract rejects none allowed action mixed with other action", () => {
+  assertVoxWeaveError(
+    () =>
+      validateStructuredContextContract(
+        minimalStructuredContextContract({ allowed_action_kinds: ["none", "handoff"] })
+      ),
+    "invalid_structured_context_contract"
+  );
+});
+
+test("structured context contract rejects command risk with speak action", () => {
+  assertVoxWeaveError(
+    () =>
+      validateStructuredContextContract(
+        minimalStructuredContextContract({
+          risk_flags: ["command_risk"],
+          allowed_action_kinds: ["speak"],
+        })
+      ),
+    "invalid_structured_context_contract"
+  );
+});
+
+test("structured context contract accepts command risk with handoff or safe metadata only", () => {
+  const contract = validateStructuredContextContract(
+    minimalStructuredContextContract({
+      risk_flags: ["command_risk"],
+      allowed_action_kinds: ["handoff", "safe_metadata_only"],
+    })
+  );
+
+  assert.deepEqual(contract.risk_flags, ["command_risk"]);
+  assert.deepEqual(contract.allowed_action_kinds, ["handoff", "safe_metadata_only"]);
+});
+
+test("structured context contract rejects raw URL in visible_objects_summary", () => {
+  assertVoxWeaveError(
+    () =>
+      validateStructuredContextContract(
+        minimalStructuredContextContract({
+          visible_objects_summary: "see https://example.invalid/object",
+        })
+      ),
+    "unsafe_payload"
+  );
+});
+
+test("structured context contract rejects raw command-like key", () => {
+  assertVoxWeaveError(
+    () =>
+      validateStructuredContextContract(
+        minimalStructuredContextContract({
+          raw_command: "blocked",
+        })
+      ),
+    "unsafe_payload"
+  );
+});
+
+test("structured context contract rejects token-like field", () => {
+  assertVoxWeaveError(
+    () =>
+      validateStructuredContextContract(
+        minimalStructuredContextContract({
+          access_token: "blocked",
+        })
+      ),
+    "unsafe_payload"
+  );
+});
+
+test("validateInputPayload accepts safe structured context contract on ordinary safe payload", () => {
+  assert.equal(
+    validateInputPayload({
+      text: "safe sample",
+      structured_context_contract: minimalStructuredContextContract(),
+    }),
+    undefined
+  );
+});
+
+test("validateInputPayload accepts safe character identity, realtime interaction, human oversight, and structured context contracts together", () => {
+  assert.equal(
+    validateInputPayload({
+      text: "safe sample",
+      character_identity_contract: minimalCharacterIdentityContract(),
+      realtime_interaction_contract: minimalRealtimeInteractionContract(),
+      human_oversight_consent_contract: minimalHumanOversightConsentContract(),
+      structured_context_contract: minimalStructuredContextContract(),
+    }),
+    undefined
+  );
+});
+
+test("validateInputPayload rejects unsafe structured context contract on ordinary payload", () => {
+  assertVoxWeaveError(
+    () =>
+      validateInputPayload({
+        text: "safe sample",
+        structured_context_contract: minimalStructuredContextContract({
+          app_or_game_state_summary: "state.motion3.json",
+        }),
+      }),
+    "unsafe_payload"
+  );
+});
+
+test("validateInputPayload still rejects existing adapter unsafe field command with structured context contract", () => {
+  assertVoxWeaveError(
+    () =>
+      validateInputPayload({
+        ...minimalAdapterPacket("tts"),
+        structured_context_contract: minimalStructuredContextContract(),
+        command: "blocked",
+      }),
+    "unsafe_payload"
   );
 });
 
