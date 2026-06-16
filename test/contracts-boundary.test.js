@@ -8,10 +8,12 @@ import {
   extractAvatarFeedbackContract,
   extractCharacterIdentityContract,
   extractHumanOversightConsentContract,
+  extractMultilingualPersonalizationContract,
   extractRealtimeInteractionContract,
   extractStructuredContextContract,
   HUMAN_OVERSIGHT_CONSENT_CONTRACT_SCHEMA,
   IRIS_ADAPTER_PACKET_SCHEMA,
+  MULTILINGUAL_PERSONALIZATION_CONTRACT_SCHEMA,
   normalizeAdapterKind,
   REALTIME_INTERACTION_CONTRACT_SCHEMA,
   safeId,
@@ -20,6 +22,7 @@ import {
   validateAvatarFeedbackContract,
   validateCharacterIdentityContract,
   validateHumanOversightConsentContract,
+  validateMultilingualPersonalizationContract,
   validateRealtimeInteractionContract,
   validateStructuredContextContract,
   validateInputPayload,
@@ -106,6 +109,19 @@ function minimalAvatarFeedbackContract(overrides = {}) {
     mouth_state: "closed",
     attention_state: "focused",
     intensity: "medium",
+    ...overrides,
+  };
+}
+
+function minimalMultilingualPersonalizationContract(overrides = {}) {
+  return {
+    schema: MULTILINGUAL_PERSONALIZATION_CONTRACT_SCHEMA,
+    locale_in: "ja",
+    locale_out: "en-US",
+    translation_mode: "none",
+    recipient_profile_kind: "user",
+    personalization_scope: "none",
+    approved_profile_facts: [],
     ...overrides,
   };
 }
@@ -1549,6 +1565,338 @@ test("validateInputPayload still rejects existing adapter unsafe field command w
       validateInputPayload({
         ...minimalAdapterPacket("tts"),
         avatar_feedback_contract: minimalAvatarFeedbackContract(),
+        command: "blocked",
+      }),
+    "unsafe_payload"
+  );
+});
+
+test("multilingual personalization contract accepts minimal safe contract", () => {
+  const contract = validateMultilingualPersonalizationContract(
+    minimalMultilingualPersonalizationContract()
+  );
+
+  assert.equal(contract.schema, MULTILINGUAL_PERSONALIZATION_CONTRACT_SCHEMA);
+  assert.equal(contract.locale_in, "ja");
+  assert.equal(contract.locale_out, "en-US");
+  assert.equal(contract.translation_mode, "none");
+  assert.equal(contract.recipient_profile_kind, "user");
+  assert.equal(contract.personalization_scope, "none");
+  assert.deepEqual(contract.approved_profile_facts, []);
+});
+
+test("multilingual personalization contract defaults safe_summary_only to true", () => {
+  const contract = validateMultilingualPersonalizationContract(
+    minimalMultilingualPersonalizationContract()
+  );
+
+  assert.equal(contract.safe_summary_only, true);
+});
+
+test("multilingual personalization contract normalizes locales and fact ids", () => {
+  const contract = validateMultilingualPersonalizationContract(
+    minimalMultilingualPersonalizationContract({
+      locale_in: "  und  ",
+      locale_out: "  zh-Hant-TW  ",
+      recipient_profile_kind: "guardian",
+      personalization_scope: "approved_profile_facts",
+      approved_profile_facts: [" profile fact/one ", "profile.fact:two", "profile fact/one"],
+    })
+  );
+
+  assert.equal(contract.locale_in, "und");
+  assert.equal(contract.locale_out, "zh-Hant-TW");
+  assert.deepEqual(contract.approved_profile_facts, [
+    "profile-fact-one",
+    "profile.fact:two",
+  ]);
+});
+
+test("multilingual personalization contract extracts snake and camel case payloads", () => {
+  assert.equal(
+    extractMultilingualPersonalizationContract({
+      multilingual_personalization_contract: minimalMultilingualPersonalizationContract({
+        locale_out: "fr",
+      }),
+    }).locale_out,
+    "fr"
+  );
+  assert.equal(
+    extractMultilingualPersonalizationContract({
+      multilingualPersonalizationContract: minimalMultilingualPersonalizationContract({
+        locale_out: "de",
+      }),
+    }).locale_out,
+    "de"
+  );
+  assert.equal(extractMultilingualPersonalizationContract({ text: "safe sample" }), null);
+});
+
+test("multilingual personalization contract rejects wrong schema", () => {
+  assertVoxWeaveError(
+    () =>
+      validateMultilingualPersonalizationContract(
+        minimalMultilingualPersonalizationContract({ schema: "other" })
+      ),
+    "invalid_multilingual_personalization_contract"
+  );
+});
+
+test("multilingual personalization contract rejects safe_summary_only false", () => {
+  assertVoxWeaveError(
+    () =>
+      validateMultilingualPersonalizationContract(
+        minimalMultilingualPersonalizationContract({ safe_summary_only: false })
+      ),
+    "invalid_multilingual_personalization_contract"
+  );
+});
+
+test("multilingual personalization contract rejects invalid locales", () => {
+  assertVoxWeaveError(
+    () =>
+      validateMultilingualPersonalizationContract(
+        minimalMultilingualPersonalizationContract({ locale_in: "english" })
+      ),
+    "invalid_multilingual_personalization_contract"
+  );
+  assertVoxWeaveError(
+    () =>
+      validateMultilingualPersonalizationContract(
+        minimalMultilingualPersonalizationContract({ locale_out: "ja-" })
+      ),
+    "invalid_multilingual_personalization_contract"
+  );
+});
+
+test("multilingual personalization contract rejects unknown enum values", () => {
+  assertVoxWeaveError(
+    () =>
+      validateMultilingualPersonalizationContract(
+        minimalMultilingualPersonalizationContract({ translation_mode: "provider_translate" })
+      ),
+    "invalid_multilingual_personalization_contract"
+  );
+  assertVoxWeaveError(
+    () =>
+      validateMultilingualPersonalizationContract(
+        minimalMultilingualPersonalizationContract({ recipient_profile_kind: "advertiser" })
+      ),
+    "invalid_multilingual_personalization_contract"
+  );
+  assertVoxWeaveError(
+    () =>
+      validateMultilingualPersonalizationContract(
+        minimalMultilingualPersonalizationContract({ personalization_scope: "full_profile" })
+      ),
+    "invalid_multilingual_personalization_contract"
+  );
+});
+
+test("multilingual personalization contract rejects invalid approved profile facts", () => {
+  assertVoxWeaveError(
+    () =>
+      validateMultilingualPersonalizationContract(
+        minimalMultilingualPersonalizationContract({ approved_profile_facts: "fact-one" })
+      ),
+    "invalid_multilingual_personalization_contract"
+  );
+  assertVoxWeaveError(
+    () =>
+      validateMultilingualPersonalizationContract(
+        minimalMultilingualPersonalizationContract({
+          approved_profile_facts: [{ id: "fact-one" }],
+        })
+      ),
+    "invalid_multilingual_personalization_contract"
+  );
+  assertVoxWeaveError(
+    () =>
+      validateMultilingualPersonalizationContract(
+        minimalMultilingualPersonalizationContract({
+          approved_profile_facts: ["https://example.invalid/fact"],
+        })
+      ),
+    "unsafe_payload"
+  );
+});
+
+test("multilingual personalization contract guards approved profile fact scope", () => {
+  for (const scope of ["none", "name_only", "session_context"]) {
+    assertVoxWeaveError(
+      () =>
+        validateMultilingualPersonalizationContract(
+          minimalMultilingualPersonalizationContract({
+            personalization_scope: scope,
+            approved_profile_facts: ["fact-one"],
+          })
+        ),
+      "invalid_multilingual_personalization_contract"
+    );
+  }
+
+  assertVoxWeaveError(
+    () =>
+      validateMultilingualPersonalizationContract(
+        minimalMultilingualPersonalizationContract({
+          personalization_scope: "approved_profile_facts",
+        })
+      ),
+    "invalid_multilingual_personalization_contract"
+  );
+  assertVoxWeaveError(
+    () =>
+      validateMultilingualPersonalizationContract(
+        minimalMultilingualPersonalizationContract({
+          recipient_profile_kind: "unknown",
+          personalization_scope: "approved_profile_facts",
+          approved_profile_facts: ["fact-one"],
+        })
+      ),
+    "invalid_multilingual_personalization_contract"
+  );
+});
+
+test("multilingual personalization contract guards child friendly recipients", () => {
+  assertVoxWeaveError(
+    () =>
+      validateMultilingualPersonalizationContract(
+        minimalMultilingualPersonalizationContract({
+          translation_mode: "child_friendly",
+          recipient_profile_kind: "developer",
+        })
+      ),
+    "invalid_multilingual_personalization_contract"
+  );
+  assert.equal(
+    validateMultilingualPersonalizationContract(
+      minimalMultilingualPersonalizationContract({
+        translation_mode: "child_friendly",
+        recipient_profile_kind: "learner",
+      })
+    ).recipient_profile_kind,
+    "learner"
+  );
+});
+
+test("multilingual personalization contract guards guardian friendly recipients", () => {
+  assertVoxWeaveError(
+    () =>
+      validateMultilingualPersonalizationContract(
+        minimalMultilingualPersonalizationContract({
+          translation_mode: "guardian_friendly",
+          recipient_profile_kind: "viewer",
+        })
+      ),
+    "invalid_multilingual_personalization_contract"
+  );
+  assert.equal(
+    validateMultilingualPersonalizationContract(
+      minimalMultilingualPersonalizationContract({
+        translation_mode: "guardian_friendly",
+        recipient_profile_kind: "parent",
+      })
+    ).recipient_profile_kind,
+    "parent"
+  );
+});
+
+test("multilingual personalization contract guards operator summary recipients", () => {
+  assertVoxWeaveError(
+    () =>
+      validateMultilingualPersonalizationContract(
+        minimalMultilingualPersonalizationContract({
+          translation_mode: "operator_summary",
+          recipient_profile_kind: "user",
+        })
+      ),
+    "invalid_multilingual_personalization_contract"
+  );
+  assert.equal(
+    validateMultilingualPersonalizationContract(
+      minimalMultilingualPersonalizationContract({
+        translation_mode: "operator_summary",
+        recipient_profile_kind: "operator",
+      })
+    ).recipient_profile_kind,
+    "operator"
+  );
+});
+
+test("multilingual personalization contract rejects unsafe locale and fields", () => {
+  assertVoxWeaveError(
+    () =>
+      validateMultilingualPersonalizationContract(
+        minimalMultilingualPersonalizationContract({
+          locale_out: "https://example.invalid/locale",
+        })
+      ),
+    "unsafe_payload"
+  );
+  assertVoxWeaveError(
+    () =>
+      validateMultilingualPersonalizationContract(
+        minimalMultilingualPersonalizationContract({
+          endpoint: "blocked",
+        })
+      ),
+    "unsafe_payload"
+  );
+  assertVoxWeaveError(
+    () =>
+      validateMultilingualPersonalizationContract(
+        minimalMultilingualPersonalizationContract({
+          access_token: "blocked",
+        })
+      ),
+    "unsafe_payload"
+  );
+});
+
+test("validateInputPayload accepts safe multilingual personalization on ordinary payload", () => {
+  assert.equal(
+    validateInputPayload({
+      text: "safe sample",
+      multilingual_personalization_contract: minimalMultilingualPersonalizationContract(),
+    }),
+    undefined
+  );
+});
+
+test("validateInputPayload accepts all safe AI character contracts together", () => {
+  assert.equal(
+    validateInputPayload({
+      text: "safe sample",
+      character_identity_contract: minimalCharacterIdentityContract(),
+      realtime_interaction_contract: minimalRealtimeInteractionContract(),
+      human_oversight_consent_contract: minimalHumanOversightConsentContract(),
+      structured_context_contract: minimalStructuredContextContract(),
+      avatar_feedback_contract: minimalAvatarFeedbackContract(),
+      multilingual_personalization_contract: minimalMultilingualPersonalizationContract(),
+    }),
+    undefined
+  );
+});
+
+test("validateInputPayload rejects unsafe multilingual personalization on ordinary payload", () => {
+  assertVoxWeaveError(
+    () =>
+      validateInputPayload({
+        text: "safe sample",
+        multilingual_personalization_contract: minimalMultilingualPersonalizationContract({
+          locale_out: "C:\\unsafe\\locale",
+        }),
+      }),
+    "unsafe_payload"
+  );
+});
+
+test("validateInputPayload still rejects existing adapter unsafe field command with multilingual personalization contract", () => {
+  assertVoxWeaveError(
+    () =>
+      validateInputPayload({
+        ...minimalAdapterPacket("tts"),
+        multilingual_personalization_contract: minimalMultilingualPersonalizationContract(),
         command: "blocked",
       }),
     "unsafe_payload"
