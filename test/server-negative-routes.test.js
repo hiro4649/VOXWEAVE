@@ -15,7 +15,10 @@ import {
   DEFAULT_SERVER_LIFECYCLE_POLICY,
   DEFAULT_WRITE_ADMISSION_POLICY,
   extractWriteCredential,
+  buildSafeClientErrorResponse,
+  buildSafeExpectationFailedResponse,
   buildSafeServerStartupSummary,
+  isRequestAbortedError,
   normalizeServerLifecyclePolicy,
   normalizeWriteAdmissionPolicy,
   parseCanonicalRequestTarget,
@@ -458,6 +461,101 @@ test("write admission is not consumed before eligible write body handling", asyn
     assertSafeError(oversized, 413, "request_body_too_large");
     assert.equal(controller.snapshot().active_write_count, 0);
   }, { apiKey: FAKE_API_KEY, writeAdmissionController: controller });
+});
+
+test("request abort classification is safe and releases admission lease", async () => {
+  const controller = createWriteAdmissionController({ maxInFlightWrites: 1 });
+  const service = createCountingService();
+
+  await withRouteServer(async (baseUrl) => {
+    const url = new URL(baseUrl);
+    await sendPartialWriteAndDestroy({
+      host: url.hostname,
+      port: Number(url.port),
+    });
+
+    await waitFor(() => controller.snapshot().active_write_count === 0);
+    assert.equal(service.orchestrateCallCount(), 0);
+    assert.equal(controller.snapshot().active_write_count, 0);
+
+    const health = await fetchJson(`${baseUrl}/health`);
+    assert.equal(health.status, 200);
+    assert.equal(health.body.status, "ok");
+  }, { service, writeAdmissionController: controller });
+});
+
+test("request abort helper recognizes safe transport abort codes only", () => {
+  assert.equal(isRequestAbortedError({ code: "ECONNRESET" }), true);
+  assert.equal(isRequestAbortedError({ code: "ERR_STREAM_PREMATURE_CLOSE" }), true);
+  assert.equal(isRequestAbortedError({ code: "EOTHER" }), false);
+  assert.equal(isRequestAbortedError(null), false);
+});
+
+test("safe clientError response is generic and closes socket", async () => {
+  const safe = buildSafeClientErrorResponse();
+  assert.equal(safe.statusCode, 400);
+  assert.equal(safe.body.error, "bad_request");
+  assert.equal(safe.headers.connection, "close");
+  assertNoForbiddenFields(safe.body);
+
+  await withRouteServer(async (baseUrl) => {
+    const url = new URL(baseUrl);
+    const response = parseRawHttpJson(await sendRawMalformedHttp({
+      host: url.hostname,
+      port: Number(url.port),
+    }));
+
+    assertSafeError(response, 400, "bad_request");
+    assert.equal(response.headers.connection, "close");
+    assert.equal(JSON.stringify(response.body).includes("HTTP"), false);
+    assert.equal(JSON.stringify(response.body).includes("/v1/orchestrate"), false);
+  });
+});
+
+test("Expect requests are rejected safely without service call or admission slot", async () => {
+  const controller = createWriteAdmissionController({ maxInFlightWrites: 1 });
+  const service = createCountingService();
+  const safe = buildSafeExpectationFailedResponse();
+  assert.equal(safe.statusCode, 417);
+  assert.equal(safe.body.error, "expectation_failed");
+  assert.equal(safe.headers.connection, "close");
+  assertNoForbiddenFields(safe.body);
+
+  await withRouteServer(async (baseUrl) => {
+    const url = new URL(baseUrl);
+    const response = parseRawHttpJson(await sendExpectRequest({
+      host: url.hostname,
+      port: Number(url.port),
+      expectValue: "100-continue",
+    }));
+
+    assertSafeError(response, 417, "expectation_failed");
+    assert.equal(response.headers.connection, "close");
+    assert.equal(service.orchestrateCallCount(), 0);
+    assert.equal(controller.snapshot().active_write_count, 0);
+
+    const health = await fetchJson(`${baseUrl}/health`);
+    assert.equal(health.status, 200);
+    assert.equal(health.body.status, "ok");
+  }, { service, writeAdmissionController: controller });
+});
+
+test("unknown Expect value is rejected safely without retaining request body", async () => {
+  const service = createCountingService();
+
+  await withRouteServer(async (baseUrl) => {
+    const url = new URL(baseUrl);
+    const response = parseRawHttpJson(await sendExpectRequest({
+      host: url.hostname,
+      port: Number(url.port),
+      expectValue: "unit-test-expectation",
+    }));
+
+    assertSafeError(response, 417, "expectation_failed");
+    assert.equal(response.headers.connection, "close");
+    assert.equal(JSON.stringify(response.body).includes("unit-test-expectation"), false);
+    assert.equal(service.orchestrateCallCount(), 0);
+  }, { service });
 });
 
 test("safe startup summary excludes transport values", () => {
@@ -1126,6 +1224,19 @@ function createDeferredWriteService(deferred) {
   };
 }
 
+function createCountingService() {
+  const realService = createVoxWeaveService();
+  let calls = 0;
+  return {
+    health: () => realService.health(),
+    orchestrateCallCount: () => calls,
+    async orchestrate(payload, context) {
+      calls += 1;
+      return realService.orchestrate(payload, context);
+    },
+  };
+}
+
 function safeRequestTargetErrorMatcher(error) {
   assert.equal(error.code, "invalid_request_target");
   assert.equal(error.statusCode, 400);
@@ -1175,8 +1286,15 @@ async function sendRawHttpRequest({ host, port, requestLines }) {
   return new Promise((resolve, reject) => {
     const socket = createConnection({ host, port });
     const chunks = [];
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve(Buffer.concat(chunks).toString("utf8"));
+    };
     socket.setTimeout(1000, () => {
-      socket.destroy(new Error("raw_http_timeout"));
+      socket.destroy();
+      finish();
     });
     socket.on("connect", () => {
       socket.write(requestLines.join("\r\n"));
@@ -1184,11 +1302,91 @@ async function sendRawHttpRequest({ host, port, requestLines }) {
     socket.on("data", (chunk) => {
       chunks.push(chunk);
     });
-    socket.on("error", reject);
-    socket.on("end", () => {
-      resolve(Buffer.concat(chunks).toString("utf8"));
+    socket.on("error", (error) => {
+      if (settled) return;
+      reject(error);
     });
+    socket.on("end", finish);
+    socket.on("close", finish);
   });
+}
+
+async function sendRawMalformedHttp({ host, port }) {
+  return sendRawHttpRequest({
+    host,
+    port,
+    requestLines: [
+      "POST /v1/orchestrate HTTP/1.1",
+      `Host: ${host}:${port}`,
+      "Content-Length: not-a-number",
+      "Connection: close",
+      "",
+      "",
+    ],
+  });
+}
+
+async function sendExpectRequest({ host, port, expectValue }) {
+  const body = JSON.stringify(adapterPacket());
+  return sendRawHttpRequest({
+    host,
+    port,
+    requestLines: [
+      "POST /v1/orchestrate HTTP/1.1",
+      `Host: ${host}:${port}`,
+      "Content-Type: application/json",
+      `Content-Length: ${Buffer.byteLength(body)}`,
+      `Expect: ${expectValue}`,
+      "Connection: close",
+      "",
+      body,
+    ],
+  });
+}
+
+async function sendPartialWriteAndDestroy({ host, port }) {
+  await new Promise((resolve, reject) => {
+    const socket = createConnection({ host, port });
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    socket.setTimeout(1000, () => {
+      socket.destroy();
+      finish();
+    });
+    socket.on("connect", () => {
+      socket.write([
+        "POST /v1/orchestrate HTTP/1.1",
+        `Host: ${host}:${port}`,
+        "Content-Type: application/json",
+        "Content-Length: 64",
+        "Connection: close",
+        "",
+        "{\"text\"",
+      ].join("\r\n"));
+      setTimeout(() => socket.destroy(), 10);
+    });
+    socket.on("error", (error) => {
+      if (error?.code === "ECONNRESET") {
+        finish();
+        return;
+      }
+      reject(error);
+    });
+    socket.on("close", finish);
+  });
+}
+
+async function waitFor(predicate) {
+  const deadline = Date.now() + 1000;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.equal(predicate(), true);
 }
 
 function parseRawHttpJson(rawResponse) {
@@ -1210,6 +1408,7 @@ function parseRawHttpJson(rawResponse) {
     status,
     headers: {
       cacheControl: headers["cache-control"],
+      connection: headers["connection"],
       contentType: headers["content-type"],
       nosniff: headers["x-content-type-options"],
     },

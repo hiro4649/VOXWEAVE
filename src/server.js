@@ -62,7 +62,7 @@ export function createVoxWeaveServer({
   const admissionController = normalizeWriteAdmissionController(
     writeAdmissionController ?? createWriteAdmissionController(writeAdmissionPolicy)
   );
-  const server = createServer(async (request, response) => {
+  async function handleRequest(request, response) {
     try {
       const pathname = assertCanonicalRequestTarget(request.url ?? "/");
       if (request.method === "GET" && ["/health", "/v1/health"].includes(pathname)) {
@@ -98,10 +98,18 @@ export function createVoxWeaveServer({
 
       sendJson(response, 404, { ok: false, error: "not_found" });
     } catch (error) {
+      if (response.destroyed || response.writableEnded) return;
+      if (response.headersSent) {
+        response.destroy();
+        return;
+      }
       const safe = toSafeError(error);
       sendJson(response, safe.statusCode, safe.body);
     }
-  });
+  }
+
+  const server = createServer(handleRequest);
+  installSafeHttpProtocolBoundaries(server);
   applyServerLifecyclePolicy(server, lifecyclePolicy);
   return server;
 }
@@ -417,19 +425,26 @@ function isNonLoopbackOptIn(value) {
 }
 
 async function readJson(request) {
+  assertRequestNotAborted(request);
   const chunks = [];
   let total = 0;
-  for await (const chunk of request) {
-    total += chunk.length;
-    if (total > MAX_BODY_BYTES) {
-      throw new VoxWeaveError(
-        "request body too large",
-        "request_body_too_large",
-        413
-      );
+  try {
+    for await (const chunk of request) {
+      total += chunk.length;
+      if (total > MAX_BODY_BYTES) {
+        throw new VoxWeaveError(
+          "request body too large",
+          "request_body_too_large",
+          413
+        );
+      }
+      chunks.push(chunk);
     }
-    chunks.push(chunk);
+  } catch (error) {
+    if (isRequestAbortedError(error) || request.aborted) throwRequestAborted();
+    throw error;
   }
+  assertRequestNotAborted(request);
   const body = Buffer.concat(chunks).toString("utf8");
   if (!body.trim()) return {};
   try {
@@ -437,6 +452,18 @@ async function readJson(request) {
   } catch {
     throw new VoxWeaveError("invalid json", "invalid_json", 400);
   }
+}
+
+function assertRequestNotAborted(request) {
+  if (request.aborted) throwRequestAborted();
+}
+
+export function isRequestAbortedError(error) {
+  return error?.code === "ECONNRESET" || error?.code === "ERR_STREAM_PREMATURE_CLOSE";
+}
+
+function throwRequestAborted() {
+  throw new VoxWeaveError("request aborted", "request_aborted", 400);
 }
 
 function assertServerLifecyclePolicyObject(policy) {
@@ -547,13 +574,24 @@ function resolveRouteKind(pathname) {
 }
 
 function sendJson(response, statusCode, body, headers = {}) {
-  response.writeHead(statusCode, {
-    "content-type": "application/json; charset=utf-8",
-    "cache-control": "no-store",
-    "x-content-type-options": "nosniff",
-    ...headers,
-  });
-  response.end(JSON.stringify(body));
+  if (response.destroyed || response.writableEnded) return false;
+  if (response.headersSent) {
+    response.destroy();
+    return false;
+  }
+  try {
+    response.writeHead(statusCode, {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff",
+      ...headers,
+    });
+    response.end(JSON.stringify(body));
+    return true;
+  } catch {
+    response.destroy();
+    return false;
+  }
 }
 
 function sendServerBusy(response) {
@@ -562,6 +600,72 @@ function sendServerBusy(response) {
     "connection": "close",
     "retry-after": "1",
   });
+}
+
+export function buildSafeClientErrorResponse() {
+  const safe = toSafeError(new VoxWeaveError("bad request", "bad_request", 400));
+  return Object.freeze({
+    statusCode: safe.statusCode,
+    body: Object.freeze({ ...safe.body }),
+    headers: Object.freeze({
+      "connection": "close",
+    }),
+  });
+}
+
+export function buildSafeExpectationFailedResponse() {
+  const safe = toSafeError(new VoxWeaveError("expectation failed", "expectation_failed", 417));
+  return Object.freeze({
+    statusCode: safe.statusCode,
+    body: Object.freeze({ ...safe.body }),
+    headers: Object.freeze({
+      "connection": "close",
+    }),
+  });
+}
+
+export function installSafeHttpProtocolBoundaries(server) {
+  server.on("clientError", (_error, socket) => {
+    writeSafeSocketJson(socket, buildSafeClientErrorResponse());
+  });
+  server.on("checkContinue", (request, response) => {
+    request.resume();
+    const safe = buildSafeExpectationFailedResponse();
+    sendJson(response, safe.statusCode, safe.body, safe.headers);
+  });
+  server.on("checkExpectation", (request, response) => {
+    request.resume();
+    const safe = buildSafeExpectationFailedResponse();
+    sendJson(response, safe.statusCode, safe.body, safe.headers);
+  });
+  return server;
+}
+
+function writeSafeSocketJson(socket, safeResponse) {
+  if (!socket?.writable || socket.destroyed) {
+    socket?.destroy?.();
+    return false;
+  }
+  const body = JSON.stringify(safeResponse.body);
+  const headers = [
+    `HTTP/1.1 ${safeResponse.statusCode} ${safeHttpReason(safeResponse.statusCode)}`,
+    "Content-Type: application/json; charset=utf-8",
+    "Cache-Control: no-store",
+    "X-Content-Type-Options: nosniff",
+    "Connection: close",
+    `Content-Length: ${Buffer.byteLength(body)}`,
+    "",
+    body,
+  ].join("\r\n");
+  socket.end(headers);
+  return true;
+}
+
+function safeHttpReason(statusCode) {
+  if (statusCode === 400) return "Bad Request";
+  if (statusCode === 417) return "Expectation Failed";
+  if (statusCode === 503) return "Service Unavailable";
+  return "Error";
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
