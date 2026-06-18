@@ -770,6 +770,36 @@ test("operational request lifecycle matrix keeps boundary decisions aligned", ()
   }
 });
 
+test("concurrency and backpressure regression matrix keeps local fake-only boundaries aligned", async () => {
+  const controller = createWriteAdmissionController({ maxInFlightWrites: 1 });
+  const firstLease = controller.tryAcquire();
+  const saturatedLease = controller.tryAcquire();
+  firstLease.release();
+
+  const closedSummary = await closeVoxWeaveServer(null);
+  const clientError = buildSafeClientErrorResponse();
+  const expectationError = buildSafeExpectationFailedResponse();
+  const temporaryServer = createVoxWeaveServer();
+  const matrix = [
+    ["strict_lifecycle_bounds", normalizeServerLifecyclePolicy().maxConnections > 0],
+    ["connection_cap", temporaryServer.maxConnections === DEFAULT_SERVER_LIFECYCLE_POLICY.maxConnections],
+    ["write_admission_release", controller.snapshot().active_write_count === 0],
+    ["write_overload_rejection", saturatedLease === null],
+    ["request_abort_classification", isRequestAbortedError({ code: "ECONNRESET" })],
+    ["client_error_safe_response", clientError.statusCode === 400 && clientError.body.error === "bad_request"],
+    ["expect_boundary", expectationError.statusCode === 417 && expectationError.body.error === "expectation_failed"],
+    ["forced_shutdown_safe_summary", closedSummary.status === "not_listening"],
+  ];
+
+  await closeVoxWeaveServer(temporaryServer);
+  for (const [name, passed] of matrix) {
+    assert.equal(passed, true, name);
+  }
+  assertNoForbiddenFields(clientError.body);
+  assertNoForbiddenFields(expectationError.body);
+  assertNoForbiddenFields(closedSummary);
+});
+
 test("POST /v1/orchestrate without auth returns safe auth_required error", async () => {
   await withRouteServer(async (baseUrl) => {
     const response = await postJson(`${baseUrl}/v1/orchestrate`, adapterPacket());
