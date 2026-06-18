@@ -1,10 +1,18 @@
 {
   "schema": "voxweave_external_acceptance_candidate_manifest_v1",
-  "candidate_bundle_version": "1.0.0",
+  "candidate_bundle_version": "1.1.0",
   "source_project": "VOXWEAVE",
   "source_harness": "v1.2.6",
   "source_main_sha": "f173aaf1df26cb6cfe35563501fc11c0b6ac9162",
+  "source_binding_kind": "runtime_source_snapshot",
+  "bundle_binding_kind": "transitive_sha256",
   "fixture_manifest_path": "test/fixtures/interop/voxweave-interop-manifest.safe.json",
+  "fixture_files": [
+    "test/fixtures/interop/voxweave-interop-manifest.safe.json",
+    "test/fixtures/interop/iris-tts-packet.safe.json",
+    "test/fixtures/interop/iris-subtitle-packet.safe.json",
+    "test/fixtures/interop/iris-live2d-packet.safe.json"
+  ],
   "evidence_runner_script": "scripts/voxweave-loopback-integration-evidence.mjs",
   "failure_matrix_command": "node scripts/voxweave-loopback-integration-evidence.mjs --matrix",
   "candidate_status": "candidate_prepared_not_sent",

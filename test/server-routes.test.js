@@ -384,8 +384,13 @@ test("external acceptance candidate bundle is safe and not accepted", async () =
   );
   const readmeText = await readExternalAcceptanceText("README.safe.md");
   const receipts = [irisReceipt, live2dReceipt];
+  const fixtureManifest = await readFixture("voxweave-interop-manifest.safe.json");
+  const fixtures = await readCandidateFixtureFiles();
 
   assert.equal(manifest.schema, "voxweave_external_acceptance_candidate_manifest_v1");
+  assert.equal(manifest.candidate_bundle_version, "1.1.0");
+  assert.equal(manifest.source_binding_kind, "runtime_source_snapshot");
+  assert.equal(manifest.bundle_binding_kind, "transitive_sha256");
   assert.equal(manifest.candidate_status, "candidate_prepared_not_sent");
   assert.equal(manifest.external_team_acceptance_status, "not_started");
   assert.equal(manifest.real_integration_proof_status, "no");
@@ -399,6 +404,7 @@ test("external acceptance candidate bundle is safe and not accepted", async () =
   );
   for (const receipt of receipts) {
     assert.equal(receipt.schema, "voxweave_external_acceptance_receipt_template_v1");
+    assert.equal(receipt.candidate_bundle_version, "1.1.0");
     assert.equal(receipt.received_status, "pending");
     assert.equal(receipt.parsed_status, "pending");
     assert.equal(receipt.acceptance_candidate_status, "pending");
@@ -410,21 +416,40 @@ test("external acceptance candidate bundle is safe and not accepted", async () =
   assert.equal(/\bhttps?:\/\//iu.test(readmeText), false);
   assert.equal(readmeText.includes("not acceptance"), true);
   assert.equal(readmeText.includes("not runtime readiness"), true);
-  assertNoDangerousCandidateMaterial({ manifest, receipts, readmeText });
+  assert.equal(fixtureManifest.contract_registry_family_count, AI_CHARACTER_CONTRACT_FAMILY_COUNT);
+  assert.equal(fixtures.length, 4);
+  assert.deepEqual(
+    manifest.fixture_files,
+    [
+      "test/fixtures/interop/voxweave-interop-manifest.safe.json",
+      "test/fixtures/interop/iris-tts-packet.safe.json",
+      "test/fixtures/interop/iris-subtitle-packet.safe.json",
+      "test/fixtures/interop/iris-live2d-packet.safe.json",
+    ]
+  );
+  for (const fixture of fixtures) assertNoDangerousCandidateMaterial(fixture);
+  assertNoDangerousCandidateMaterial({ manifest, receipts, readmeText, fixtureManifest, fixtures });
 
   const summary = await runExternalAcceptanceCandidateBundleSummary({
     manifest,
     receipts,
     readmeText,
+    fixtureManifest,
+    fixtures,
   });
   assertExternalAcceptanceCandidateBundleSummarySafe(summary);
   assert.equal(summary.schema, EXTERNAL_ACCEPTANCE_CANDIDATE_BUNDLE_SUMMARY_SCHEMA);
   assert.equal(summary.status, "pass");
-  assert.equal(summary.candidate_bundle_version, "1.0.0");
+  assert.equal(summary.candidate_bundle_version, "1.1.0");
+  assert.equal(summary.source_binding_kind, "runtime_source_snapshot");
+  assert.equal(summary.bundle_binding_kind, "transitive_sha256");
   assert.equal(summary.manifest_status, "pass");
   assert.equal(summary.receipt_template_count, 2);
   assert.equal(summary.forbidden_material_scan_status, "pass");
   assert.equal(summary.fixture_reference_status, "pass");
+  assert.equal(summary.fixture_manifest_status, "pass");
+  assert.equal(summary.fixture_file_count, 4);
+  assert.equal(summary.transitive_fixture_binding_status, "pass");
   assert.equal(summary.external_team_acceptance_status, "not_started");
   assert.equal(summary.real_integration_proof_status, "no");
   assert.equal(summary.runtime_readiness_claimed, false);
@@ -433,17 +458,138 @@ test("external acceptance candidate bundle is safe and not accepted", async () =
   assert.match(summary.candidate_bundle_fingerprint, /^[a-f0-9]{64}$/u);
   assert.equal(
     summary.candidate_bundle_fingerprint,
-    buildExternalAcceptanceCandidateBundleFingerprint({ manifest, receipts, readmeText })
+    buildExternalAcceptanceCandidateBundleFingerprint({
+      manifest,
+      receipts,
+      readmeText,
+      fixtureManifest,
+      fixtures,
+    })
   );
   const changedVersionSummary = await runExternalAcceptanceCandidateBundleSummary({
     manifest: { ...manifest, candidate_bundle_version: "1.0.1" },
-    receipts,
+    receipts: receipts.map((receipt) => ({ ...receipt, candidate_bundle_version: "1.0.1" })),
     readmeText,
+    fixtureManifest,
+    fixtures,
   });
   assert.notEqual(
     summary.candidate_bundle_fingerprint,
     changedVersionSummary.candidate_bundle_fingerprint
   );
+  const changedTtsSummary = await runExternalAcceptanceCandidateBundleSummary({
+    manifest,
+    receipts,
+    readmeText,
+    fixtureManifest,
+    fixtures: mutateFixture(fixtures, "iris-tts-packet.safe.json", { trace_id: "changed-tts" }),
+  });
+  const changedSubtitleSummary = await runExternalAcceptanceCandidateBundleSummary({
+    manifest,
+    receipts,
+    readmeText,
+    fixtureManifest,
+    fixtures: mutateFixture(fixtures, "iris-subtitle-packet.safe.json", { trace_id: "changed-subtitle" }),
+  });
+  const changedLive2dSummary = await runExternalAcceptanceCandidateBundleSummary({
+    manifest,
+    receipts,
+    readmeText,
+    fixtureManifest,
+    fixtures: mutateFixture(fixtures, "iris-live2d-packet.safe.json", { trace_id: "changed-live2d" }),
+  });
+  const changedFixtureManifestSummary = await runExternalAcceptanceCandidateBundleSummary({
+    manifest,
+    receipts,
+    readmeText,
+    fixtureManifest: { ...fixtureManifest, fixture_version: "1.0.1" },
+    fixtures,
+  });
+  const changedReceiptSummary = await runExternalAcceptanceCandidateBundleSummary({
+    manifest,
+    receipts: [{ ...irisReceipt, recipient_role: "adapter_packet_owner_v2" }, live2dReceipt],
+    readmeText,
+    fixtureManifest,
+    fixtures,
+  });
+  const changedReadmeSummary = await runExternalAcceptanceCandidateBundleSummary({
+    manifest,
+    receipts,
+    readmeText: `${readmeText}\nSafe candidate bundle note.\n`,
+    fixtureManifest,
+    fixtures,
+  });
+  assert.notEqual(summary.candidate_bundle_fingerprint, changedTtsSummary.candidate_bundle_fingerprint);
+  assert.notEqual(summary.candidate_bundle_fingerprint, changedSubtitleSummary.candidate_bundle_fingerprint);
+  assert.notEqual(summary.candidate_bundle_fingerprint, changedLive2dSummary.candidate_bundle_fingerprint);
+  assert.notEqual(summary.candidate_bundle_fingerprint, changedFixtureManifestSummary.candidate_bundle_fingerprint);
+  assert.notEqual(summary.candidate_bundle_fingerprint, changedReceiptSummary.candidate_bundle_fingerprint);
+  assert.notEqual(summary.candidate_bundle_fingerprint, changedReadmeSummary.candidate_bundle_fingerprint);
+  assert.equal(
+    summary.candidate_bundle_fingerprint,
+    buildExternalAcceptanceCandidateBundleFingerprint({
+      manifest,
+      receipts: [live2dReceipt, irisReceipt],
+      readmeText,
+      fixtureManifest,
+      fixtures: [...fixtures].reverse(),
+    })
+  );
+  await assert.rejects(() =>
+    runExternalAcceptanceCandidateBundleSummary({
+      manifest: { ...manifest, unknown_field: "blocked" },
+      receipts,
+      readmeText,
+      fixtureManifest,
+      fixtures,
+    })
+  );
+  await assert.rejects(() =>
+    runExternalAcceptanceCandidateBundleSummary({
+      manifest,
+      receipts: [{ ...irisReceipt, unknown_field: "blocked" }, live2dReceipt],
+      readmeText,
+      fixtureManifest,
+      fixtures,
+    })
+  );
+  await assert.rejects(() =>
+    runExternalAcceptanceCandidateBundleSummary({
+      manifest: { ...manifest, fixture_files: ["../blocked"] },
+      receipts,
+      readmeText,
+      fixtureManifest,
+      fixtures,
+    })
+  );
+  await assert.rejects(() =>
+    runExternalAcceptanceCandidateBundleSummary({
+      manifest: { ...manifest, fixture_files: ["C:/blocked"] },
+      receipts,
+      readmeText,
+      fixtureManifest,
+      fixtures,
+    })
+  );
+  await assert.rejects(() =>
+    runExternalAcceptanceCandidateBundleSummary({
+      manifest,
+      receipts,
+      readmeText,
+      fixtureManifest,
+      fixtures: fixtures.slice(1),
+    })
+  );
+  await assert.rejects(() =>
+    runExternalAcceptanceCandidateBundleSummary({
+      manifest,
+      receipts,
+      readmeText,
+      fixtureManifest,
+      fixtures: [fixtures[0], fixtures[0], fixtures[1], fixtures[2]],
+    })
+  );
+  assert.notEqual(summary.candidate_bundle_fingerprint, manifest.source_main_sha);
 });
 
 test("external acceptance receipt validator accepts only safe receipts", async () => {
@@ -455,7 +601,7 @@ test("external acceptance receipt validator accepts only safe receipts", async (
     schema: EXTERNAL_ACCEPTANCE_RECEIPT_SCHEMA,
     recipient_project: "IRIS",
     recipient_role: "adapter_packet_owner",
-    candidate_bundle_version: "1.0.0",
+    candidate_bundle_version: "1.1.0",
     source_main_sha: "e".repeat(40),
     candidate_bundle_fingerprint: "f".repeat(64),
     received_status: "received",
@@ -562,11 +708,15 @@ test("external acceptance candidate dry-run matrix composes safe local evidence 
     "live2d-team-receipt-template.safe.json"
   );
   const readmeText = await readExternalAcceptanceText("README.safe.md");
+  const fixtureManifest = await readFixture("voxweave-interop-manifest.safe.json");
+  const fixtures = await readCandidateFixtureFiles();
 
   const bundle = await runExternalAcceptanceCandidateBundleSummary({
     manifest,
     receipts: [irisTemplate, live2dTemplate],
     readmeText,
+    fixtureManifest,
+    fixtures,
   });
   const happyEvidence = await runLoopbackIntegrationEvidence({
     headSha: "1".repeat(40),
@@ -581,7 +731,7 @@ test("external acceptance candidate dry-run matrix composes safe local evidence 
     schema: EXTERNAL_ACCEPTANCE_RECEIPT_SCHEMA,
     recipient_project: "IRIS",
     recipient_role: "synthetic_test_only",
-    candidate_bundle_version: "1.0.0",
+    candidate_bundle_version: "1.1.0",
     source_main_sha: "1".repeat(40),
     candidate_bundle_fingerprint: bundle.candidate_bundle_fingerprint,
     received_status: "received",
@@ -804,6 +954,29 @@ async function readExternalAcceptanceFixture(name) {
 
 async function readExternalAcceptanceText(name) {
   return readFile(new URL(`./fixtures/external-acceptance/${name}`, import.meta.url), "utf8");
+}
+
+async function readCandidateFixtureFiles() {
+  const names = [
+    "voxweave-interop-manifest.safe.json",
+    "iris-tts-packet.safe.json",
+    "iris-subtitle-packet.safe.json",
+    "iris-live2d-packet.safe.json",
+  ];
+  return Promise.all(
+    names.map(async (name) => ({
+      path: `test/fixtures/interop/${name}`,
+      content: await readFixture(name),
+    }))
+  );
+}
+
+function mutateFixture(fixtures, pathSuffix, patch) {
+  return fixtures.map((fixture) =>
+    fixture.path.endsWith(pathSuffix)
+      ? { ...fixture, content: { ...fixture.content, ...patch } }
+      : fixture
+  );
 }
 
 function assertNoForbiddenFixtureMaterial(value) {
