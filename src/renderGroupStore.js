@@ -14,34 +14,16 @@ export class RenderGroupStore {
     qualityWarningCount = 0,
   } = {}) {
     const groupId = groupKey({ traceId, eventId, utteranceId, requestId });
-    const current = this.groups.get(groupId) ?? {
-      schema: "voxweave_render_group_v1",
-      group_id: groupId,
-      trace_id: traceId,
-      event_id: eventId,
-      utterance_id: utteranceId,
-      tts_received: false,
-      subtitle_received: false,
-      live2d_received: false,
-      group_complete: false,
-      artifact_sync_status: "waiting",
-      first_audio_latency_ms: null,
-      quality_warning_count: 0,
-      created_at_ms: this.now(),
-    };
-
-    if (adapterKind === "tts") {
-      current.tts_received = true;
-      if (current.first_audio_latency_ms === null) {
-        current.first_audio_latency_ms = Math.max(0, this.now() - current.created_at_ms);
-      }
-    }
-    if (adapterKind === "subtitle") current.subtitle_received = true;
-    if (adapterKind === "live2d") current.live2d_received = true;
-    current.quality_warning_count += Math.max(0, Number(qualityWarningCount) || 0);
-    current.group_complete =
-      current.tts_received && current.subtitle_received && current.live2d_received;
-    current.artifact_sync_status = current.group_complete ? "complete" : "partial";
+    const current = applyRenderGroupUpdate({
+      group: this.groups.get(groupId),
+      adapterKind,
+      traceId,
+      eventId,
+      utteranceId,
+      groupId,
+      qualityWarningCount,
+      now: this.now,
+    });
 
     this.groups.delete(groupId);
     this.groups.set(groupId, current);
@@ -51,10 +33,74 @@ export class RenderGroupStore {
     return publicGroup(current);
   }
 
+  previewUpdate({
+    adapterKind,
+    traceId = "",
+    eventId = "",
+    utteranceId = "",
+    requestId = "",
+    qualityWarningCount = 0,
+  } = {}) {
+    const groupId = groupKey({ traceId, eventId, utteranceId, requestId });
+    return publicGroup(
+      applyRenderGroupUpdate({
+        group: this.groups.get(groupId),
+        adapterKind,
+        traceId,
+        eventId,
+        utteranceId,
+        groupId,
+        qualityWarningCount,
+        now: this.now,
+      })
+    );
+  }
+
   get({ traceId = "", eventId = "", utteranceId = "", requestId = "" } = {}) {
     const group = this.groups.get(groupKey({ traceId, eventId, utteranceId, requestId }));
     return group ? publicGroup(group) : null;
   }
+}
+
+function applyRenderGroupUpdate({
+  group,
+  adapterKind,
+  traceId,
+  eventId,
+  utteranceId,
+  groupId,
+  qualityWarningCount,
+  now,
+}) {
+  const current = structuredClone(group ?? {
+    schema: "voxweave_render_group_v1",
+    group_id: groupId,
+    trace_id: traceId,
+    event_id: eventId,
+    utterance_id: utteranceId,
+    tts_received: false,
+    subtitle_received: false,
+    live2d_received: false,
+    group_complete: false,
+    artifact_sync_status: "waiting",
+    first_audio_latency_ms: null,
+    quality_warning_count: 0,
+    created_at_ms: now(),
+  });
+
+  if (adapterKind === "tts") {
+    current.tts_received = true;
+    if (current.first_audio_latency_ms === null) {
+      current.first_audio_latency_ms = Math.max(0, now() - current.created_at_ms);
+    }
+  }
+  if (adapterKind === "subtitle") current.subtitle_received = true;
+  if (adapterKind === "live2d") current.live2d_received = true;
+  current.quality_warning_count += Math.max(0, Number(qualityWarningCount) || 0);
+  current.group_complete =
+    current.tts_received && current.subtitle_received && current.live2d_received;
+  current.artifact_sync_status = current.group_complete ? "complete" : "partial";
+  return current;
 }
 
 function groupKey({ traceId = "", eventId = "", utteranceId = "", requestId = "" }) {
