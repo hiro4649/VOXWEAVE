@@ -89,6 +89,92 @@ function makeLive2dPacket(overrides = {}) {
   };
 }
 
+function safeCharacterIdentityContract() {
+  return {
+    schema: "voxweave_character_identity_contract_v1",
+    character_profile_id: "iris-main",
+    persona_version: "v1-safe",
+    identity_lock_level: "soft",
+    identity_source_kind: "synthetic",
+    identity_consent_status: "not_required",
+    identity_asset_license_status: "not_required",
+    identity_drift_risk: "low",
+  };
+}
+
+function safeRealtimeInteractionContract() {
+  return {
+    schema: "voxweave_realtime_interaction_contract_v1",
+    session_id: "session-matrix",
+    turn_id: "turn-matrix",
+    utterance_id: "utterance-matrix",
+    input_mode: "text",
+    output_mode: "tts",
+    speech_state: "thinking",
+    interrupt_policy: "allow_user_barge_in",
+    latency_class: "interactive",
+  };
+}
+
+function safeHumanOversightConsentContract() {
+  return {
+    schema: "voxweave_human_oversight_consent_contract_v1",
+    consent_status: "not_required",
+    human_review_status: "not_required",
+    brand_guard_status: "not_required",
+    voice_clone_allowed: false,
+    likeness_use_allowed: false,
+    commercial_use_allowed: false,
+    minor_or_sensitive_context: false,
+  };
+}
+
+function safeStructuredContextContract() {
+  return {
+    schema: "voxweave_structured_context_contract_v1",
+    scene_id: "scene-matrix",
+    context_source_kind: "app_state_summary",
+    context_confidence: "high",
+    risk_flags: ["none"],
+    allowed_action_kinds: ["speak"],
+  };
+}
+
+function safeAvatarFeedbackContract() {
+  return {
+    schema: "voxweave_avatar_feedback_contract_v1",
+    expression: "happy",
+    gaze: "user",
+    gesture: "idle",
+    mouth_state: "speaking",
+    attention_state: "focused",
+    intensity: "medium",
+  };
+}
+
+function safeMultilingualPersonalizationContract() {
+  return {
+    schema: "voxweave_multilingual_personalization_contract_v1",
+    locale_in: "en",
+    locale_out: "ja",
+    translation_mode: "none",
+    recipient_profile_kind: "user",
+    personalization_scope: "none",
+    approved_profile_facts: [],
+  };
+}
+
+function allSafeContracts() {
+  return {
+    character_identity_contract: safeCharacterIdentityContract(),
+    realtime_interaction_contract: safeRealtimeInteractionContract(),
+    human_oversight_consent_contract: safeHumanOversightConsentContract(),
+    structured_context_contract: safeStructuredContextContract(),
+    avatar_feedback_contract: safeAvatarFeedbackContract(),
+    multilingual_personalization_contract: safeMultilingualPersonalizationContract(),
+  };
+}
+
 function assertNoForbiddenFields(value) {
   const stack = [value];
   while (stack.length > 0) {
@@ -137,6 +223,30 @@ function assertIntegrationBoundarySnapshot(snapshot) {
   assert.equal(snapshot.production_readiness_claimed, false);
   assert.equal(snapshot.safe_summary_only, true);
   assertNoForbiddenFields(snapshot);
+}
+
+function assertDryRunIntegrationBoundary(result, expectedContractCount) {
+  assert.equal(result.runtime_readiness_claimed, false);
+  assert.equal(result.mock_tts.provider_connected, false);
+  assert.equal(result.tts_routing.real_tts_connected, false);
+  assert.equal(result.response_summary.integration_boundary.asr_boundary.provider_connected, false);
+  assert.equal(
+    result.response_summary.integration_boundary.translation_boundary.provider_connected,
+    false
+  );
+  assert.equal(
+    result.response_summary.integration_boundary.live2d_boundary.renderer_readiness_claimed,
+    false
+  );
+  assert.equal(result.response_summary.integration_boundary.production_readiness_claimed, false);
+  assert.equal(result.ai_character_contract_summary.contract_presence_count, expectedContractCount);
+  assert.equal(
+    result.response_summary.ai_character_adapter_metadata.contract_presence_count,
+    expectedContractCount
+  );
+  assert.equal(result.response_summary.ai_character_contract_response_guard.response_guard_applied, true);
+  assertIntegrationBoundarySnapshot(result.response_summary.integration_boundary);
+  assertNoForbiddenFields(result);
 }
 
 test("health returns safe health metadata and no forbidden fields", () => {
@@ -191,6 +301,51 @@ test("integration boundary snapshot exposes blocked fake forwarder scope only", 
   assert.equal(result.response_summary.integration_boundary.live2d_boundary.forwarder_scope, "blocked");
   assert.equal(result.live2d_forward.renderer_forward_attempted, false);
   assertNoForbiddenFields(result);
+});
+
+test("dry-run integration matrix covers adapter kinds and contract combinations", async () => {
+  const scenarios = [
+    { adapterKind: "tts", packet: makeTtsPacket(), contractPatch: {}, contractCount: 0 },
+    {
+      adapterKind: "subtitle",
+      packet: makeSubtitlePacket(),
+      contractPatch: { character_identity_contract: safeCharacterIdentityContract() },
+      contractCount: 1,
+    },
+    {
+      adapterKind: "live2d",
+      packet: makeLive2dPacket(),
+      contractPatch: allSafeContracts(),
+      contractCount: 6,
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    const result = await makeService().orchestrate(
+      { ...scenario.packet, ...scenario.contractPatch },
+      { routeKind: scenario.adapterKind }
+    );
+    assert.equal(result.adapter_kind, scenario.adapterKind);
+    assertDryRunIntegrationBoundary(result, scenario.contractCount);
+  }
+});
+
+test("dry-run integration matrix preserves snapshot on cache hit", async () => {
+  const service = makeService();
+  const packet = makeTtsPacket({
+    text: "yes",
+    final_text: "yes",
+    event_id: "event-matrix-cache",
+    ...allSafeContracts(),
+  });
+
+  const first = await service.orchestrate(packet, { routeKind: "tts" });
+  const second = await service.orchestrate(packet, { routeKind: "tts" });
+
+  assert.equal(first.cache.status, "miss");
+  assert.equal(second.cache.status, "hit");
+  assert.equal(second.cache.key, first.cache.key);
+  assertDryRunIntegrationBoundary(second, 6);
 });
 
 test("orchestrate tts minimal safe packet returns accepted bridge output", async () => {
