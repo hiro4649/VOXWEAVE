@@ -375,12 +375,7 @@ export function validateInputPayload(payload, { routeKind = "" } = {}) {
     throw new VoxWeaveError("JSON object payload required", "invalid_payload");
   }
 
-  extractCharacterIdentityContract(payload);
-  extractRealtimeInteractionContract(payload);
-  extractHumanOversightConsentContract(payload);
-  extractStructuredContextContract(payload);
-  extractAvatarFeedbackContract(payload);
-  extractMultilingualPersonalizationContract(payload);
+  extractAiCharacterContracts(payload);
   scanUnsafeInput(payload, "root");
 
   if (payload.schema === IRIS_ADAPTER_PACKET_SCHEMA) {
@@ -881,6 +876,88 @@ export function extractMultilingualPersonalizationContract(payload) {
     payload.multilingualPersonalizationContract;
   if (contract === undefined || contract === null) return null;
   return validateMultilingualPersonalizationContract(contract);
+}
+
+const INTERNAL_AI_CHARACTER_CONTRACT_REGISTRY = Object.freeze([
+  Object.freeze({
+    key: "character_identity",
+    schema: CHARACTER_IDENTITY_CONTRACT_SCHEMA,
+    snakeCaseField: "character_identity_contract",
+    camelCaseField: "characterIdentityContract",
+    presenceFlag: "character_identity_contract_present",
+    validate: validateCharacterIdentityContract,
+    extract: extractCharacterIdentityContract,
+  }),
+  Object.freeze({
+    key: "realtime_interaction",
+    schema: REALTIME_INTERACTION_CONTRACT_SCHEMA,
+    snakeCaseField: "realtime_interaction_contract",
+    camelCaseField: "realtimeInteractionContract",
+    presenceFlag: "realtime_interaction_contract_present",
+    validate: validateRealtimeInteractionContract,
+    extract: extractRealtimeInteractionContract,
+  }),
+  Object.freeze({
+    key: "human_oversight_consent",
+    schema: HUMAN_OVERSIGHT_CONSENT_CONTRACT_SCHEMA,
+    snakeCaseField: "human_oversight_consent_contract",
+    camelCaseField: "humanOversightConsentContract",
+    presenceFlag: "human_oversight_consent_contract_present",
+    validate: validateHumanOversightConsentContract,
+    extract: extractHumanOversightConsentContract,
+  }),
+  Object.freeze({
+    key: "structured_context",
+    schema: STRUCTURED_CONTEXT_CONTRACT_SCHEMA,
+    snakeCaseField: "structured_context_contract",
+    camelCaseField: "structuredContextContract",
+    presenceFlag: "structured_context_contract_present",
+    validate: validateStructuredContextContract,
+    extract: extractStructuredContextContract,
+  }),
+  Object.freeze({
+    key: "avatar_feedback",
+    schema: AVATAR_FEEDBACK_CONTRACT_SCHEMA,
+    snakeCaseField: "avatar_feedback_contract",
+    camelCaseField: "avatarFeedbackContract",
+    presenceFlag: "avatar_feedback_contract_present",
+    validate: validateAvatarFeedbackContract,
+    extract: extractAvatarFeedbackContract,
+  }),
+  Object.freeze({
+    key: "multilingual_personalization",
+    schema: MULTILINGUAL_PERSONALIZATION_CONTRACT_SCHEMA,
+    snakeCaseField: "multilingual_personalization_contract",
+    camelCaseField: "multilingualPersonalizationContract",
+    presenceFlag: "multilingual_personalization_contract_present",
+    validate: validateMultilingualPersonalizationContract,
+    extract: extractMultilingualPersonalizationContract,
+  }),
+]);
+
+export const AI_CHARACTER_CONTRACT_REGISTRY = Object.freeze(
+  INTERNAL_AI_CHARACTER_CONTRACT_REGISTRY.map((entry) =>
+    Object.freeze({
+      key: entry.key,
+      schema: entry.schema,
+      snakeCaseField: entry.snakeCaseField,
+      camelCaseField: entry.camelCaseField,
+      presenceFlag: entry.presenceFlag,
+    })
+  )
+);
+
+export const AI_CHARACTER_CONTRACT_FAMILY_COUNT =
+  AI_CHARACTER_CONTRACT_REGISTRY.length;
+
+export function extractAiCharacterContracts(payload) {
+  if (!isPlainObject(payload)) return {};
+  const contracts = {};
+  for (const entry of INTERNAL_AI_CHARACTER_CONTRACT_REGISTRY) {
+    const contract = entry.extract(payload);
+    if (contract !== null) contracts[entry.key] = contract;
+  }
+  return contracts;
 }
 
 export function assertSafeResponse(payload) {

@@ -1,21 +1,17 @@
 import {
+  AI_CHARACTER_CONTRACT_REGISTRY,
   HEALTH_SCHEMA,
   LIVE2D_RENDERER_CUE_SCHEMA,
   LIVE2D_RENDERER_DELIVERY_SCHEMA,
   SERVICE_SCHEMA,
   assertSafeResponse,
   clamp,
+  extractAiCharacterContracts,
   extractDurationMs,
-  extractAvatarFeedbackContract,
-  extractCharacterIdentityContract,
-  extractHumanOversightConsentContract,
   extractInputText,
   extractLanguage,
-  extractMultilingualPersonalizationContract,
   extractProsodyHints,
-  extractRealtimeInteractionContract,
   extractScriptDirection,
-  extractStructuredContextContract,
   extractTrace,
   hashPayload,
   normalizeAdapterKind,
@@ -122,9 +118,12 @@ export function createVoxWeaveService({
 
     async orchestrate(payload, { routeKind = "" } = {}) {
       validateInputPayload(payload, { routeKind });
-      const aiCharacterContracts = buildAiCharacterContractPresence(payload);
+      const extractedAiCharacterContracts = extractAiCharacterContracts(payload);
+      const aiCharacterContracts = buildAiCharacterContractPresence(
+        extractedAiCharacterContracts
+      );
       const aiCharacterContractSummary = buildAiCharacterContractSafeSummary(
-        payload,
+        extractedAiCharacterContracts,
         aiCharacterContracts
       );
 
@@ -640,17 +639,13 @@ function buildIrisResponseSummary({
   };
 }
 
-function buildAiCharacterContractPresence(payload) {
-  const presence = {
-    character_identity_contract_present: extractCharacterIdentityContract(payload) !== null,
-    realtime_interaction_contract_present: extractRealtimeInteractionContract(payload) !== null,
-    human_oversight_consent_contract_present:
-      extractHumanOversightConsentContract(payload) !== null,
-    structured_context_contract_present: extractStructuredContextContract(payload) !== null,
-    avatar_feedback_contract_present: extractAvatarFeedbackContract(payload) !== null,
-    multilingual_personalization_contract_present:
-      extractMultilingualPersonalizationContract(payload) !== null,
-  };
+function buildAiCharacterContractPresence(contractsByFamily) {
+  const presence = Object.fromEntries(
+    AI_CHARACTER_CONTRACT_REGISTRY.map((entry) => [
+      entry.presenceFlag,
+      contractsByFamily[entry.key] !== undefined,
+    ])
+  );
   const contractPresenceCount = Object.values(presence).filter(Boolean).length;
   return {
     schema: "voxweave_ai_character_contract_presence_v1",
@@ -664,21 +659,15 @@ function buildAiCharacterContractPresence(payload) {
   };
 }
 
-function buildAiCharacterContractSafeSummary(payload, presence) {
-  const characterIdentity = extractCharacterIdentityContract(payload);
-  const realtimeInteraction = extractRealtimeInteractionContract(payload);
-  const humanOversight = extractHumanOversightConsentContract(payload);
-  const structuredContext = extractStructuredContextContract(payload);
-  const avatarFeedback = extractAvatarFeedbackContract(payload);
-  const multilingualPersonalization = extractMultilingualPersonalizationContract(payload);
-  const contracts = [
-    characterIdentity,
-    realtimeInteraction,
-    humanOversight,
-    structuredContext,
-    avatarFeedback,
-    multilingualPersonalization,
-  ].filter((contract) => contract !== null);
+function buildAiCharacterContractSafeSummary(contractsByFamily, presence) {
+  const characterIdentity = contractsByFamily.character_identity ?? null;
+  const realtimeInteraction = contractsByFamily.realtime_interaction ?? null;
+  const humanOversight = contractsByFamily.human_oversight_consent ?? null;
+  const structuredContext = contractsByFamily.structured_context ?? null;
+  const avatarFeedback = contractsByFamily.avatar_feedback ?? null;
+  const multilingualPersonalization =
+    contractsByFamily.multilingual_personalization ?? null;
+  const contracts = Object.values(contractsByFamily);
 
   return {
     schema: "voxweave_ai_character_contract_safe_summary_v1",
