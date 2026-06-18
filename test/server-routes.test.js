@@ -959,6 +959,135 @@ test("external receipt binding CLI emits safe candidate-bound JSON only", async 
   }
 });
 
+test("acceptance provenance drift matrix rejects unsafe or stale bindings", async () => {
+  const candidate = await loadCandidateBundleForTest();
+  const descriptor = buildExternalAcceptanceCandidateDescriptor(candidate);
+  const exactReceipt = buildSyntheticBoundReceipt(candidate, descriptor);
+  const pendingReceipt = buildSyntheticBoundReceipt(candidate, descriptor, {
+    received_status: "pending",
+    parsed_status: "pending",
+    forbidden_material_absent_status: "pending",
+    expected_schema_observed_status: "pending",
+    raw_values_absent_status: "pending",
+    readiness_claim_absent_status: "pending",
+    acceptance_candidate_status: "pending",
+  });
+  const exact = validateExternalAcceptanceReceiptAgainstCandidate({
+    ...candidate,
+    receipt: exactReceipt,
+    receiptSourceKind: "synthetic_test_only",
+  });
+  const pending = validateExternalAcceptanceReceiptAgainstCandidate({
+    ...candidate,
+    receipt: pendingReceipt,
+    receiptSourceKind: "synthetic_test_only",
+  });
+  assert.equal(exact.status, "pass");
+  assert.equal(pending.status, "pass");
+  assert.equal(exact.external_team_acceptance_status, "not_claimed_by_validator");
+  assert.equal(pending.external_team_acceptance_status, "not_claimed_by_validator");
+  assert.equal(candidate.receipts.find((receipt) => receipt.recipient_project === "IRIS").recipient_role, "adapter_packet_owner");
+  assert.equal(candidate.receipts.find((receipt) => receipt.recipient_project === "LIVE2D").recipient_role, "renderer_boundary_owner");
+
+  const mismatchCases = [
+    ["version", { candidate_bundle_version: "1.0.0" }, "candidate_bundle_version_mismatch"],
+    ["source", { source_main_sha: "a".repeat(40) }, "candidate_source_head_mismatch"],
+    ["fingerprint", { candidate_bundle_fingerprint: "b".repeat(64) }, "candidate_bundle_fingerprint_mismatch"],
+    ["recipient_project", { recipient_project: "LIVE2D", recipient_role: "adapter_packet_owner" }, "candidate_recipient_role_mismatch"],
+    ["recipient_role", { recipient_role: "renderer_boundary_owner" }, "candidate_recipient_role_mismatch"],
+    ["readiness", { runtime_readiness_claimed: true }, "candidate_receipt_safety_invalid"],
+    ["real_proof", { real_integration_proof_status: "yes" }, "candidate_receipt_safety_invalid"],
+    ["accepted_pending_safety", { parsed_status: "pending" }, "candidate_receipt_safety_invalid"],
+  ];
+  for (const [, patch, reason] of mismatchCases) {
+    const result = validateExternalAcceptanceReceiptAgainstCandidate({
+      ...candidate,
+      receipt: { ...exactReceipt, ...patch },
+      receiptSourceKind: "synthetic_test_only",
+    });
+    assert.equal(result.status, "fail");
+    assert.equal(result.primary_reason_code, reason);
+    assertExternalAcceptanceReceiptBindingResultSafe(result);
+    assertNoDangerousCandidateMaterial(result);
+  }
+  assert.throws(() => validateExternalAcceptanceReceipt({ ...exactReceipt, raw_payload: "x" }));
+  assert.throws(() => validateExternalAcceptanceReceipt({ ...exactReceipt, recipient_role: "error_detail" }));
+  assert.equal(
+    validateExternalAcceptanceReceipt({ ...exactReceipt, candidate_bundle_version: "1.0.0" }).status,
+    "pass"
+  );
+  assert.equal(
+    validateExternalAcceptanceReceiptAgainstCandidate({
+      ...candidate,
+      receipt: { ...exactReceipt, candidate_bundle_version: "1.0.0" },
+      receiptSourceKind: "synthetic_test_only",
+    }).status,
+    "fail"
+  );
+
+  const baseFingerprint = descriptor.candidate_bundle_fingerprint;
+  const fingerprintMutations = [
+    { fixtureManifest: { ...candidate.fixtureManifest, fixture_version: "1.0.1" } },
+    { fixtures: mutateFixture(candidate.fixtures, "iris-tts-packet.safe.json", { trace_id: "drift-tts" }) },
+    { fixtures: mutateFixture(candidate.fixtures, "iris-subtitle-packet.safe.json", { trace_id: "drift-subtitle" }) },
+    { fixtures: mutateFixture(candidate.fixtures, "iris-live2d-packet.safe.json", { trace_id: "drift-live2d" }) },
+    { receipts: [{ ...candidate.receipts[0], recipient_role: "adapter_packet_owner_v2" }, candidate.receipts[1]] },
+    { readmeText: `${candidate.readmeText}\nSafe drift note.\n` },
+    { manifest: { ...candidate.manifest, candidate_bundle_version: "1.1.1" }, receipts: candidate.receipts.map((receipt) => ({ ...receipt, candidate_bundle_version: "1.1.1" })) },
+    { manifest: { ...candidate.manifest, source_main_sha: "c".repeat(40) } },
+  ];
+  for (const mutation of fingerprintMutations) {
+    const mutated = {
+      ...candidate,
+      ...mutation,
+    };
+    const mutatedDescriptor = buildExternalAcceptanceCandidateDescriptor(mutated);
+    assert.notEqual(baseFingerprint, mutatedDescriptor.candidate_bundle_fingerprint);
+    const staleReceipt = validateExternalAcceptanceReceiptAgainstCandidate({
+      ...mutated,
+      receipt: exactReceipt,
+      receiptSourceKind: "synthetic_test_only",
+    });
+    assert.equal(staleReceipt.status, "fail");
+  }
+  assert.equal(
+    baseFingerprint,
+    buildExternalAcceptanceCandidateDescriptor({
+      ...candidate,
+      receipts: [...candidate.receipts].reverse(),
+      fixtures: [...candidate.fixtures].reverse(),
+    }).candidate_bundle_fingerprint
+  );
+  for (const invalidCandidate of [
+    { manifest: { ...candidate.manifest, unknown_field: "blocked" } },
+    { receipts: [{ ...candidate.receipts[0], unknown_field: "blocked" }, candidate.receipts[1]] },
+    { manifest: { ...candidate.manifest, fixture_manifest_path: "../blocked" } },
+    { manifest: { ...candidate.manifest, fixture_manifest_path: "C:/blocked" } },
+    { manifest: { ...candidate.manifest, fixture_files: [candidate.manifest.fixture_files[0], candidate.manifest.fixture_files[0], candidate.manifest.fixture_files[1], candidate.manifest.fixture_files[2]] } },
+    { fixtures: candidate.fixtures.slice(1) },
+  ]) {
+    assert.throws(() => buildExternalAcceptanceCandidateDescriptor({ ...candidate, ...invalidCandidate }));
+  }
+
+  const malformedPath = join(tmpdir(), `voxweave-drift-malformed-${Date.now()}.json`);
+  const missingPath = join(tmpdir(), `voxweave-drift-missing-${Date.now()}.json`);
+  try {
+    await writeFile(malformedPath, "{", "utf8");
+    const malformed = await runBindingCli(malformedPath, "synthetic_test_only");
+    const missing = await runBindingCli(missingPath, "synthetic_test_only");
+    assert.equal(malformed.exitCode, 1);
+    assert.equal(malformed.output.primary_reason_code, "invalid_receipt_json");
+    assert.equal(missing.exitCode, 1);
+    assert.equal(missing.output.primary_reason_code, "invalid_receipt_file");
+    assert.equal(malformed.stdout.includes(malformedPath), false);
+    assert.equal(missing.stdout.includes(missingPath), false);
+    assertOneSafeJsonObject(malformed.stdout);
+    assertOneSafeJsonObject(missing.stdout);
+  } finally {
+    await unlink(malformedPath).catch(() => {});
+  }
+});
+
 test("external acceptance candidate dry-run matrix composes safe local evidence only", async () => {
   const manifest = await readExternalAcceptanceFixture(
     "voxweave-external-acceptance-candidate.manifest.safe.json"
