@@ -10,16 +10,20 @@ import {
   closeVoxWeaveServer,
   constantTimeCredentialMatch,
   credentialDigest,
+  createWriteAdmissionController,
   createVoxWeaveServer,
   DEFAULT_SERVER_LIFECYCLE_POLICY,
+  DEFAULT_WRITE_ADMISSION_POLICY,
   extractWriteCredential,
   buildSafeServerStartupSummary,
   normalizeServerLifecyclePolicy,
+  normalizeWriteAdmissionPolicy,
   parseCanonicalRequestTarget,
   SERVER_LIFECYCLE_POLICY_LIMITS,
   SERVER_SHUTDOWN_SUMMARY_SCHEMA,
   SERVER_STARTUP_SUMMARY_SCHEMA,
   startServer,
+  WRITE_ADMISSION_POLICY_LIMITS,
 } from "../src/server.js";
 
 const FAKE_API_KEY = "unit-test-key";
@@ -302,6 +306,158 @@ test("invalid lifecycle policy error does not expose values", () => {
       return true;
     }
   );
+});
+
+test("write admission policy exposes exact frozen defaults in bounds", () => {
+  const policy = normalizeWriteAdmissionPolicy();
+
+  assert.deepEqual(Object.keys(policy), Object.keys(DEFAULT_WRITE_ADMISSION_POLICY));
+  assert.equal(Object.isFrozen(policy), true);
+  assert.equal(policy.maxInFlightWrites, DEFAULT_WRITE_ADMISSION_POLICY.maxInFlightWrites);
+  assert.equal(policy.queueMode, "reject");
+  assert.equal(
+    policy.maxInFlightWrites >= WRITE_ADMISSION_POLICY_LIMITS.maxInFlightWrites.min,
+    true
+  );
+  assert.equal(
+    policy.maxInFlightWrites <= WRITE_ADMISSION_POLICY_LIMITS.maxInFlightWrites.max,
+    true
+  );
+});
+
+test("write admission policy accepts custom bounds and rejects unsafe values", () => {
+  assert.equal(normalizeWriteAdmissionPolicy({ maxInFlightWrites: 1 }).maxInFlightWrites, 1);
+  assert.equal(normalizeWriteAdmissionPolicy({ maxInFlightWrites: 256 }).maxInFlightWrites, 256);
+
+  for (const policy of [
+    { maxInFlightWrites: 0 },
+    { maxInFlightWrites: 257 },
+    { maxInFlightWrites: 1.5 },
+    { maxInFlightWrites: "1" },
+    { maxInFlightWrites: true },
+    { queueMode: "queue" },
+    { unknownField: 1 },
+    [],
+    null,
+  ]) {
+    assert.throws(() => normalizeWriteAdmissionPolicy(policy), writeAdmissionPolicyErrorMatcher);
+  }
+});
+
+test("write admission controller bounds capacity and releases idempotently", () => {
+  const controller = createWriteAdmissionController({ maxInFlightWrites: 2 });
+  const first = controller.tryAcquire();
+  const second = controller.tryAcquire();
+
+  assert.equal(typeof first.release, "function");
+  assert.equal(Object.isFrozen(first), true);
+  assert.equal(typeof second.release, "function");
+  assert.equal(controller.tryAcquire(), null);
+  assert.deepEqual(controller.snapshot(), {
+    max_in_flight_writes: 2,
+    active_write_count: 2,
+    available_write_capacity: 0,
+    saturated: true,
+    queue_mode: "reject",
+  });
+
+  first.release();
+  first.release();
+  assert.equal(controller.snapshot().active_write_count, 1);
+  second.release();
+  second.release();
+  assert.equal(controller.snapshot().active_write_count, 0);
+  assert.equal(controller.snapshot().available_write_capacity, 2);
+});
+
+test("write admission saturation returns safe 503 and keeps health available", async () => {
+  const deferred = createDeferred();
+  const service = createDeferredWriteService(deferred);
+  const controller = createWriteAdmissionController({ maxInFlightWrites: 1 });
+
+  await withRouteServer(async (baseUrl) => {
+    const first = postJson(`${baseUrl}/v1/orchestrate`, adapterPacket());
+    await deferred.started;
+
+    const second = await postJson(`${baseUrl}/v1/orchestrate`, adapterPacket("tts"));
+    assertSafeError(second, 503, "server_busy");
+    assert.equal(second.headers.retryAfter, "1");
+    assert.equal(second.headers.connection, "close");
+    assert.equal(JSON.stringify(second.body).includes("max_in_flight"), false);
+    assert.equal(JSON.stringify(second.body).includes("active_write"), false);
+    assert.equal(JSON.stringify(second.body).includes(FAKE_API_KEY), false);
+    assert.equal(JSON.stringify(second.body).includes("/v1/orchestrate"), false);
+    assert.equal(service.orchestrateCallCount(), 1);
+
+    const health = await fetchJson(`${baseUrl}/health`);
+    assert.equal(health.status, 200);
+    assert.equal(health.body.status, "ok");
+    assert.equal(JSON.stringify(health.body).includes("active_write"), false);
+
+    deferred.resolve();
+    const firstResponse = await first;
+    assert.equal(firstResponse.status, 200);
+    assert.equal(controller.snapshot().active_write_count, 0);
+
+    const third = await postJson(`${baseUrl}/v1/orchestrate`, adapterPacket("tts"));
+    assert.equal(third.status, 200);
+  }, { apiKey: "", service, writeAdmissionController: controller });
+});
+
+test("write admission lease releases on service failure and invalid JSON", async () => {
+  const controller = createWriteAdmissionController({ maxInFlightWrites: 1 });
+  const failingService = {
+    health: () => createVoxWeaveService().health(),
+    async orchestrate() {
+      throw new Error("unit service failure");
+    },
+  };
+
+  await withRouteServer(async (baseUrl) => {
+    const failed = await postJson(`${baseUrl}/v1/orchestrate`, adapterPacket());
+    assertSafeError(failed, 500, "internal_error");
+    assert.equal(controller.snapshot().active_write_count, 0);
+
+    const invalid = await fetchJson(`${baseUrl}/v1/orchestrate`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{",
+    });
+    assertSafeError(invalid, 400, "invalid_json");
+    assert.equal(controller.snapshot().active_write_count, 0);
+  }, { service: failingService, writeAdmissionController: controller });
+});
+
+test("write admission is not consumed before eligible write body handling", async () => {
+  const controller = createWriteAdmissionController({ maxInFlightWrites: 1 });
+
+  await withRouteServer(async (baseUrl) => {
+    assertSafeError(await postJson(`${baseUrl}/v1/orchestrate`, adapterPacket()), 401, "auth_required");
+    assert.equal(controller.snapshot().active_write_count, 0);
+
+    const unknown = await postJson(`${baseUrl}/unknown`, adapterPacket(), { "x-api-key": FAKE_API_KEY });
+    assertSafeError(unknown, 404, "not_found");
+    assert.equal(controller.snapshot().active_write_count, 0);
+
+    const wrongContentType = await fetchJson(`${baseUrl}/v1/orchestrate`, {
+      method: "POST",
+      headers: { "content-type": "text/plain", "x-api-key": FAKE_API_KEY },
+      body: "{}",
+    });
+    assertSafeError(wrongContentType, 415, "unsupported_media_type");
+    assert.equal(controller.snapshot().active_write_count, 0);
+
+    const oversized = await fetchJson(`${baseUrl}/v1/orchestrate`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": FAKE_API_KEY,
+      },
+      body: OVERSIZED_BODY,
+    });
+    assertSafeError(oversized, 413, "request_body_too_large");
+    assert.equal(controller.snapshot().active_write_count, 0);
+  }, { apiKey: FAKE_API_KEY, writeAdmissionController: controller });
 });
 
 test("safe startup summary excludes transport values", () => {
@@ -801,7 +957,29 @@ async function assertUnsafePayload(extraPayload) {
   });
 }
 
-async function withRouteServer(callback, { apiKey = "" } = {}) {
+async function withRouteServer(
+  callback,
+  {
+    apiKey = "",
+    service = createVoxWeaveService({
+      now: () => 1_777_000_000_000,
+      live2dForwarder: {
+        configured: false,
+        scope: "not_configured",
+        async forward() {
+          return {
+            renderer_forward_configured: false,
+            renderer_forward_scope: "not_configured",
+            renderer_forward_attempted: false,
+            renderer_forward_ok: false,
+            renderer_forward_status: "dry_run",
+          };
+        },
+      },
+    }),
+    writeAdmissionController,
+  } = {}
+) {
   const previousApiKey = process.env.VOXWEAVE_API_KEY;
   if (apiKey) {
     process.env.VOXWEAVE_API_KEY = apiKey;
@@ -809,23 +987,7 @@ async function withRouteServer(callback, { apiKey = "" } = {}) {
     delete process.env.VOXWEAVE_API_KEY;
   }
 
-  const service = createVoxWeaveService({
-    now: () => 1_777_000_000_000,
-    live2dForwarder: {
-      configured: false,
-      scope: "not_configured",
-      async forward() {
-        return {
-          renderer_forward_configured: false,
-          renderer_forward_scope: "not_configured",
-          renderer_forward_attempted: false,
-          renderer_forward_ok: false,
-          renderer_forward_status: "dry_run",
-        };
-      },
-    },
-  });
-  const server = createVoxWeaveServer({ service });
+  const server = createVoxWeaveServer({ service, writeAdmissionController });
   try {
     await new Promise((resolve, reject) => {
       server.once("error", reject);
@@ -868,8 +1030,10 @@ async function fetchJson(url, options = {}) {
     status: response.status,
     headers: {
       cacheControl: response.headers.get("cache-control"),
+      connection: response.headers.get("connection"),
       contentType: response.headers.get("content-type"),
       nosniff: response.headers.get("x-content-type-options"),
+      retryAfter: response.headers.get("retry-after"),
     },
     body: await response.json(),
   };
@@ -915,11 +1079,51 @@ function lifecyclePolicyErrorMatcher(error) {
   return true;
 }
 
+function writeAdmissionPolicyErrorMatcher(error) {
+  assert.equal(error.code, "invalid_write_admission_policy");
+  assert.equal(error.statusCode, 500);
+  assert.equal(String(error.message).includes(FAKE_API_KEY), false);
+  assert.equal(String(error.message).includes("256"), false);
+  return true;
+}
+
 function safeAuthErrorMatcher(error) {
   assert.equal(error.code, "auth_required");
   assert.equal(error.statusCode, 401);
   assert.equal(String(error.message).includes(FAKE_API_KEY), false);
   return true;
+}
+
+function createDeferred() {
+  let resolve;
+  const wait = new Promise((done) => {
+    resolve = done;
+  });
+  let startedResolve;
+  const started = new Promise((done) => {
+    startedResolve = done;
+  });
+  return {
+    resolve,
+    wait,
+    started,
+    startedResolve,
+  };
+}
+
+function createDeferredWriteService(deferred) {
+  const realService = createVoxWeaveService();
+  let calls = 0;
+  return {
+    health: () => realService.health(),
+    orchestrateCallCount: () => calls,
+    async orchestrate(payload, context) {
+      calls += 1;
+      deferred.startedResolve();
+      await deferred.wait;
+      return realService.orchestrate(payload, context);
+    },
+  };
 }
 
 function safeRequestTargetErrorMatcher(error) {
