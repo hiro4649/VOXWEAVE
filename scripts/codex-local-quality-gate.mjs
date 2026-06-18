@@ -6853,6 +6853,7 @@ function normalizeLocalPrePrRemoteEvidenceStatuses(report, env = process.env) {
     'remoteNpmDiagnosticNormalizationStatus',
   ];
 
+  const normalizedKeys = new Set();
   for (const key of remoteEvidenceKeys) {
     const value = report[key];
     if (!value || !['fail', 'manual_confirmation_required'].includes(value.status)) continue;
@@ -6871,6 +6872,14 @@ function normalizeLocalPrePrRemoteEvidenceStatuses(report, env = process.env) {
       reasonCodes: [...reasonCodes, 'local_pre_pr_remote_evidence_not_required'],
       safeSummaryOnly: true,
     };
+    normalizedKeys.add(key);
+  }
+
+  if (Array.isArray(report.failures) && normalizedKeys.size) {
+    report.failures = report.failures.filter((failure) => {
+      const id = String(failure?.id || '');
+      return ![...normalizedKeys].some((key) => id === `${key}.failed` || id.startsWith(`${key}.`));
+    });
   }
 
   return report;
