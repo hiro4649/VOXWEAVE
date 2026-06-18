@@ -1,0 +1,32 @@
+{
+  "schema": "voxweave_external_acceptance_candidate_manifest_v1",
+  "candidate_bundle_version": "1.0.0",
+  "source_project": "VOXWEAVE",
+  "source_harness": "v1.2.6",
+  "source_main_sha": "f173aaf1df26cb6cfe35563501fc11c0b6ac9162",
+  "fixture_manifest_path": "test/fixtures/interop/voxweave-interop-manifest.safe.json",
+  "evidence_runner_script": "scripts/voxweave-loopback-integration-evidence.mjs",
+  "failure_matrix_command": "node scripts/voxweave-loopback-integration-evidence.mjs --matrix",
+  "candidate_status": "candidate_prepared_not_sent",
+  "external_team_acceptance_status": "not_started",
+  "real_integration_proof_status": "no",
+  "runtime_readiness_claimed": false,
+  "production_readiness_claimed": false,
+  "safe_summary_only": true,
+  "forbidden_material_policy": [
+    "no_secret",
+    "no_token",
+    "no_endpoint",
+    "no_url",
+    "no_private_path",
+    "no_raw_log",
+    "no_raw_audio",
+    "no_raw_transcript",
+    "no_raw_renderer_payload",
+    "no_raw_contract"
+  ],
+  "receipt_templates": [
+    "test/fixtures/external-acceptance/iris-team-receipt-template.safe.json",
+    "test/fixtures/external-acceptance/live2d-team-receipt-template.safe.json"
+  ]
+}

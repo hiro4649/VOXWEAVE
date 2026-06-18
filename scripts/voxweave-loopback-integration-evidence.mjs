@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { promisify } from "node:util";
 import { createVoxWeaveService } from "../src/orchestrator.js";
@@ -15,6 +16,8 @@ export const LOOPBACK_INTEGRATION_EVIDENCE_SCHEMA =
   "voxweave_loopback_integration_evidence_v1";
 export const LOOPBACK_INTEGRATION_FAILURE_MATRIX_SCHEMA =
   "voxweave_loopback_integration_failure_matrix_v1";
+export const EXTERNAL_ACCEPTANCE_CANDIDATE_BUNDLE_SUMMARY_SCHEMA =
+  "voxweave_external_acceptance_candidate_bundle_summary_v1";
 
 const execFileAsync = promisify(execFile);
 const LOOPBACK_HOST = "127.0.0.1";
@@ -84,6 +87,22 @@ const ALLOWED_MATRIX_KEYS = Object.freeze([
   "runtime_readiness_claimed",
   "production_readiness_claimed",
   "safe_summary_only",
+]);
+const ALLOWED_CANDIDATE_BUNDLE_KEYS = Object.freeze([
+  "schema",
+  "status",
+  "candidate_bundle_version",
+  "manifest_status",
+  "receipt_template_count",
+  "forbidden_material_scan_status",
+  "fixture_reference_status",
+  "external_team_acceptance_status",
+  "real_integration_proof_status",
+  "runtime_readiness_claimed",
+  "production_readiness_claimed",
+  "safe_summary_only",
+  "candidate_bundle_fingerprint_algorithm",
+  "candidate_bundle_fingerprint",
 ]);
 const FORBIDDEN_OUTPUT_KEYS = new Set([
   "endpoint",
@@ -295,6 +314,65 @@ export function validateLoopbackIntegrationEvidence(evidence) {
     throw new Error("invalid_evidence_fingerprint");
   }
   return evidence;
+}
+
+export async function runExternalAcceptanceCandidateBundleSummary({
+  manifest = null,
+  receipts = null,
+  readmeText = null,
+} = {}) {
+  const bundle = manifest && receipts && readmeText !== null
+    ? { manifest, receipts, readmeText }
+    : await readCandidateBundleFiles();
+  validateCandidateBundle(bundle);
+  const summary = {
+    schema: EXTERNAL_ACCEPTANCE_CANDIDATE_BUNDLE_SUMMARY_SCHEMA,
+    status: "pass",
+    candidate_bundle_version: bundle.manifest.candidate_bundle_version,
+    manifest_status: "pass",
+    receipt_template_count: bundle.receipts.length,
+    forbidden_material_scan_status: "pass",
+    fixture_reference_status: "pass",
+    external_team_acceptance_status: "not_started",
+    real_integration_proof_status: "no",
+    runtime_readiness_claimed: false,
+    production_readiness_claimed: false,
+    safe_summary_only: true,
+    candidate_bundle_fingerprint_algorithm: "sha256",
+    candidate_bundle_fingerprint: buildCandidateBundleFingerprint(bundle),
+  };
+  assertExternalAcceptanceCandidateBundleSummarySafe(summary);
+  return summary;
+}
+
+export function buildExternalAcceptanceCandidateBundleFingerprint({
+  manifest,
+  receipts,
+  readmeText,
+}) {
+  return buildCandidateBundleFingerprint({ manifest, receipts, readmeText });
+}
+
+export function assertExternalAcceptanceCandidateBundleSummarySafe(summary) {
+  const keys = Object.keys(summary).sort();
+  const allowed = [...ALLOWED_CANDIDATE_BUNDLE_KEYS].sort();
+  if (JSON.stringify(keys) !== JSON.stringify(allowed)) {
+    throw new Error("unsafe_candidate_bundle_key_set");
+  }
+  scanEvidenceSafe(summary);
+  if (summary.schema !== EXTERNAL_ACCEPTANCE_CANDIDATE_BUNDLE_SUMMARY_SCHEMA) {
+    throw new Error("unsafe_candidate_bundle_schema");
+  }
+  if (
+    summary.external_team_acceptance_status !== "not_started" ||
+    summary.real_integration_proof_status !== "no" ||
+    summary.runtime_readiness_claimed !== false ||
+    summary.production_readiness_claimed !== false ||
+    summary.safe_summary_only !== true
+  ) {
+    throw new Error("unsafe_candidate_bundle_readiness");
+  }
+  return summary;
 }
 
 export function canonicalizeLoopbackEvidence(evidence) {
@@ -714,6 +792,126 @@ function fingerprintEvidence(evidence) {
   return buildLoopbackEvidenceFingerprint(evidence);
 }
 
+async function readCandidateBundleFiles() {
+  const base = new URL("../test/fixtures/external-acceptance/", import.meta.url);
+  const [manifestText, irisText, live2dText, readmeText] = await Promise.all([
+    readFile(new URL("voxweave-external-acceptance-candidate.manifest.safe.json", base), "utf8"),
+    readFile(new URL("iris-team-receipt-template.safe.json", base), "utf8"),
+    readFile(new URL("live2d-team-receipt-template.safe.json", base), "utf8"),
+    readFile(new URL("README.safe.md", base), "utf8"),
+  ]);
+  return {
+    manifest: JSON.parse(manifestText),
+    receipts: [JSON.parse(irisText), JSON.parse(live2dText)],
+    readmeText,
+  };
+}
+
+function validateCandidateBundle({ manifest, receipts, readmeText }) {
+  if (manifest?.schema !== "voxweave_external_acceptance_candidate_manifest_v1") {
+    throw new Error("invalid_candidate_manifest_schema");
+  }
+  if (manifest.candidate_status !== "candidate_prepared_not_sent") {
+    throw new Error("invalid_candidate_status");
+  }
+  if (
+    manifest.external_team_acceptance_status !== "not_started" ||
+    manifest.real_integration_proof_status !== "no" ||
+    manifest.runtime_readiness_claimed !== false ||
+    manifest.production_readiness_claimed !== false ||
+    manifest.safe_summary_only !== true
+  ) {
+    throw new Error("unsafe_candidate_manifest_readiness");
+  }
+  if (!Array.isArray(receipts) || receipts.length !== 2) {
+    throw new Error("invalid_receipt_template_count");
+  }
+  const recipients = receipts.map((receipt) => receipt.recipient_project).sort();
+  if (JSON.stringify(recipients) !== JSON.stringify(["IRIS", "LIVE2D"])) {
+    throw new Error("invalid_receipt_recipients");
+  }
+  for (const receipt of receipts) {
+    validateReceiptTemplate(receipt);
+  }
+  if (typeof readmeText !== "string" || readmeText.trim() === "") {
+    throw new Error("invalid_candidate_readme");
+  }
+  scanCandidateBundleSafe({ manifest, receipts, readmeText });
+}
+
+function validateReceiptTemplate(receipt) {
+  if (receipt?.schema !== "voxweave_external_acceptance_receipt_template_v1") {
+    throw new Error("invalid_receipt_template_schema");
+  }
+  if (!["IRIS", "LIVE2D"].includes(receipt.recipient_project)) {
+    throw new Error("invalid_receipt_template_recipient");
+  }
+  for (const key of [
+    "received_status",
+    "parsed_status",
+    "forbidden_material_absent_status",
+    "expected_schema_observed_status",
+    "raw_values_absent_status",
+    "readiness_claim_absent_status",
+    "acceptance_candidate_status",
+  ]) {
+    if (receipt[key] !== "pending") throw new Error("invalid_receipt_template_pending_status");
+  }
+  if (
+    receipt.real_integration_proof_status !== "no" ||
+    receipt.runtime_readiness_claimed !== false ||
+    receipt.production_readiness_claimed !== false ||
+    receipt.safe_summary_only !== true
+  ) {
+    throw new Error("unsafe_receipt_template_readiness");
+  }
+}
+
+function buildCandidateBundleFingerprint({ manifest, receipts, readmeText }) {
+  const canonical = {
+    manifest: sortObject(manifest),
+    receipts: receipts.map(sortObject).sort((a, b) =>
+      String(a.recipient_project).localeCompare(String(b.recipient_project))
+    ),
+    readmeText: String(readmeText).replace(/\s+/gu, " ").trim(),
+  };
+  scanCandidateBundleSafe(canonical);
+  return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
+}
+
+function sortObject(value) {
+  if (Array.isArray(value)) return value.map(sortObject);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, child]) => [key, sortObject(child)])
+  );
+}
+
+function scanCandidateBundleSafe(value) {
+  const stack = [value];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (typeof current === "string") {
+      if (/\bhttps?:\/\//iu.test(current)) throw new Error("unsafe_candidate_bundle_url");
+      if (/[A-Za-z]:[\\/]/u.test(current)) {
+        throw new Error("unsafe_candidate_bundle_private_path");
+      }
+      if (/\bBearer\b|fake-(?:server|renderer)-key|sk-[A-Za-z0-9]/iu.test(current)) {
+        throw new Error("unsafe_candidate_bundle_secret_like_material");
+      }
+      continue;
+    }
+    if (!current || typeof current !== "object") continue;
+    if (Array.isArray(current)) {
+      for (const child of current) stack.push(child);
+      continue;
+    }
+    for (const child of Object.values(current)) stack.push(child);
+  }
+}
+
 function safeHeadSha(value) {
   const text = String(value ?? "").trim().toLowerCase();
   return /^[a-f0-9]{40}$/u.test(text) ? text : "unknown";
@@ -774,9 +972,11 @@ async function resolveCliHeadSha() {
 
 async function main() {
   const headSha = await resolveCliHeadSha();
-  const output = process.argv.includes("--matrix")
-    ? await runLoopbackIntegrationFailureMatrix({ headSha })
-    : await runLoopbackIntegrationEvidence({ headSha });
+  const output = process.argv.includes("--candidate-bundle")
+    ? await runExternalAcceptanceCandidateBundleSummary()
+    : process.argv.includes("--matrix")
+      ? await runLoopbackIntegrationFailureMatrix({ headSha })
+      : await runLoopbackIntegrationEvidence({ headSha });
   console.log(JSON.stringify(output));
   process.exitCode = output.status === "pass" ? 0 : 1;
 }

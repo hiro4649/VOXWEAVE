@@ -1,0 +1,19 @@
+{
+  "schema": "voxweave_external_acceptance_receipt_template_v1",
+  "recipient_project": "LIVE2D",
+  "recipient_role": "renderer_boundary_owner",
+  "candidate_bundle_version": "1.0.0",
+  "source_main_sha_placeholder": "owner_supplied_source_head_sha",
+  "candidate_bundle_fingerprint_placeholder": "owner_supplied_candidate_bundle_fingerprint",
+  "received_status": "pending",
+  "parsed_status": "pending",
+  "forbidden_material_absent_status": "pending",
+  "expected_schema_observed_status": "pending",
+  "raw_values_absent_status": "pending",
+  "readiness_claim_absent_status": "pending",
+  "acceptance_candidate_status": "pending",
+  "real_integration_proof_status": "no",
+  "runtime_readiness_claimed": false,
+  "production_readiness_claimed": false,
+  "safe_summary_only": true
+}

@@ -10,10 +10,14 @@ import { createVoxWeaveServer } from "../src/server.js";
 import {
   LOOPBACK_INTEGRATION_FAILURE_MATRIX_SCHEMA,
   LOOPBACK_INTEGRATION_EVIDENCE_SCHEMA,
+  EXTERNAL_ACCEPTANCE_CANDIDATE_BUNDLE_SUMMARY_SCHEMA,
   assertLoopbackFailureMatrixSafe,
   assertLoopbackEvidenceSafe,
+  assertExternalAcceptanceCandidateBundleSummarySafe,
+  buildExternalAcceptanceCandidateBundleFingerprint,
   buildLoopbackEvidenceFingerprint,
   canonicalizeLoopbackEvidence,
+  runExternalAcceptanceCandidateBundleSummary,
   runLoopbackIntegrationFailureMatrix,
   runLoopbackIntegrationEvidence,
   validateLoopbackIntegrationEvidence,
@@ -361,6 +365,78 @@ test("safe interop fixtures are static JSON and accepted by routes", async () =>
   });
 });
 
+test("external acceptance candidate bundle is safe and not accepted", async () => {
+  const manifest = await readExternalAcceptanceFixture(
+    "voxweave-external-acceptance-candidate.manifest.safe.json"
+  );
+  const irisReceipt = await readExternalAcceptanceFixture("iris-team-receipt-template.safe.json");
+  const live2dReceipt = await readExternalAcceptanceFixture(
+    "live2d-team-receipt-template.safe.json"
+  );
+  const readmeText = await readExternalAcceptanceText("README.safe.md");
+  const receipts = [irisReceipt, live2dReceipt];
+
+  assert.equal(manifest.schema, "voxweave_external_acceptance_candidate_manifest_v1");
+  assert.equal(manifest.candidate_status, "candidate_prepared_not_sent");
+  assert.equal(manifest.external_team_acceptance_status, "not_started");
+  assert.equal(manifest.real_integration_proof_status, "no");
+  assert.equal(manifest.runtime_readiness_claimed, false);
+  assert.equal(manifest.production_readiness_claimed, false);
+  assert.equal(manifest.safe_summary_only, true);
+  assert.equal(new Set(receipts.map((receipt) => receipt.recipient_project)).size, 2);
+  assert.deepEqual(
+    receipts.map((receipt) => receipt.recipient_project).sort(),
+    ["IRIS", "LIVE2D"]
+  );
+  for (const receipt of receipts) {
+    assert.equal(receipt.schema, "voxweave_external_acceptance_receipt_template_v1");
+    assert.equal(receipt.received_status, "pending");
+    assert.equal(receipt.parsed_status, "pending");
+    assert.equal(receipt.acceptance_candidate_status, "pending");
+    assert.equal(receipt.real_integration_proof_status, "no");
+    assert.equal(receipt.runtime_readiness_claimed, false);
+    assert.equal(receipt.production_readiness_claimed, false);
+    assert.equal(receipt.safe_summary_only, true);
+  }
+  assert.equal(/\bhttps?:\/\//iu.test(readmeText), false);
+  assert.equal(readmeText.includes("not acceptance"), true);
+  assert.equal(readmeText.includes("not runtime readiness"), true);
+  assertNoDangerousCandidateMaterial({ manifest, receipts, readmeText });
+
+  const summary = await runExternalAcceptanceCandidateBundleSummary({
+    manifest,
+    receipts,
+    readmeText,
+  });
+  assertExternalAcceptanceCandidateBundleSummarySafe(summary);
+  assert.equal(summary.schema, EXTERNAL_ACCEPTANCE_CANDIDATE_BUNDLE_SUMMARY_SCHEMA);
+  assert.equal(summary.status, "pass");
+  assert.equal(summary.candidate_bundle_version, "1.0.0");
+  assert.equal(summary.manifest_status, "pass");
+  assert.equal(summary.receipt_template_count, 2);
+  assert.equal(summary.forbidden_material_scan_status, "pass");
+  assert.equal(summary.fixture_reference_status, "pass");
+  assert.equal(summary.external_team_acceptance_status, "not_started");
+  assert.equal(summary.real_integration_proof_status, "no");
+  assert.equal(summary.runtime_readiness_claimed, false);
+  assert.equal(summary.production_readiness_claimed, false);
+  assert.equal(summary.safe_summary_only, true);
+  assert.match(summary.candidate_bundle_fingerprint, /^[a-f0-9]{64}$/u);
+  assert.equal(
+    summary.candidate_bundle_fingerprint,
+    buildExternalAcceptanceCandidateBundleFingerprint({ manifest, receipts, readmeText })
+  );
+  const changedVersionSummary = await runExternalAcceptanceCandidateBundleSummary({
+    manifest: { ...manifest, candidate_bundle_version: "1.0.1" },
+    receipts,
+    readmeText,
+  });
+  assert.notEqual(
+    summary.candidate_bundle_fingerprint,
+    changedVersionSummary.candidate_bundle_fingerprint
+  );
+});
+
 async function withRouteServer(callback) {
   const service = createVoxWeaveService({
     now: () => 1_777_000_000_000,
@@ -517,6 +593,15 @@ async function readFixture(name) {
   return JSON.parse(text);
 }
 
+async function readExternalAcceptanceFixture(name) {
+  const text = await readExternalAcceptanceText(name);
+  return JSON.parse(text);
+}
+
+async function readExternalAcceptanceText(name) {
+  return readFile(new URL(`./fixtures/external-acceptance/${name}`, import.meta.url), "utf8");
+}
+
 function assertNoForbiddenFixtureMaterial(value) {
   const stack = [value];
   while (stack.length > 0) {
@@ -560,3 +645,22 @@ const FORBIDDEN_FIXTURE_KEYS = new Set([
   "runtime_readiness",
   "production_readiness",
 ]);
+
+function assertNoDangerousCandidateMaterial(value) {
+  const stack = [value];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (typeof current === "string") {
+      assert.equal(/\bhttps?:\/\//iu.test(current), false);
+      assert.equal(/[A-Za-z]:[\\/]/u.test(current), false);
+      assert.equal(/\bBearer\b|fake-(?:server|renderer)-key|sk-[A-Za-z0-9]/iu.test(current), false);
+      continue;
+    }
+    if (!current || typeof current !== "object") continue;
+    if (Array.isArray(current)) {
+      for (const item of current) stack.push(item);
+      continue;
+    }
+    for (const child of Object.values(current)) stack.push(child);
+  }
+}
