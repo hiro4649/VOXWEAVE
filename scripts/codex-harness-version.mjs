@@ -8,8 +8,14 @@ export const activeSelfTestSuite = 'v126';
 export const legacyAdvisorySuites = ['v125', 'v124', 'v123', 'v122', 'v121', 'v120', 'v119', 'v118', 'v117', 'v116', 'v115', 'v114', 'v113'];
 export const knownVersions = ['1.0.3', '1.0.4', '1.0.5', '1.0.6', '1.0.7', '1.0.8', '1.0.9', '1.1.0', '1.1.1', '1.1.2', '1.1.3', '1.1.4', '1.1.5', '1.1.6', '1.1.7', '1.1.8', '1.1.9', '1.2.0', '1.2.1', '1.2.2', '1.2.3', '1.2.4', '1.2.5', '1.2.6'];
 export const versionLineagePolicy = {
+  sourceReleaseBoundary: 'source_body_only',
+  sourceReleaseAuthorizesTargetRollout: false,
   sourceOnlyRelease: true,
   targetRollout: 'not_started',
+  targetRepoRolloutStatus: 'completed',
+  targetRepoActiveHarness: '1.2.6',
+  targetRepoManifestAuthoritative: true,
+  targetRepoRolloutPr: 352,
   representativeLivePrValidation: 'not_started',
   representativeRealPrReplay: 'required',
   decisionLedger: 'required',

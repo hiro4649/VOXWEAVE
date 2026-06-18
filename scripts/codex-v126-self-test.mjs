@@ -3,6 +3,7 @@
 
 import fs from 'node:fs';
 import { writeJsonReport, exitFor } from './codex-v080-lib.mjs';
+import { buildHarnessVersionRegistry } from './codex-harness-version.mjs';
 import {
   V126_OPERATOR_STATUS_KEYS,
   V126_P0_ARTIFACTS,
@@ -69,6 +70,23 @@ const compatibilityCases = [
   ['v125_compatibility_self_test_accepts_v126', () => readText('scripts/codex-v125-self-test.mjs').includes("['v125', 'v126'].includes")],
   ['v124_compatibility_self_test_accepts_v126', () => readText('scripts/codex-v124-self-test.mjs').includes("['v124', 'v125', 'v126'].includes")],
   ['v122_context_routing_accepts_v126', () => readText('scripts/codex-v122-self-test.mjs').includes("'1.2.6'")],
+  ['source_release_boundary_remains_source_only', () => buildHarnessVersionRegistry().versionLineagePolicy.sourceReleaseBoundary === 'source_body_only' && buildHarnessVersionRegistry().versionLineagePolicy.sourceOnlyRelease === true],
+  ['source_release_does_not_authorize_target_rollout', () => buildHarnessVersionRegistry().versionLineagePolicy.sourceReleaseAuthorizesTargetRollout === false],
+  ['target_repo_rollout_is_completed', () => {
+    const registry = buildHarnessVersionRegistry();
+    const manifest = readJson('docs/process/CODEX_HARNESS_MANIFEST.json');
+    return registry.versionLineagePolicy.targetRepoRolloutStatus === 'completed'
+      && manifest.targetRollout === 'completed';
+  }],
+  ['target_repo_active_harness_is_v126', () => buildHarnessVersionRegistry().versionLineagePolicy.targetRepoActiveHarness === '1.2.6'],
+  ['target_manifest_is_authoritative_for_target_state', () => buildHarnessVersionRegistry().versionLineagePolicy.targetRepoManifestAuthoritative === true],
+  ['source_and_target_statuses_are_not_conflated', () => {
+    const policy = buildHarnessVersionRegistry().versionLineagePolicy;
+    return policy.sourceOnlyRelease === true
+      && policy.targetRollout === 'not_started'
+      && policy.targetRepoRolloutStatus === 'completed'
+      && policy.sourceReleaseAuthorizesTargetRollout === false;
+  }],
 ];
 
 const observedStateCases = [
