@@ -28,6 +28,15 @@ import {
   startServer,
   WRITE_ADMISSION_POLICY_LIMITS,
 } from "../src/server.js";
+import {
+  DEFAULT_OPERATION_POLICY,
+  OPERATION_POLICY_LIMITS,
+  classifyOperationAbortKind,
+  createOperationContext,
+  normalizeOperationPolicy,
+  runWithOperationContext,
+  throwIfOperationAborted,
+} from "../src/operationContext.js";
 
 const FAKE_API_KEY = "unit-test-key";
 const OVERSIZED_BODY = "x".repeat(513_000);
@@ -373,6 +382,113 @@ test("write admission controller bounds capacity and releases idempotently", () 
   assert.equal(controller.snapshot().available_write_capacity, 2);
 });
 
+test("operation policy exposes exact frozen defaults in bounds", () => {
+  const policy = normalizeOperationPolicy();
+
+  assert.deepEqual(Object.keys(policy), Object.keys(DEFAULT_OPERATION_POLICY));
+  assert.equal(Object.isFrozen(policy), true);
+  assert.equal(policy.operationTimeoutMs, DEFAULT_OPERATION_POLICY.operationTimeoutMs);
+  assert.equal(policy.cancelOnClientDisconnect, true);
+  assert.equal(
+    policy.operationTimeoutMs >= OPERATION_POLICY_LIMITS.operationTimeoutMs.min,
+    true
+  );
+  assert.equal(
+    policy.operationTimeoutMs <= OPERATION_POLICY_LIMITS.operationTimeoutMs.max,
+    true
+  );
+});
+
+test("operation policy accepts safe explicit values and rejects unsafe values", () => {
+  assert.equal(normalizeOperationPolicy({ operationTimeoutMs: 50 }).operationTimeoutMs, 50);
+  assert.equal(normalizeOperationPolicy({ operationTimeoutMs: 60_000 }).operationTimeoutMs, 60_000);
+  assert.equal(normalizeOperationPolicy({ cancelOnClientDisconnect: false }).cancelOnClientDisconnect, false);
+
+  for (const policy of [
+    { operationTimeoutMs: 49 },
+    { operationTimeoutMs: 60_001 },
+    { operationTimeoutMs: 50.5 },
+    { operationTimeoutMs: "50" },
+    { operationTimeoutMs: true },
+    { cancelOnClientDisconnect: "true" },
+    { cancelOnClientDisconnect: 1 },
+    { unknownField: 1 },
+    [],
+    null,
+  ]) {
+    assert.throws(() => normalizeOperationPolicy(policy), operationPolicyErrorMatcher);
+  }
+});
+
+test("operation context timeout aborts with safe error and cleanup clears timer", async () => {
+  let timeoutCallback;
+  let cleared = false;
+  const context = createOperationContext({
+    policy: { operationTimeoutMs: 50 },
+    setTimeoutImpl(callback) {
+      timeoutCallback = callback;
+      return "timer-id";
+    },
+    clearTimeoutImpl(id) {
+      if (id === "timer-id") cleared = true;
+    },
+  });
+
+  assert.equal(Object.isFrozen(context), true);
+  assert.equal(context.getAbortKind(), "none");
+  timeoutCallback();
+  assert.equal(context.signal.aborted, true);
+  assert.equal(context.getAbortKind(), "operation_timeout");
+  assert.throws(() => throwIfOperationAborted(context.signal), (error) => {
+    assert.equal(error.code, "operation_timeout");
+    assert.equal(error.statusCode, 504);
+    assert.equal(String(error.message).includes("50"), false);
+    return true;
+  });
+  context.cleanup();
+  context.cleanup();
+  assert.equal(cleared, true);
+});
+
+test("operation context parent abort uses safe cancellation reason", () => {
+  const parent = new AbortController();
+  const context = createOperationContext({ parentSignal: parent.signal });
+
+  parent.abort("raw parent reason should not leak");
+  assert.equal(context.signal.aborted, true);
+  assert.equal(context.getAbortKind(), "parent_cancelled");
+  assert.equal(classifyOperationAbortKind(context.signal), "parent_cancelled");
+  assert.throws(() => throwIfOperationAborted(context.signal), (error) => {
+    assert.equal(error.code, "operation_cancelled");
+    assert.equal(error.statusCode, 408);
+    assert.equal(String(error.message).includes("raw parent"), false);
+    return true;
+  });
+  context.cleanup();
+});
+
+test("runWithOperationContext races operation timeout without raw reason", async () => {
+  let timeoutCallback;
+  const context = createOperationContext({
+    policy: { operationTimeoutMs: 50 },
+    setTimeoutImpl(callback) {
+      timeoutCallback = callback;
+      return "timer-id";
+    },
+    clearTimeoutImpl() {},
+  });
+  const result = runWithOperationContext(context, () => new Promise(() => {}));
+  timeoutCallback();
+
+  await assert.rejects(result, (error) => {
+    assert.equal(error.code, "operation_timeout");
+    assert.equal(error.statusCode, 504);
+    assert.equal(String(error.message).includes("timer-id"), false);
+    return true;
+  });
+  context.cleanup();
+});
+
 test("write admission saturation returns safe 503 and keeps health available", async () => {
   const deferred = createDeferred();
   const service = createDeferredWriteService(deferred);
@@ -429,6 +545,65 @@ test("write admission lease releases on service failure and invalid JSON", async
     assertSafeError(invalid, 400, "invalid_json");
     assert.equal(controller.snapshot().active_write_count, 0);
   }, { service: failingService, writeAdmissionController: controller });
+});
+
+test("server passes operation signal to service and releases lease on operation timeout", async () => {
+  const controller = createWriteAdmissionController({ maxInFlightWrites: 1 });
+  let observedSignal;
+  const service = {
+    health: () => createVoxWeaveService().health(),
+    async orchestrate(_payload, context) {
+      observedSignal = context.signal;
+      await new Promise(() => {});
+    },
+  };
+
+  await withRouteServer(async (baseUrl) => {
+    const response = await postJson(`${baseUrl}/v1/orchestrate`, adapterPacket());
+
+    assertSafeError(response, 504, "operation_timeout");
+    assert.equal(observedSignal.aborted, true);
+    assert.equal(classifyOperationAbortKind(observedSignal), "operation_timeout");
+    assert.equal(controller.snapshot().active_write_count, 0);
+    assert.equal(JSON.stringify(response.body).includes("50"), false);
+    assert.equal(JSON.stringify(response.body).includes(FAKE_API_KEY), false);
+
+    const next = await postJson(`${baseUrl}/v1/orchestrate`, adapterPacket("tts"));
+    assertSafeError(next, 504, "operation_timeout");
+    assert.equal(controller.snapshot().active_write_count, 0);
+  }, {
+    service,
+    writeAdmissionController: controller,
+    operationPolicy: { operationTimeoutMs: 50 },
+  });
+});
+
+test("client disconnect after body completion cancels service signal and releases lease", async () => {
+  const controller = createWriteAdmissionController({ maxInFlightWrites: 1 });
+  const service = createSignalWaitingService();
+
+  await withRouteServer(async (baseUrl) => {
+    const url = new URL(baseUrl);
+    await sendCompleteWriteAndDestroyAfterServiceStart({
+      host: url.hostname,
+      port: Number(url.port),
+      service,
+    });
+
+    await service.aborted;
+    assert.equal(service.observedSignal().aborted, true);
+    assert.equal(classifyOperationAbortKind(service.observedSignal()), "client_disconnect");
+    await waitFor(() => controller.snapshot().active_write_count === 0);
+    assert.equal(controller.snapshot().active_write_count, 0);
+
+    const health = await fetchJson(`${baseUrl}/health`);
+    assert.equal(health.status, 200);
+    assert.equal(health.body.status, "ok");
+  }, {
+    service,
+    writeAdmissionController: controller,
+    operationPolicy: { operationTimeoutMs: 1_000 },
+  });
 });
 
 test("write admission is not consumed before eligible write body handling", async () => {
@@ -1234,6 +1409,7 @@ async function withRouteServer(
       },
     }),
     writeAdmissionController,
+    operationPolicy,
   } = {}
 ) {
   const previousApiKey = process.env.VOXWEAVE_API_KEY;
@@ -1243,7 +1419,7 @@ async function withRouteServer(
     delete process.env.VOXWEAVE_API_KEY;
   }
 
-  const server = createVoxWeaveServer({ service, writeAdmissionController });
+  const server = createVoxWeaveServer({ service, writeAdmissionController, operationPolicy });
   try {
     await new Promise((resolve, reject) => {
       server.once("error", reject);
@@ -1262,12 +1438,21 @@ async function withRouteServer(
 
 async function closeServer(server) {
   if (!server.listening) return;
+  const forceCloseTimer = setTimeout(() => {
+    server.closeAllConnections?.();
+  }, 25);
   await Promise.race([
     new Promise((resolve, reject) =>
-      server.close((error) => error ? reject(error) : resolve())
+      server.close((error) => {
+        clearTimeout(forceCloseTimer);
+        error ? reject(error) : resolve();
+      })
     ),
     new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("server_close_timeout")), 1000)
+      setTimeout(() => {
+        clearTimeout(forceCloseTimer);
+        reject(new Error("server_close_timeout"));
+      }, 1000)
     ),
   ]);
 }
@@ -1343,6 +1528,15 @@ function writeAdmissionPolicyErrorMatcher(error) {
   return true;
 }
 
+function operationPolicyErrorMatcher(error) {
+  assert.equal(error.code, "invalid_operation_policy");
+  assert.equal(error.statusCode, 500);
+  assert.equal(String(error.message).includes(FAKE_API_KEY), false);
+  assert.equal(String(error.message).includes("50"), false);
+  assert.equal(String(error.message).includes("60000"), false);
+  return true;
+}
+
 function safeAuthErrorMatcher(error) {
   assert.equal(error.code, "auth_required");
   assert.equal(error.statusCode, 401);
@@ -1391,6 +1585,48 @@ function createCountingService() {
     async orchestrate(payload, context) {
       calls += 1;
       return realService.orchestrate(payload, context);
+    },
+  };
+}
+
+function createSignalWaitingService() {
+  const realService = createVoxWeaveService();
+  let signal;
+  let startedResolve;
+  let abortedResolve;
+  const started = new Promise((resolve) => {
+    startedResolve = resolve;
+  });
+  const aborted = new Promise((resolve) => {
+    abortedResolve = resolve;
+  });
+  return {
+    health: () => realService.health(),
+    started,
+    aborted,
+    observedSignal: () => signal,
+    async orchestrate(_payload, context) {
+      signal = context.signal;
+      startedResolve();
+      if (signal.aborted) {
+        abortedResolve();
+        throwIfOperationAborted(signal);
+      }
+      await new Promise((resolve, reject) => {
+        signal.addEventListener(
+          "abort",
+          () => {
+            abortedResolve();
+            try {
+              throwIfOperationAborted(signal);
+            } catch (error) {
+              reject(error);
+            }
+            resolve();
+          },
+          { once: true }
+        );
+      });
     },
   };
 }
@@ -1526,6 +1762,45 @@ async function sendPartialWriteAndDestroy({ host, port }) {
         "{\"text\"",
       ].join("\r\n"));
       setTimeout(() => socket.destroy(), 10);
+    });
+    socket.on("error", (error) => {
+      if (error?.code === "ECONNRESET") {
+        finish();
+        return;
+      }
+      reject(error);
+    });
+    socket.on("close", finish);
+  });
+}
+
+async function sendCompleteWriteAndDestroyAfterServiceStart({ host, port, service }) {
+  await new Promise((resolve, reject) => {
+    const socket = createConnection({ host, port });
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    socket.setTimeout(1000, () => {
+      socket.destroy();
+      finish();
+    });
+    socket.on("connect", async () => {
+      const body = JSON.stringify(adapterPacket());
+      socket.write([
+        "POST /v1/orchestrate HTTP/1.1",
+        `Host: ${host}:${port}`,
+        "Content-Type: application/json",
+        `Content-Length: ${Buffer.byteLength(body)}`,
+        "Connection: close",
+        "",
+        body,
+      ].join("\r\n"));
+      await service.started;
+      socket.destroy();
+      finish();
     });
     socket.on("error", (error) => {
       if (error?.code === "ECONNRESET") {
