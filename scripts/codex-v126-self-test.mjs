@@ -100,6 +100,7 @@ const compatibilityCases = [
     const text = readText('scripts/codex-local-quality-gate.mjs');
     return text.includes('normalizeLocalPrePrRemoteEvidenceStatuses')
       && text.includes('remoteProductBaselineStatus')
+      && text.includes('manual_confirmation_required')
       && text.includes('local_pre_pr_remote_evidence_not_required');
   }],
   ['same_head_remote_gate_still_required_for_pr_context', () => {

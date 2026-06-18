@@ -6855,7 +6855,7 @@ function normalizeLocalPrePrRemoteEvidenceStatuses(report, env = process.env) {
 
   for (const key of remoteEvidenceKeys) {
     const value = report[key];
-    if (!value || value.status !== 'fail') continue;
+    if (!value || !['fail', 'manual_confirmation_required'].includes(value.status)) continue;
     const reasonCodes = new Set(value.reasonCodes || []);
     const localPrePrRemoteMissing =
       reasonCodes.has('remote_product_baseline_missing') ||
