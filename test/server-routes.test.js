@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import {
   AI_CHARACTER_CONTRACT_FAMILY_COUNT,
@@ -318,6 +319,48 @@ test("loopback evidence fingerprint is deterministic and rejects unsafe summarie
   );
 });
 
+test("safe interop fixtures are static JSON and accepted by routes", async () => {
+  const manifest = await readFixture("voxweave-interop-manifest.safe.json");
+  const ttsFixture = await readFixture("iris-tts-packet.safe.json");
+  const subtitleFixture = await readFixture("iris-subtitle-packet.safe.json");
+  const live2dFixture = await readFixture("iris-live2d-packet.safe.json");
+
+  assert.equal(manifest.schema, "voxweave_safe_interop_fixture_manifest_v1");
+  assert.equal(manifest.fixture_version, "1.0.0");
+  assert.equal(manifest.adapter_packet_schema, "iris_adapter_packet_v1");
+  assert.equal(manifest.contract_registry_family_count, AI_CHARACTER_CONTRACT_FAMILY_COUNT);
+  assert.equal(new Set(manifest.fixture_ids).size, manifest.fixture_ids.length);
+  assert.deepEqual(manifest.fixture_ids, [
+    "iris_tts_minimal_v1",
+    "iris_subtitle_minimal_v1",
+    "iris_live2d_all_contracts_v1",
+  ]);
+  for (const fixture of [manifest, ttsFixture, subtitleFixture, live2dFixture]) {
+    assertNoForbiddenFixtureMaterial(fixture);
+  }
+
+  await withRouteServer(async (baseUrl) => {
+    const tts = await postJson(`${baseUrl}/v1/adapter/tts`, ttsFixture);
+    const subtitle = await postJson(`${baseUrl}/v1/adapter/subtitle`, subtitleFixture);
+    const live2d = await postJson(`${baseUrl}/v1/adapter/live2d`, live2dFixture);
+
+    assert.equal(tts.status, 200);
+    assert.equal(tts.body.adapter_kind, "tts");
+    assert.equal(subtitle.status, 200);
+    assert.equal(subtitle.body.adapter_kind, "subtitle");
+    assert.equal(live2d.status, 200);
+    assert.equal(live2d.body.adapter_kind, "live2d");
+    assert.equal(
+      live2d.body.ai_character_contract_summary.contract_presence_count,
+      AI_CHARACTER_CONTRACT_FAMILY_COUNT
+    );
+    assert.equal(live2d.body.live2d_forward.renderer_forward_attempted, false);
+    assertNoForbiddenFixtureMaterial(tts.body);
+    assertNoForbiddenFixtureMaterial(subtitle.body);
+    assertNoForbiddenFixtureMaterial(live2d.body);
+  });
+});
+
 async function withRouteServer(callback) {
   const service = createVoxWeaveService({
     now: () => 1_777_000_000_000,
@@ -468,3 +511,52 @@ function assertNoForbiddenEvidenceMaterial(value) {
   assert.equal(/\bBearer\b/iu.test(text), false);
   assert.equal(/request_body|response_body|raw_contract|raw_cue/iu.test(text), false);
 }
+
+async function readFixture(name) {
+  const text = await readFile(new URL(`./fixtures/interop/${name}`, import.meta.url), "utf8");
+  return JSON.parse(text);
+}
+
+function assertNoForbiddenFixtureMaterial(value) {
+  const stack = [value];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (typeof current === "string") {
+      if (current.startsWith("artifact://voxweave/")) continue;
+      assert.equal(/\bhttps?:\/\//iu.test(current), false);
+      assert.equal(/\b127\.0\.0\.1\b/u.test(current), false);
+      assert.equal(/\blocalhost\b/iu.test(current), false);
+      assert.equal(/[A-Za-z]:[\\/]/u.test(current), false);
+      assert.equal(/\b(?:token|secret|api[_-]?key|endpoint|host|port)\b/iu.test(current), false);
+      assert.equal(/\.(?:wav|mp3|ogg|moc3|motion3\.json)\b/iu.test(current), false);
+      continue;
+    }
+    if (!current || typeof current !== "object") continue;
+    if (Array.isArray(current)) {
+      for (const item of current) stack.push(item);
+      continue;
+    }
+    for (const [key, child] of Object.entries(current)) {
+      assert.equal(FORBIDDEN_FIXTURE_KEYS.has(key), false, `forbidden fixture key ${key}`);
+      stack.push(child);
+    }
+  }
+}
+
+const FORBIDDEN_FIXTURE_KEYS = new Set([
+  "api_key",
+  "apiKey",
+  "token",
+  "secret",
+  "endpoint",
+  "url",
+  "host",
+  "port",
+  "private_path",
+  "raw_audio",
+  "raw_transcript",
+  "raw_renderer_payload",
+  "raw_model_path",
+  "runtime_readiness",
+  "production_readiness",
+]);

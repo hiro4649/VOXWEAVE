@@ -1,0 +1,19 @@
+{
+  "fixture_id": "iris_tts_minimal_v1",
+  "schema": "iris_adapter_packet_v1",
+  "adapter_kind": "tts",
+  "trace_id": "interop-tts-trace",
+  "event_id": "interop-tts-event",
+  "utterance_id": "interop-tts-utterance",
+  "final_text": "Safe interop TTS fixture text.",
+  "speech_cue": {
+    "schema": "iris_speech_cue_v1",
+    "estimated_duration_ms": 1200,
+    "prosody_style": "natural_speech",
+    "pace": "normal",
+    "pitch": "medium",
+    "volume": "medium",
+    "adapter_validation_required": true
+  },
+  "adapter_validation_required": true
+}

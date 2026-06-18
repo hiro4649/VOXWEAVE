@@ -1,0 +1,14 @@
+{
+  "fixture_id": "iris_subtitle_minimal_v1",
+  "schema": "iris_adapter_packet_v1",
+  "adapter_kind": "subtitle",
+  "trace_id": "interop-subtitle-trace",
+  "event_id": "interop-subtitle-event",
+  "utterance_id": "interop-subtitle-utterance",
+  "subtitle_text": "Safe interop subtitle fixture text.",
+  "subtitle_language": "en",
+  "script_direction": "ltr",
+  "display_start_ms": 0,
+  "display_end_ms": 1600,
+  "adapter_validation_required": true
+}
