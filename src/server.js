@@ -343,21 +343,57 @@ export async function closeVoxWeaveServer(server, { timeoutMs } = {}) {
     return buildSafeServerShutdownSummary("not_listening");
   }
   const boundedTimeoutMs = normalizeShutdownTimeout(server, timeoutMs);
-  await Promise.race([
-    new Promise((resolve, reject) =>
-      server.close((error) => error ? reject(error) : resolve())
-    ),
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new VoxWeaveError("server close timeout", "server_close_timeout", 500)), boundedTimeoutMs)
-    ),
-  ]);
-  return buildSafeServerShutdownSummary("closed");
+  const state = {
+    forcedConnectionClose: false,
+    idleConnectionCloseAttempted: false,
+    allConnectionCloseAttempted: false,
+  };
+
+  if (typeof server.closeIdleConnections === "function") {
+    state.idleConnectionCloseAttempted = true;
+    server.closeIdleConnections();
+  }
+
+  return await new Promise((resolve) => {
+    let settled = false;
+    let timeout;
+    let forceGraceTimeout;
+    const finish = (status) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      clearTimeout(forceGraceTimeout);
+      resolve(buildSafeServerShutdownSummary(status, state));
+    };
+
+    server.close((error) => {
+      finish(error ? "server_shutdown_failed" : "closed");
+    });
+
+    timeout = setTimeout(() => {
+      state.forcedConnectionClose = true;
+      if (typeof server.closeAllConnections !== "function") {
+        finish("server_shutdown_failed");
+        return;
+      }
+      state.allConnectionCloseAttempted = true;
+      server.closeAllConnections();
+      forceGraceTimeout = setTimeout(() => {
+        finish("server_shutdown_failed");
+      }, Math.min(100, boundedTimeoutMs));
+    }, boundedTimeoutMs);
+  });
 }
 
-function buildSafeServerShutdownSummary(status) {
+function buildSafeServerShutdownSummary(status, state = {}) {
   return {
     schema: SERVER_SHUTDOWN_SUMMARY_SCHEMA,
     status,
+    forced_connection_close: state.forcedConnectionClose === true,
+    idle_connection_close_attempted: state.idleConnectionCloseAttempted === true,
+    all_connection_close_attempted: state.allConnectionCloseAttempted === true,
+    shutdown_timeout_bounded: true,
+    transport_values_excluded: true,
     runtime_readiness_claimed: false,
     production_readiness_claimed: false,
     safe_summary_only: true,
