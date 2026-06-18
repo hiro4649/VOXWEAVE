@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   AI_CHARACTER_CONTRACT_REGISTRY,
   AI_CHARACTER_CONTRACT_FAMILY_COUNT,
@@ -15,7 +16,6 @@ import {
   extractProsodyHints,
   extractScriptDirection,
   extractTrace,
-  hashPayload,
   normalizeAdapterKind,
   safeId,
   safeText,
@@ -90,6 +90,7 @@ export function createVoxWeaveService({
   cache = new ReactionCache(),
   renderGroups = new RenderGroupStore({ now }),
   live2dForwarder = createLive2dForwarder(),
+  requestIdFactory = null,
 } = {}) {
   return {
     health() {
@@ -182,6 +183,7 @@ export function createVoxWeaveService({
             now,
             live2dForwarder,
             renderGroups,
+            requestIdFactory,
             aiCharacterContracts,
             aiCharacterContractSummary,
             aiCharacterAdapterMetadata,
@@ -216,20 +218,12 @@ export function createVoxWeaveService({
         payload,
       });
       const mouthCues = buildMouthCues({ text: correctedText, durationMs });
-      const requestId = createRequestId(payload, now);
       const live2dCue = buildLive2dCue({
         payload,
         durationMs,
-        requestId,
+        requestId: "voxweave-template",
         prosody,
         mouthCues,
-      });
-      const mockTts = buildMockTts({
-        requestId,
-        durationMs,
-        mouthCues,
-        language,
-        localeStatus,
       });
       const quality = scoreQuality({
         text,
@@ -264,6 +258,7 @@ export function createVoxWeaveService({
         now,
         live2dForwarder,
         renderGroups,
+        requestIdFactory,
         aiCharacterContracts,
         aiCharacterContractSummary,
         aiCharacterAdapterMetadata,
@@ -277,10 +272,22 @@ export function createVoxWeaveService({
   };
 }
 
-function createRequestId(payload, now) {
-  const base = safeId(payload.trace_id ?? payload.event_id ?? "");
-  const suffix = hashPayload({ payload, timeBucket: Math.floor(now() / 1000) }).slice(0, 12);
-  return `voxweave-${base || "request"}-${suffix}`;
+function createRequestId({ trace, adapterKind, requestIdFactory }) {
+  const base = safeId(trace.traceId || trace.eventId || "request");
+  const value =
+    typeof requestIdFactory === "function"
+      ? requestIdFactory({ trace: structuredClone(trace), adapterKind })
+      : `voxweave-${base || "request"}-${randomUUID()}`;
+  const normalized = String(value ?? "");
+  if (
+    normalized.length === 0 ||
+    normalized.length > 160 ||
+    !normalized.startsWith("voxweave-") ||
+    safeId(normalized, 160) !== normalized
+  ) {
+    throw new VoxWeaveError("Invalid request id.", "invalid_request_id", 500);
+  }
+  return normalized;
 }
 
 async function materializeReactionPlanResponse({
@@ -293,12 +300,13 @@ async function materializeReactionPlanResponse({
   now,
   live2dForwarder,
   renderGroups,
+  requestIdFactory,
   aiCharacterContracts,
   aiCharacterContractSummary,
   aiCharacterAdapterMetadata,
   integrationBoundary,
 }) {
-  const requestId = createRequestId(payload, now);
+  const requestId = createRequestId({ trace, adapterKind, requestIdFactory });
   const mouthCues = structuredClone(reactionPlan.mouth_cues);
   const subtitleTiming = structuredClone(reactionPlan.subtitle_timing);
   const live2dCue = {
@@ -349,6 +357,7 @@ async function materializeReactionPlanResponse({
     traceId: trace.traceId,
     eventId: trace.eventId,
     utteranceId: trace.utteranceId,
+    requestId,
     qualityWarningCount: reactionPlan.quality.deductions.length,
   });
   const responseSummary = buildIrisResponseSummary({
