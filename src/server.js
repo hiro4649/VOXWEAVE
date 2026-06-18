@@ -30,8 +30,8 @@ export function createVoxWeaveServer({
   const writeApiKey = String(requiredApiKey ?? "").trim();
   return createServer(async (request, response) => {
     try {
-      const url = new URL(request.url ?? "/", "http://127.0.0.1");
-      if (request.method === "GET" && ["/health", "/v1/health"].includes(url.pathname)) {
+      const pathname = assertCanonicalRequestTarget(request.url ?? "/");
+      if (request.method === "GET" && ["/health", "/v1/health"].includes(pathname)) {
         sendJson(response, 200, service.health());
         return;
       }
@@ -42,8 +42,8 @@ export function createVoxWeaveServer({
       }
 
       assertAuthorizedWrite(request, writeApiKey);
-      const routeKind = resolveRouteKind(url.pathname);
-      if (isAllowedPostRoute(url.pathname)) {
+      const routeKind = resolveRouteKind(pathname);
+      if (isAllowedPostRoute(pathname)) {
         assertJsonContentType(request);
         const payload = await readJson(request);
         const result = await service.orchestrate(payload, { routeKind });
@@ -61,6 +61,36 @@ export function createVoxWeaveServer({
 
 function isAllowedPostRoute(pathname) {
   return ALLOWED_POST_ROUTES.has(pathname);
+}
+
+export function parseCanonicalRequestTarget(requestTarget) {
+  const target = String(requestTarget ?? "");
+  if (
+    !target ||
+    target.length > 512 ||
+    target === "*" ||
+    !target.startsWith("/") ||
+    target.startsWith("//") ||
+    target.endsWith("/") ||
+    target.includes("?") ||
+    target.includes("#") ||
+    target.includes("\\") ||
+    target.includes("%") ||
+    target.includes("://") ||
+    /[\u0000-\u001f\u007f\s]/u.test(target)
+  ) {
+    return "";
+  }
+  const parts = target.split("/");
+  if (parts.some((part) => part === "." || part === "..")) return "";
+  if (parts.some((part, index) => index > 0 && part === "")) return "";
+  return target;
+}
+
+export function assertCanonicalRequestTarget(requestTarget) {
+  const pathname = parseCanonicalRequestTarget(requestTarget);
+  if (pathname) return pathname;
+  throw new VoxWeaveError("invalid request target", "invalid_request_target", 400);
 }
 
 function assertAuthorizedWrite(request, requiredApiKey) {
