@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createVoxWeaveService } from "../src/orchestrator.js";
-import { createVoxWeaveServer } from "../src/server.js";
+import {
+  assertSafeServerBind,
+  classifyServerHostScope,
+  createVoxWeaveServer,
+  startServer,
+} from "../src/server.js";
 
 const FAKE_API_KEY = "unit-test-key";
 const OVERSIZED_BODY = "x".repeat(513_000);
@@ -64,6 +69,87 @@ test("GET /v1/health remains public when API key is configured", async () => {
     assertSafeHeaders(response);
     assertNoForbiddenFields(response.body);
   }, { apiKey: FAKE_API_KEY });
+});
+
+test("server host classifier separates loopback wildcard non-loopback and invalid hosts", () => {
+  assert.equal(classifyServerHostScope("localhost"), "loopback");
+  assert.equal(classifyServerHostScope("localhost."), "loopback");
+  assert.equal(classifyServerHostScope("127.0.0.1"), "loopback");
+  assert.equal(classifyServerHostScope("127.4.5.6"), "loopback");
+  assert.equal(classifyServerHostScope("::1"), "loopback");
+  assert.equal(classifyServerHostScope("[::1]"), "loopback");
+  assert.equal(classifyServerHostScope("0.0.0.0"), "wildcard");
+  assert.equal(classifyServerHostScope("::"), "wildcard");
+  assert.equal(classifyServerHostScope("127.example.invalid"), "non_loopback");
+  assert.equal(classifyServerHostScope("127.0.0.1.example.invalid"), "non_loopback");
+  assert.equal(classifyServerHostScope("localhost.example.invalid"), "non_loopback");
+  assert.equal(classifyServerHostScope(""), "invalid");
+  assert.equal(classifyServerHostScope("http://localhost"), "invalid");
+  assert.equal(classifyServerHostScope("local host"), "invalid");
+  assert.equal(classifyServerHostScope("bad_host"), "invalid");
+});
+
+test("server bind policy requires API key and explicit opt-in outside loopback", () => {
+  assert.doesNotThrow(() => assertSafeServerBind({ host: "127.0.0.1" }));
+  assert.throws(
+    () => assertSafeServerBind({ host: "0.0.0.0" }),
+    safeBindErrorMatcher
+  );
+  assert.throws(
+    () => assertSafeServerBind({ host: "0.0.0.0", requiredApiKey: FAKE_API_KEY }),
+    safeBindErrorMatcher
+  );
+  assert.throws(
+    () => assertSafeServerBind({ host: "0.0.0.0", allowNonLoopback: true }),
+    safeBindErrorMatcher
+  );
+  assert.doesNotThrow(() =>
+    assertSafeServerBind({
+      host: "0.0.0.0",
+      requiredApiKey: FAKE_API_KEY,
+      allowNonLoopback: "true",
+    })
+  );
+  assert.throws(
+    () => assertSafeServerBind({ host: "example.invalid" }),
+    safeBindErrorMatcher
+  );
+  assert.throws(
+    () => assertSafeServerBind({ host: "example.invalid", requiredApiKey: FAKE_API_KEY }),
+    safeBindErrorMatcher
+  );
+  assert.doesNotThrow(() =>
+    assertSafeServerBind({
+      host: "example.invalid",
+      requiredApiKey: FAKE_API_KEY,
+      allowNonLoopback: "1",
+    })
+  );
+});
+
+test("safe bind error does not expose host or API key material", () => {
+  assert.throws(
+    () =>
+      assertSafeServerBind({
+        host: "example.invalid",
+        requiredApiKey: FAKE_API_KEY,
+        allowNonLoopback: false,
+      }),
+    (error) => {
+      assert.equal(error.code, "unsafe_server_bind");
+      assert.equal(error.statusCode, 500);
+      assert.equal(String(error.message).includes("example.invalid"), false);
+      assert.equal(String(error.message).includes(FAKE_API_KEY), false);
+      return true;
+    }
+  );
+});
+
+test("startServer rejects unsafe bind before listen", () => {
+  assert.throws(
+    () => startServer({ host: "0.0.0.0", port: 0 }),
+    safeBindErrorMatcher
+  );
 });
 
 test("POST /v1/orchestrate without auth returns safe auth_required error", async () => {
@@ -163,6 +249,67 @@ test("POST /v1/adapter/tts/extra returns safe 404 not_found", async () => {
 test("POST /adapter/live2d/extra returns safe 404 not_found", async () => {
   await withRouteServer(async (baseUrl) => {
     const response = await postJson(`${baseUrl}/adapter/live2d/extra`, adapterPacket("live2d"));
+
+    assertSafeError(response, 404, "not_found");
+  });
+});
+
+test("POST /v1/orchestrate missing content type returns safe unsupported media type", async () => {
+  await withRouteServer(async (baseUrl) => {
+    const response = await fetchJson(`${baseUrl}/v1/orchestrate`, {
+      method: "POST",
+      body: JSON.stringify(adapterPacket()),
+    });
+
+    assertSafeError(response, 415, "unsupported_media_type");
+  });
+});
+
+test("POST /v1/orchestrate text/plain content type returns safe unsupported media type", async () => {
+  await withRouteServer(async (baseUrl) => {
+    const response = await fetchJson(`${baseUrl}/v1/orchestrate`, {
+      method: "POST",
+      headers: { "content-type": "text/plain" },
+      body: JSON.stringify(adapterPacket()),
+    });
+
+    assertSafeError(response, 415, "unsupported_media_type");
+  });
+});
+
+test("POST /v1/orchestrate form content type returns safe unsupported media type", async () => {
+  await withRouteServer(async (baseUrl) => {
+    const response = await fetchJson(`${baseUrl}/v1/orchestrate`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: "safe=value",
+    });
+
+    assertSafeError(response, 415, "unsupported_media_type");
+  });
+});
+
+test("POST /v1/orchestrate accepts application/json charset content type", async () => {
+  await withRouteServer(async (baseUrl) => {
+    const response = await fetchJson(`${baseUrl}/v1/orchestrate`, {
+      method: "POST",
+      headers: { "content-type": "application/json; charset=utf-8" },
+      body: JSON.stringify(adapterPacket()),
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.ok, true);
+    assertSafeHeaders(response);
+    assertNoForbiddenFields(response.body);
+  });
+});
+
+test("POST unknown route remains safe 404 without content type detail", async () => {
+  await withRouteServer(async (baseUrl) => {
+    const response = await fetchJson(`${baseUrl}/unknown`, {
+      method: "POST",
+      body: JSON.stringify(adapterPacket()),
+    });
 
     assertSafeError(response, 404, "not_found");
   });
@@ -362,6 +509,7 @@ async function fetchJson(url, options = {}) {
     headers: {
       cacheControl: response.headers.get("cache-control"),
       contentType: response.headers.get("content-type"),
+      nosniff: response.headers.get("x-content-type-options"),
     },
     body: await response.json(),
   };
@@ -387,6 +535,15 @@ function assertSafeError(response, status, code) {
 function assertSafeHeaders(response) {
   assert.match(response.headers.contentType, /^application\/json\b/);
   assert.equal(response.headers.cacheControl, "no-store");
+  assert.equal(response.headers.nosniff, "nosniff");
+}
+
+function safeBindErrorMatcher(error) {
+  assert.equal(error.code, "unsafe_server_bind");
+  assert.equal(error.statusCode, 500);
+  assert.equal(String(error.message).includes("0.0.0.0"), false);
+  assert.equal(String(error.message).includes(FAKE_API_KEY), false);
+  return true;
 }
 
 function assertNoForbiddenFields(value) {
