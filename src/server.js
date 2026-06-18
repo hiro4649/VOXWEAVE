@@ -4,6 +4,12 @@ import { isIP } from "node:net";
 import { createVoxWeaveService } from "./orchestrator.js";
 import { VoxWeaveError, toSafeError } from "./errors.js";
 import { normalizeAdapterKind } from "./contracts.js";
+import {
+  DEFAULT_OPERATION_POLICY,
+  createOperationContext,
+  normalizeOperationPolicy,
+  runWithOperationContext,
+} from "./operationContext.js";
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 9011;
@@ -57,8 +63,11 @@ export function createVoxWeaveServer({
   lifecyclePolicy = DEFAULT_SERVER_LIFECYCLE_POLICY,
   writeAdmissionPolicy = DEFAULT_WRITE_ADMISSION_POLICY,
   writeAdmissionController,
+  operationPolicy = DEFAULT_OPERATION_POLICY,
+  operationContextFactory = createOperationContext,
 } = {}) {
   const writeApiKey = String(requiredApiKey ?? "").trim();
+  const normalizedOperationPolicy = normalizeOperationPolicy(operationPolicy);
   const admissionController = normalizeWriteAdmissionController(
     writeAdmissionController ?? createWriteAdmissionController(writeAdmissionPolicy)
   );
@@ -88,8 +97,24 @@ export function createVoxWeaveServer({
         }
         try {
           const payload = await readJson(request);
-          const result = await service.orchestrate(payload, { routeKind });
-          sendJson(response, 200, result);
+          const operationContext = operationContextFactory({
+            policy: normalizedOperationPolicy,
+          });
+          const detachClientDisconnect = attachClientDisconnectCancellation({
+            request,
+            response,
+            operationContext,
+            policy: normalizedOperationPolicy,
+          });
+          try {
+            const result = await runWithOperationContext(operationContext, (signal) =>
+              service.orchestrate(payload, { routeKind, signal })
+            );
+            sendJson(response, 200, result);
+          } finally {
+            detachClientDisconnect();
+            operationContext.cleanup();
+          }
         } finally {
           lease.release();
         }
@@ -224,11 +249,17 @@ export function startServer({
   requiredApiKey = process.env.VOXWEAVE_API_KEY,
   allowNonLoopback = process.env.VOXWEAVE_ALLOW_NON_LOOPBACK,
   lifecyclePolicy = DEFAULT_SERVER_LIFECYCLE_POLICY,
+  operationPolicy = DEFAULT_OPERATION_POLICY,
   logger = console,
 } = {}) {
   assertSafeServerBind({ host, requiredApiKey, allowNonLoopback });
   const policy = normalizeServerLifecyclePolicy(lifecyclePolicy);
-  const server = createVoxWeaveServer({ service, requiredApiKey, lifecyclePolicy: policy });
+  const server = createVoxWeaveServer({
+    service,
+    requiredApiKey,
+    lifecyclePolicy: policy,
+    operationPolicy,
+  });
   server.listen(port, host, () => {
     logger?.log?.(JSON.stringify(buildSafeServerStartupSummary({ policy })));
   });
@@ -636,6 +667,21 @@ function sendServerBusy(response) {
     "connection": "close",
     "retry-after": "1",
   });
+}
+
+function attachClientDisconnectCancellation({ request, response, operationContext, policy }) {
+  if (policy.cancelOnClientDisconnect !== true) return () => {};
+  const cancel = () => operationContext.abort("client_disconnect");
+  const onRequestAborted = () => cancel();
+  const onResponseClose = () => {
+    if (!response.writableEnded) cancel();
+  };
+  request.on("aborted", onRequestAborted);
+  response.on("close", onResponseClose);
+  return () => {
+    request.off("aborted", onRequestAborted);
+    response.off("close", onResponseClose);
+  };
 }
 
 export function buildSafeClientErrorResponse() {
