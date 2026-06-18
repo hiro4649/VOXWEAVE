@@ -6841,7 +6841,7 @@ function isLocalPrePrEvidenceLane(env = process.env) {
   return !env.CODEX_PR_NUMBER && !(env.GITHUB_REF || '').includes('/pull/');
 }
 
-function normalizeLocalPrePrRemoteEvidenceStatuses(report, env = process.env) {
+function normalizeLocalPrePrRemoteEvidenceStatuses(report, env = process.env, failureList = null) {
   if (!isLocalPrePrEvidenceLane(env)) return report;
 
   const remoteEvidenceKeys = [
@@ -6883,6 +6883,13 @@ function normalizeLocalPrePrRemoteEvidenceStatuses(report, env = process.env) {
     if (report.failures.length === 0 && report.targetQualityScoreStatus?.status === 'pass') {
       report.status = 'pass';
     }
+  }
+  if (Array.isArray(failureList) && normalizedKeys.size) {
+    const kept = failureList.filter((failure) => {
+      const id = String(failure?.id || '');
+      return ![...normalizedKeys].some((key) => id === `${key}.failed` || id.startsWith(`${key}.`));
+    });
+    failureList.splice(0, failureList.length, ...kept);
   }
 
   return report;
@@ -12407,7 +12414,7 @@ async function runTargetHarnessGate() {
 
 
 
-  normalizeLocalPrePrRemoteEvidenceStatuses(report, process.env);
+  normalizeLocalPrePrRemoteEvidenceStatuses(report, process.env, failures);
   report.targetQualityScoreStatus = computeTargetQualityScoreStatus(report);
 
 
@@ -12420,7 +12427,7 @@ async function runTargetHarnessGate() {
 
 
 
-  normalizeLocalPrePrRemoteEvidenceStatuses(report, process.env);
+  normalizeLocalPrePrRemoteEvidenceStatuses(report, process.env, failures);
   report.targetQualityScoreStatus = computeTargetQualityScoreStatus(report);
 
 
