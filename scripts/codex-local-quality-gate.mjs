@@ -6847,6 +6847,7 @@ function normalizeLocalPrePrRemoteEvidenceStatuses(report, env = process.env) {
   const remoteEvidenceKeys = [
     'productVerificationStatus',
     'productVerificationEvidenceStatus',
+    'remoteProductBaselineStatus',
     'remoteProductEvidenceRunnerStatus',
     'formalEvidencePrecedenceStatus',
     'remoteNpmDiagnosticNormalizationStatus',
