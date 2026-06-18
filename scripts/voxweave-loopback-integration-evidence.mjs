@@ -1561,8 +1561,11 @@ async function resolveCliHeadSha() {
 
 async function main() {
   const headSha = await resolveCliHeadSha();
+  const bindingReceiptIndex = process.argv.indexOf("--validate-receipt-against-bundle");
   const receiptIndex = process.argv.indexOf("--validate-receipt");
-  const output = receiptIndex >= 0
+  const output = bindingReceiptIndex >= 0
+    ? await runReceiptBindingValidationCli(process.argv[bindingReceiptIndex + 1])
+    : receiptIndex >= 0
     ? await runReceiptValidationCli(process.argv[receiptIndex + 1])
     : process.argv.includes("--candidate-bundle")
     ? await runExternalAcceptanceCandidateBundleSummary()
@@ -1571,6 +1574,94 @@ async function main() {
       : await runLoopbackIntegrationEvidence({ headSha });
   console.log(JSON.stringify(output));
   process.exitCode = output.status === "pass" ? 0 : 1;
+}
+
+async function runReceiptBindingValidationCli(receiptPath) {
+  const receiptSourceKind = resolveReceiptSourceKindArg();
+  try {
+    const text = await readFile(receiptPath, "utf8").catch(() => {
+      throw new Error("invalid_receipt_file");
+    });
+    let receipt;
+    try {
+      receipt = JSON.parse(text);
+    } catch {
+      throw new Error("invalid_receipt_json");
+    }
+    const bundle = await readCandidateBundleFiles();
+    return validateExternalAcceptanceReceiptAgainstCandidate({
+      ...bundle,
+      receipt,
+      receiptSourceKind,
+    });
+  } catch (error) {
+    return buildSafeReceiptBindingCliFailure({
+      receiptSourceKind,
+      reasonCode: safeReceiptBindingCliReason(error),
+    });
+  }
+}
+
+function resolveReceiptSourceKindArg() {
+  const sourceKindIndex = process.argv.indexOf("--receipt-source-kind");
+  const requested = sourceKindIndex >= 0 ? process.argv[sourceKindIndex + 1] : "unclassified";
+  return ALLOWED_RECEIPT_SOURCE_KINDS.has(requested) ? requested : "unclassified";
+}
+
+function safeReceiptBindingCliReason(error) {
+  const reason = safeReasonCode(error);
+  const allowed = new Set([
+    "invalid_receipt_file",
+    "invalid_receipt_json",
+    "invalid_receipt_object",
+    "invalid_receipt_fields",
+    "invalid_receipt_schema",
+    "invalid_receipt_recipient",
+    "invalid_receipt_source_head",
+    "invalid_receipt_fingerprint",
+    "unsafe_receipt_material",
+    "candidate_bundle_version_mismatch",
+    "candidate_source_head_mismatch",
+    "candidate_bundle_fingerprint_mismatch",
+    "candidate_recipient_template_missing",
+    "candidate_recipient_role_mismatch",
+    "candidate_receipt_safety_invalid",
+    "candidate_receipt_binding_invalid",
+  ]);
+  return allowed.has(reason) ? reason : "receipt_binding_exception";
+}
+
+function buildSafeReceiptBindingCliFailure({ receiptSourceKind, reasonCode }) {
+  const result = {
+    schema: EXTERNAL_ACCEPTANCE_RECEIPT_BINDING_RESULT_SCHEMA,
+    status: "fail",
+    receipt_source_kind: receiptSourceKind,
+    recipient_project: "unknown",
+    candidate_bundle_version: "unknown",
+    source_head_binding_status: "fail",
+    bundle_version_binding_status: "fail",
+    bundle_fingerprint_binding_status: "fail",
+    recipient_template_binding_status: "fail",
+    recipient_role_binding_status: "fail",
+    receipt_safety_status: reasonCode.startsWith("invalid_receipt") ||
+      reasonCode.startsWith("unsafe_receipt") ? "fail" : "unknown",
+    receipt_candidate_status: "unknown",
+    external_team_acceptance_status: "not_claimed_by_validator",
+    real_integration_proof_status: "no",
+    primary_reason_code: reasonCode,
+    binding_fingerprint_algorithm: "sha256",
+    binding_fingerprint: "",
+    runtime_readiness_claimed: false,
+    production_readiness_claimed: false,
+    safe_summary_only: true,
+  };
+  result.binding_fingerprint = buildReceiptBindingFingerprint({
+    descriptor: null,
+    receiptFingerprint: "invalid_receipt",
+    result,
+  });
+  assertExternalAcceptanceReceiptBindingResultSafe(result);
+  return result;
 }
 
 async function runReceiptValidationCli(receiptPath) {
