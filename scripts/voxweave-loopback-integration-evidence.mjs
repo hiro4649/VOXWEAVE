@@ -13,6 +13,8 @@ import {
 
 export const LOOPBACK_INTEGRATION_EVIDENCE_SCHEMA =
   "voxweave_loopback_integration_evidence_v1";
+export const LOOPBACK_INTEGRATION_FAILURE_MATRIX_SCHEMA =
+  "voxweave_loopback_integration_failure_matrix_v1";
 
 const execFileAsync = promisify(execFile);
 const LOOPBACK_HOST = "127.0.0.1";
@@ -54,6 +56,28 @@ const ALLOWED_EVIDENCE_KEYS = Object.freeze([
   "failure_count",
   "primary_reason_code",
   "evidence_fingerprint",
+  "runtime_readiness_claimed",
+  "production_readiness_claimed",
+  "safe_summary_only",
+]);
+const ALLOWED_MATRIX_KEYS = Object.freeze([
+  "schema",
+  "status",
+  "source_head_sha",
+  "evidence_mode",
+  "case_count",
+  "pass_count",
+  "failure_count",
+  "accepted_case_status",
+  "renderer_rejected_case_status",
+  "renderer_timeout_case_status",
+  "connection_reset_case_status",
+  "redirect_blocked_case_status",
+  "redirect_sink_request_count",
+  "all_servers_closed",
+  "external_network_execution",
+  "real_renderer_execution",
+  "raw_failure_material_excluded",
   "runtime_readiness_claimed",
   "production_readiness_claimed",
   "safe_summary_only",
@@ -239,6 +263,142 @@ export function assertLoopbackEvidenceSafe(evidence) {
     throw new Error("unsafe_evidence_summary");
   }
   return evidence;
+}
+
+export async function runLoopbackIntegrationFailureMatrix({
+  headSha = "unknown",
+  requestTimeoutMs = 250,
+} = {}) {
+  const scenarios = [
+    { name: "accepted", behavior: "accepted", expected: "accepted" },
+    { name: "renderer_rejected", behavior: "rejected", expected: "renderer_rejected" },
+    { name: "renderer_timeout", behavior: "timeout", expected: "renderer_timeout" },
+    { name: "connection_reset", behavior: "reset", expected: "renderer_unreachable" },
+    { name: "redirect_blocked", behavior: "redirect", expected: "renderer_unreachable" },
+  ];
+  const results = {};
+  let redirectSinkRequestCount = 0;
+  let allServersClosed = true;
+
+  for (const scenario of scenarios) {
+    const caseResult = await runFailureMatrixCase({
+      behavior: scenario.behavior,
+      expected: scenario.expected,
+      requestTimeoutMs,
+    });
+    results[scenario.name] = caseResult.pass ? "pass" : "fail";
+    redirectSinkRequestCount += caseResult.redirectSinkRequestCount;
+    allServersClosed = allServersClosed && caseResult.serversClosed;
+  }
+
+  const passCount = Object.values(results).filter((status) => status === "pass").length;
+  const matrix = {
+    schema: LOOPBACK_INTEGRATION_FAILURE_MATRIX_SCHEMA,
+    status: passCount === scenarios.length && allServersClosed ? "pass" : "fail",
+    source_head_sha: safeHeadSha(headSha),
+    evidence_mode: "local_ephemeral_loopback_fake_only",
+    case_count: scenarios.length,
+    pass_count: passCount,
+    failure_count: scenarios.length - passCount,
+    accepted_case_status: results.accepted,
+    renderer_rejected_case_status: results.renderer_rejected,
+    renderer_timeout_case_status: results.renderer_timeout,
+    connection_reset_case_status: results.connection_reset,
+    redirect_blocked_case_status: results.redirect_blocked,
+    redirect_sink_request_count: redirectSinkRequestCount,
+    all_servers_closed: allServersClosed,
+    external_network_execution: false,
+    real_renderer_execution: false,
+    raw_failure_material_excluded: true,
+    runtime_readiness_claimed: false,
+    production_readiness_claimed: false,
+    safe_summary_only: true,
+  };
+  assertLoopbackFailureMatrixSafe(matrix);
+  return matrix;
+}
+
+export function assertLoopbackFailureMatrixSafe(matrix) {
+  const keys = Object.keys(matrix).sort();
+  const allowed = [...ALLOWED_MATRIX_KEYS].sort();
+  if (JSON.stringify(keys) !== JSON.stringify(allowed)) {
+    throw new Error("unsafe_matrix_key_set");
+  }
+  scanEvidenceSafe(matrix);
+  if (matrix.schema !== LOOPBACK_INTEGRATION_FAILURE_MATRIX_SCHEMA) {
+    throw new Error("unsafe_matrix_schema");
+  }
+  if (!["pass", "fail"].includes(matrix.status)) {
+    throw new Error("unsafe_matrix_status");
+  }
+  if (matrix.safe_summary_only !== true) {
+    throw new Error("unsafe_matrix_summary");
+  }
+  return matrix;
+}
+
+async function runFailureMatrixCase({ behavior, expected, requestTimeoutMs }) {
+  const servers = [];
+  let redirectSinkRequestCount = 0;
+  try {
+    let redirectSink;
+    if (behavior === "redirect") {
+      redirectSink = createServer((_, response) => {
+        redirectSinkRequestCount += 1;
+        sendJson(response, 200, { ok: true });
+      });
+      await listen(redirectSink, LOOPBACK_HOST);
+      servers.push(redirectSink);
+    }
+
+    const target = createServer(async (request, response) => {
+      if (behavior === "reset") {
+        request.socket.destroy();
+        return;
+      }
+      if (behavior === "timeout") {
+        await new Promise((resolve) => setTimeout(resolve, requestTimeoutMs + 150));
+        sendJson(response, 202, { ok: true });
+        return;
+      }
+      if (behavior === "redirect") {
+        const sinkPort = redirectSink.address().port;
+        response.writeHead(302, { location: `http://${LOOPBACK_HOST}:${sinkPort}/sink` });
+        response.end();
+        return;
+      }
+      if (behavior === "rejected") {
+        sendJson(response, 503, { ok: false });
+        return;
+      }
+      sendJson(response, 202, { ok: true });
+    });
+    await listen(target, LOOPBACK_HOST);
+    servers.push(target);
+
+    const targetPort = target.address().port;
+    const forwarder = createLive2dForwarder({
+      endpoint: `http://${LOOPBACK_HOST}:${targetPort}/cue`,
+      apiKey: RENDERER_API_KEY,
+      timeoutMs: requestTimeoutMs,
+    });
+    const result = await forwarder.forward({
+      schema: "iris_live2d_renderer_cue_delivery_v1",
+      cue: { schema: "iris_live2d_renderer_cue_v1" },
+      boundary_policy: { renderer_cue_only: true },
+      adapter_validation_required: true,
+    });
+    const pass =
+      result.renderer_forward_status === expected &&
+      (behavior !== "redirect" || redirectSinkRequestCount === 0);
+    const serversClosed = await closeServers(servers);
+    return { pass, serversClosed, redirectSinkRequestCount };
+  } catch {
+    const serversClosed = await closeServers(servers);
+    return { pass: false, serversClosed, redirectSinkRequestCount };
+  } finally {
+    await closeServers(servers);
+  }
 }
 
 async function startFakeRenderer(state) {
@@ -549,8 +709,9 @@ async function resolveCliHeadSha() {
 
 async function main() {
   const headSha = await resolveCliHeadSha();
-  const output = await runLoopbackIntegrationEvidence({ headSha });
-  assertLoopbackEvidenceSafe(output);
+  const output = process.argv.includes("--matrix")
+    ? await runLoopbackIntegrationFailureMatrix({ headSha })
+    : await runLoopbackIntegrationEvidence({ headSha });
   console.log(JSON.stringify(output));
   process.exitCode = output.status === "pass" ? 0 : 1;
 }

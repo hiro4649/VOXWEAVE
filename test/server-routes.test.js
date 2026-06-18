@@ -7,8 +7,11 @@ import {
 import { createVoxWeaveService } from "../src/orchestrator.js";
 import { createVoxWeaveServer } from "../src/server.js";
 import {
+  LOOPBACK_INTEGRATION_FAILURE_MATRIX_SCHEMA,
   LOOPBACK_INTEGRATION_EVIDENCE_SCHEMA,
+  assertLoopbackFailureMatrixSafe,
   assertLoopbackEvidenceSafe,
+  runLoopbackIntegrationFailureMatrix,
   runLoopbackIntegrationEvidence,
 } from "../scripts/voxweave-loopback-integration-evidence.mjs";
 
@@ -222,6 +225,36 @@ test("loopback evidence runner returns safe pass summary", async () => {
   }
 });
 
+test("loopback failure matrix returns safe rollback summary", async () => {
+  const matrix = await runLoopbackIntegrationFailureMatrix({
+    headSha: "b".repeat(40),
+    requestTimeoutMs: 200,
+  });
+
+  assertLoopbackFailureMatrixSafe(matrix);
+  assert.equal(matrix.schema, LOOPBACK_INTEGRATION_FAILURE_MATRIX_SCHEMA);
+  assert.equal(matrix.status, "pass");
+  assert.equal(matrix.evidence_mode, "local_ephemeral_loopback_fake_only");
+  assert.equal(matrix.case_count, 5);
+  assert.equal(matrix.pass_count, 5);
+  assert.equal(matrix.failure_count, 0);
+  assert.equal(matrix.accepted_case_status, "pass");
+  assert.equal(matrix.renderer_rejected_case_status, "pass");
+  assert.equal(matrix.renderer_timeout_case_status, "pass");
+  assert.equal(matrix.connection_reset_case_status, "pass");
+  assert.equal(matrix.redirect_blocked_case_status, "pass");
+  assert.equal(matrix.redirect_sink_request_count, 0);
+  assert.equal(matrix.all_servers_closed, true);
+  assert.equal(matrix.external_network_execution, false);
+  assert.equal(matrix.real_renderer_execution, false);
+  assert.equal(matrix.raw_failure_material_excluded, true);
+  assert.equal(matrix.runtime_readiness_claimed, false);
+  assert.equal(matrix.production_readiness_claimed, false);
+  assert.equal(matrix.safe_summary_only, true);
+  assert.deepEqual(Object.keys(matrix).sort(), LOOPBACK_MATRIX_KEYS);
+  assertNoForbiddenEvidenceMaterial(matrix);
+});
+
 async function withRouteServer(callback) {
   const service = createVoxWeaveService({
     now: () => 1_777_000_000_000,
@@ -335,6 +368,29 @@ const LOOPBACK_EVIDENCE_KEYS = [
   "target_kind",
   "translation_execution",
   "tts_path_status",
+].sort();
+
+const LOOPBACK_MATRIX_KEYS = [
+  "accepted_case_status",
+  "all_servers_closed",
+  "case_count",
+  "connection_reset_case_status",
+  "evidence_mode",
+  "external_network_execution",
+  "failure_count",
+  "pass_count",
+  "production_readiness_claimed",
+  "raw_failure_material_excluded",
+  "real_renderer_execution",
+  "redirect_blocked_case_status",
+  "redirect_sink_request_count",
+  "renderer_rejected_case_status",
+  "renderer_timeout_case_status",
+  "runtime_readiness_claimed",
+  "safe_summary_only",
+  "schema",
+  "source_head_sha",
+  "status",
 ].sort();
 
 function assertNoForbiddenEvidenceMaterial(value) {
