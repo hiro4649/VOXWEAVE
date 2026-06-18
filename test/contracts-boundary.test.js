@@ -133,6 +133,20 @@ test("buildIntegrationBoundarySnapshot returns default safe boundary state", () 
   assert.equal(snapshot.operational_boundary.safe_startup_summary, true);
   assert.equal(snapshot.operational_boundary.safe_shutdown_summary, true);
   assert.equal(snapshot.operational_boundary.transport_values_excluded, true);
+  assert.equal(snapshot.operational_boundary.application_operation_deadline_bounded, true);
+  assert.equal(snapshot.operational_boundary.client_disconnect_cancellation_enabled, true);
+  assert.equal(snapshot.operational_boundary.server_to_service_abort_signal, true);
+  assert.equal(snapshot.operational_boundary.orchestrator_cooperative_cancellation, true);
+  assert.equal(snapshot.operational_boundary.live2d_parent_signal_propagation, true);
+  assert.equal(snapshot.operational_boundary.live2d_local_timeout_preserved, true);
+  assert.equal(snapshot.operational_boundary.parent_abort_distinguished_from_renderer_timeout, true);
+  assert.equal(snapshot.operational_boundary.cache_commit_after_cancellation_prevented, true);
+  assert.equal(snapshot.operational_boundary.render_group_commit_after_cancellation_prevented, true);
+  assert.equal(snapshot.operational_boundary.external_side_effect_rollback_guaranteed, false);
+  assert.equal(snapshot.operational_boundary.operation_timeout_safe_error, true);
+  assert.equal(snapshot.operational_boundary.operation_cancellation_safe_error, true);
+  assert.equal(snapshot.operational_boundary.operation_deadline_values_excluded, true);
+  assert.equal(snapshot.operational_boundary.active_operation_counts_excluded, true);
   assert.equal(snapshot.tts_boundary.mode, "mock_only");
   assert.equal(snapshot.tts_boundary.provider_connected, false);
   assert.equal(snapshot.asr_boundary.mode, "not_connected");
@@ -160,6 +174,13 @@ test("integration boundary snapshot excludes numeric capacity and transport valu
   const snapshot = buildIntegrationBoundarySnapshot();
   const serialized = JSON.stringify(snapshot);
 
+  assert.equal(serialized.includes("operationTimeoutMs"), false);
+  assert.equal(serialized.includes("operation_timeout_ms"), false);
+  assert.equal(serialized.includes("absolute_deadline"), false);
+  assert.equal(serialized.includes("remaining_time"), false);
+  assert.equal(serialized.includes("\"active_operation_count\":"), false);
+  assert.equal(serialized.includes("abort_reason"), false);
+  assert.equal(serialized.includes("AbortSignal"), false);
   assert.equal(serialized.includes("maxInFlightWrites"), false);
   assert.equal(serialized.includes("max_connections"), false);
   assert.equal(serialized.includes("active_write"), false);
