@@ -116,6 +116,20 @@ test("buildIntegrationBoundarySnapshot returns default safe boundary state", () 
   assert.equal(snapshot.operational_boundary.canonical_request_target_required, true);
   assert.equal(snapshot.operational_boundary.content_length_early_guard, true);
   assert.equal(snapshot.operational_boundary.explicit_server_lifecycle_policy, true);
+  assert.equal(snapshot.operational_boundary.lifecycle_bounds_enforced, true);
+  assert.equal(snapshot.operational_boundary.connection_cap_enabled, true);
+  assert.equal(snapshot.operational_boundary.write_admission_enabled, true);
+  assert.equal(snapshot.operational_boundary.write_queue_enabled, false);
+  assert.equal(snapshot.operational_boundary.write_overload_rejection_enabled, true);
+  assert.equal(snapshot.operational_boundary.health_bypasses_write_admission, true);
+  assert.equal(snapshot.operational_boundary.admission_lease_release_on_failure, true);
+  assert.equal(snapshot.operational_boundary.request_abort_safe_classification, true);
+  assert.equal(snapshot.operational_boundary.destroyed_response_write_guard, true);
+  assert.equal(snapshot.operational_boundary.client_error_safe_response, true);
+  assert.equal(snapshot.operational_boundary.expect_continue_allowed, false);
+  assert.equal(snapshot.operational_boundary.forced_shutdown_available, true);
+  assert.equal(snapshot.operational_boundary.idle_connection_cleanup_available, true);
+  assert.equal(snapshot.operational_boundary.shutdown_timer_cleanup_required, true);
   assert.equal(snapshot.operational_boundary.safe_startup_summary, true);
   assert.equal(snapshot.operational_boundary.safe_shutdown_summary, true);
   assert.equal(snapshot.operational_boundary.transport_values_excluded, true);
@@ -140,6 +154,20 @@ test("buildIntegrationBoundarySnapshot returns default safe boundary state", () 
   assert.equal(snapshot.safe_summary_only, true);
   assertNoIntegrationTargetMaterial(snapshot);
   assertSafeResponse(snapshot);
+});
+
+test("integration boundary snapshot excludes numeric capacity and transport values", () => {
+  const snapshot = buildIntegrationBoundarySnapshot();
+  const serialized = JSON.stringify(snapshot);
+
+  assert.equal(serialized.includes("maxInFlightWrites"), false);
+  assert.equal(serialized.includes("max_connections"), false);
+  assert.equal(serialized.includes("active_write"), false);
+  assert.equal(serialized.includes("available_write"), false);
+  assert.equal(serialized.includes("shutdown_timeout_ms"), false);
+  assert.equal(serialized.includes("127.0.0.1"), false);
+  assert.equal(serialized.includes("9011"), false);
+  assertNoIntegrationTargetMaterial(snapshot);
 });
 
 test("buildIntegrationBoundarySnapshot exposes only forwarder configured and scope", () => {

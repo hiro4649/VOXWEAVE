@@ -205,6 +205,21 @@ function assertIntegrationBoundarySnapshot(snapshot) {
   assert.equal(snapshot.server_bind_policy.non_loopback_requires_explicit_opt_in, true);
   assert.equal(snapshot.server_bind_policy.non_loopback_requires_auth, true);
   assert.equal(snapshot.server_bind_policy.json_write_content_type_required, true);
+  assert.equal(snapshot.operational_boundary.lifecycle_bounds_enforced, true);
+  assert.equal(snapshot.operational_boundary.connection_cap_enabled, true);
+  assert.equal(snapshot.operational_boundary.write_admission_enabled, true);
+  assert.equal(snapshot.operational_boundary.write_queue_enabled, false);
+  assert.equal(snapshot.operational_boundary.write_overload_rejection_enabled, true);
+  assert.equal(snapshot.operational_boundary.health_bypasses_write_admission, true);
+  assert.equal(snapshot.operational_boundary.admission_lease_release_on_failure, true);
+  assert.equal(snapshot.operational_boundary.request_abort_safe_classification, true);
+  assert.equal(snapshot.operational_boundary.destroyed_response_write_guard, true);
+  assert.equal(snapshot.operational_boundary.client_error_safe_response, true);
+  assert.equal(snapshot.operational_boundary.expect_continue_allowed, false);
+  assert.equal(snapshot.operational_boundary.forced_shutdown_available, true);
+  assert.equal(snapshot.operational_boundary.idle_connection_cleanup_available, true);
+  assert.equal(snapshot.operational_boundary.shutdown_timer_cleanup_required, true);
+  assert.equal(snapshot.operational_boundary.transport_values_excluded, true);
   assert.equal(snapshot.tts_boundary.mode, "mock_only");
   assert.equal(snapshot.tts_boundary.provider_connected, false);
   assert.equal(snapshot.asr_boundary.mode, "not_connected");
@@ -222,6 +237,9 @@ function assertIntegrationBoundarySnapshot(snapshot) {
   assert.equal(snapshot.runtime_readiness_claimed, false);
   assert.equal(snapshot.production_readiness_claimed, false);
   assert.equal(snapshot.safe_summary_only, true);
+  assert.equal(JSON.stringify(snapshot).includes("active_write"), false);
+  assert.equal(JSON.stringify(snapshot).includes("max_connections"), false);
+  assert.equal(JSON.stringify(snapshot).includes("shutdown_timeout_ms"), false);
   assertNoForbiddenFields(snapshot);
 }
 
