@@ -4,11 +4,13 @@ import { test } from "node:test";
 import { createVoxWeaveService } from "../src/orchestrator.js";
 import {
   assertSafeServerBind,
+  assertCanonicalRequestTarget,
   classifyServerHostScope,
   constantTimeCredentialMatch,
   credentialDigest,
   createVoxWeaveServer,
   extractWriteCredential,
+  parseCanonicalRequestTarget,
   startServer,
 } from "../src/server.js";
 
@@ -272,6 +274,57 @@ test("POST /v1/orchestrate rejects duplicate x-api-key header safely", async () 
     const response = await postRawJsonWithDuplicateHeader(baseUrl, "x-api-key");
 
     assertSafeError(response, 401, "auth_required");
+  }, { apiKey: FAKE_API_KEY });
+});
+
+test("canonical request target parser accepts exact safe route paths", () => {
+  assert.equal(parseCanonicalRequestTarget("/health"), "/health");
+  assert.equal(parseCanonicalRequestTarget("/v1/health"), "/v1/health");
+  assert.equal(parseCanonicalRequestTarget("/v1/orchestrate"), "/v1/orchestrate");
+  assert.equal(parseCanonicalRequestTarget("/v1/adapter/live2d"), "/v1/adapter/live2d");
+  assert.equal(assertCanonicalRequestTarget("/v1/adapter/tts"), "/v1/adapter/tts");
+});
+
+test("canonical request target parser rejects normalized aliases", () => {
+  const invalidTargets = [
+    "",
+    "*",
+    "v1/orchestrate",
+    "//v1/orchestrate",
+    "/v1/orchestrate/",
+    "/v1//orchestrate",
+    "/v1/./orchestrate",
+    "/v1/../v1/orchestrate",
+    "/v1/%2e/orchestrate",
+    "/v1/orchestrate?debug=1",
+    "/v1/orchestrate#fragment",
+    "/v1\\orchestrate",
+    "http://127.0.0.1/v1/orchestrate",
+  ];
+
+  for (const target of invalidTargets) {
+    assert.equal(parseCanonicalRequestTarget(target), "");
+    assert.throws(() => assertCanonicalRequestTarget(target), safeRequestTargetErrorMatcher);
+  }
+});
+
+test("absolute-form write request target is rejected before route handling", async () => {
+  await withRouteServer(async (baseUrl) => {
+    const url = new URL(baseUrl);
+    const response = await postRawJsonRequestTarget(
+      baseUrl,
+      `http://${url.hostname}:${url.port}/v1/orchestrate`
+    );
+
+    assertSafeError(response, 400, "invalid_request_target");
+  }, { apiKey: FAKE_API_KEY });
+});
+
+test("query-bearing write request target is rejected before route handling", async () => {
+  await withRouteServer(async (baseUrl) => {
+    const response = await postRawJsonRequestTarget(baseUrl, "/v1/orchestrate?debug=1");
+
+    assertSafeError(response, 400, "invalid_request_target");
   }, { apiKey: FAKE_API_KEY });
 });
 
@@ -630,19 +683,34 @@ function safeAuthErrorMatcher(error) {
   return true;
 }
 
+function safeRequestTargetErrorMatcher(error) {
+  assert.equal(error.code, "invalid_request_target");
+  assert.equal(error.statusCode, 400);
+  assert.equal(String(error.message).includes("/v1/orchestrate"), false);
+  return true;
+}
+
 async function postRawJsonWithDuplicateHeader(baseUrl, headerName) {
+  return postRawJsonRequestTarget(baseUrl, "/v1/orchestrate", [
+    `${headerName}: ${FAKE_API_KEY}`,
+    `${headerName}: ${FAKE_API_KEY}`,
+  ]);
+}
+
+async function postRawJsonRequestTarget(baseUrl, requestTarget, extraHeaderLines = [
+  `x-api-key: ${FAKE_API_KEY}`,
+]) {
   const url = new URL(baseUrl);
   const body = JSON.stringify(adapterPacket());
   const rawResponse = await sendRawHttpRequest({
     host: url.hostname,
     port: Number(url.port),
     requestLines: [
-      "POST /v1/orchestrate HTTP/1.1",
+      `POST ${requestTarget} HTTP/1.1`,
       `Host: ${url.hostname}:${url.port}`,
       "Content-Type: application/json",
       `Content-Length: ${Buffer.byteLength(body)}`,
-      `${headerName}: ${FAKE_API_KEY}`,
-      `${headerName}: ${FAKE_API_KEY}`,
+      ...extraHeaderLines,
       "Connection: close",
       "",
       body,
