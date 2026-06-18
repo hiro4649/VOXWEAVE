@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { isIP } from "node:net";
 import { createVoxWeaveService } from "./orchestrator.js";
 import { VoxWeaveError, toSafeError } from "./errors.js";
@@ -64,11 +65,63 @@ function isAllowedPostRoute(pathname) {
 
 function assertAuthorizedWrite(request, requiredApiKey) {
   if (!requiredApiKey) return;
-  const authorization = String(request.headers.authorization ?? "");
-  const bearerToken = authorization.match(/^Bearer\s+(.+)$/iu)?.[1] ?? "";
-  const explicitApiKey = String(request.headers["x-api-key"] ?? "");
-  if (bearerToken === requiredApiKey || explicitApiKey === requiredApiKey) return;
+  const credential = extractWriteCredential(request);
+  if (constantTimeCredentialMatch(credential, requiredApiKey)) return;
   throw new VoxWeaveError("auth required", "auth_required", 401);
+}
+
+export function credentialDigest(value) {
+  return createHash("sha256").update(String(value ?? ""), "utf8").digest();
+}
+
+export function constantTimeCredentialMatch(candidate, expected) {
+  const candidateText = String(candidate ?? "");
+  const expectedText = String(expected ?? "");
+  if (!candidateText || !expectedText) return false;
+  return timingSafeEqual(credentialDigest(candidateText), credentialDigest(expectedText));
+}
+
+export function extractWriteCredential(request) {
+  const duplicateHeaderNames = findDuplicateCredentialHeaderNames(request.rawHeaders);
+  if (duplicateHeaderNames.size > 0) {
+    throw new VoxWeaveError("auth required", "auth_required", 401);
+  }
+
+  const authorization = getSingleHeaderValue(request.headers.authorization);
+  const explicitApiKey = getSingleHeaderValue(request.headers["x-api-key"]);
+  const bearerToken = parseBearerCredential(authorization);
+  const bearerSourcePresent = authorization.trim() !== "";
+  const apiKeySourcePresent = explicitApiKey.trim() !== "";
+
+  if (bearerSourcePresent && apiKeySourcePresent) {
+    throw new VoxWeaveError("auth required", "auth_required", 401);
+  }
+  return bearerToken || explicitApiKey.trim();
+}
+
+function findDuplicateCredentialHeaderNames(rawHeaders = []) {
+  const counts = new Map();
+  for (let index = 0; index < rawHeaders.length; index += 2) {
+    const name = String(rawHeaders[index] ?? "").toLowerCase();
+    if (name !== "authorization" && name !== "x-api-key") continue;
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  return new Set([...counts].filter(([, count]) => count > 1).map(([name]) => name));
+}
+
+function getSingleHeaderValue(value) {
+  if (Array.isArray(value)) {
+    if (value.length !== 1) throw new VoxWeaveError("auth required", "auth_required", 401);
+    return String(value[0] ?? "");
+  }
+  return String(value ?? "");
+}
+
+function parseBearerCredential(authorization) {
+  const text = String(authorization ?? "").trim();
+  if (!text) return "";
+  const match = text.match(/^Bearer ([^\s]+)$/u);
+  return match?.[1] ?? "";
 }
 
 function assertJsonContentType(request) {
