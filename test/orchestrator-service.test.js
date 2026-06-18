@@ -570,6 +570,60 @@ test("reaction plan cache strips top-level correlation but rejects cached reques
   );
 });
 
+test("live2d cache hit forwards current cue without caching forward side effect", async () => {
+  let tick = 0;
+  const forwardedDeliveries = [];
+  const service = makeService({
+    now: () => 1_777_000_000_000 + tick,
+    live2dForwarder: {
+      configured: true,
+      scope: "loopback",
+      async forward(delivery) {
+        forwardedDeliveries.push(structuredClone(delivery));
+        return {
+          renderer_forward_configured: true,
+          renderer_forward_attempted: true,
+          renderer_forward_ok: true,
+          renderer_forward_status: "accepted",
+          renderer_forward_scope: "loopback",
+        };
+      },
+    },
+  });
+  const firstPacket = makeLive2dPacket({
+    text: "yes",
+    trace_id: "trace-live2d-cache-first",
+    event_id: "event-live2d-cache-first",
+    utterance_id: "utterance-live2d-cache-first",
+  });
+  const secondPacket = makeLive2dPacket({
+    text: "yes",
+    trace_id: "trace-live2d-cache-second",
+    event_id: "event-live2d-cache-second",
+    utterance_id: "utterance-live2d-cache-second",
+  });
+
+  const first = await service.orchestrate(firstPacket, { routeKind: "live2d" });
+  tick = 2_500;
+  const second = await service.orchestrate(secondPacket, { routeKind: "live2d" });
+
+  assert.equal(first.cache.status, "miss");
+  assert.equal(second.cache.status, "hit");
+  assert.equal(second.cache.key, first.cache.key);
+  assert.equal(forwardedDeliveries.length, 2);
+  assert.equal(first.live2d_forward.renderer_forward_attempted, true);
+  assert.equal(second.live2d_forward.renderer_forward_attempted, true);
+  assert.notEqual(second.request_id, first.request_id);
+  assert.notEqual(second.live2d_cue.cue_id, first.live2d_cue.cue_id);
+  assert.equal(forwardedDeliveries[0].cue.cue_id, first.live2d_cue.cue_id);
+  assert.equal(forwardedDeliveries[1].cue.cue_id, second.live2d_cue.cue_id);
+  assert.equal(second.trace_id, "trace-live2d-cache-second");
+  assert.equal(second.event_id, "event-live2d-cache-second");
+  assert.equal(second.utterance_id, "utterance-live2d-cache-second");
+  assertNoForbiddenFields(first);
+  assertNoForbiddenFields(second);
+});
+
 test("strong live2d motion cue includes recovery requirement", async () => {
   const result = await makeService().orchestrate(
     makeLive2dPacket({
