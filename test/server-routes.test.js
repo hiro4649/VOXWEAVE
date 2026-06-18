@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
+import { readFile, unlink, writeFile } from "node:fs/promises";
 import { test } from "node:test";
 import {
   AI_CHARACTER_CONTRACT_FAMILY_COUNT,
@@ -11,17 +15,22 @@ import {
   LOOPBACK_INTEGRATION_FAILURE_MATRIX_SCHEMA,
   LOOPBACK_INTEGRATION_EVIDENCE_SCHEMA,
   EXTERNAL_ACCEPTANCE_CANDIDATE_BUNDLE_SUMMARY_SCHEMA,
+  EXTERNAL_ACCEPTANCE_RECEIPT_SCHEMA,
   assertLoopbackFailureMatrixSafe,
   assertLoopbackEvidenceSafe,
   assertExternalAcceptanceCandidateBundleSummarySafe,
   buildExternalAcceptanceCandidateBundleFingerprint,
+  buildExternalAcceptanceReceiptFingerprint,
   buildLoopbackEvidenceFingerprint,
   canonicalizeLoopbackEvidence,
   runExternalAcceptanceCandidateBundleSummary,
   runLoopbackIntegrationFailureMatrix,
   runLoopbackIntegrationEvidence,
+  validateExternalAcceptanceReceipt,
   validateLoopbackIntegrationEvidence,
 } from "../scripts/voxweave-loopback-integration-evidence.mjs";
+
+const execFileAsync = promisify(execFile);
 
 const FORBIDDEN_RESPONSE_KEYS = new Set([
   "canonical_envelope",
@@ -435,6 +444,113 @@ test("external acceptance candidate bundle is safe and not accepted", async () =
     summary.candidate_bundle_fingerprint,
     changedVersionSummary.candidate_bundle_fingerprint
   );
+});
+
+test("external acceptance receipt validator accepts only safe receipts", async () => {
+  const irisTemplate = await readExternalAcceptanceFixture("iris-team-receipt-template.safe.json");
+  const live2dTemplate = await readExternalAcceptanceFixture(
+    "live2d-team-receipt-template.safe.json"
+  );
+  const baseReceipt = {
+    schema: EXTERNAL_ACCEPTANCE_RECEIPT_SCHEMA,
+    recipient_project: "IRIS",
+    recipient_role: "adapter_packet_owner",
+    candidate_bundle_version: "1.0.0",
+    source_main_sha: "e".repeat(40),
+    candidate_bundle_fingerprint: "f".repeat(64),
+    received_status: "received",
+    parsed_status: "pass",
+    forbidden_material_absent_status: "pass",
+    expected_schema_observed_status: "pass",
+    raw_values_absent_status: "pass",
+    readiness_claim_absent_status: "pass",
+    acceptance_candidate_status: "accepted_candidate",
+    real_integration_proof_status: "no",
+    runtime_readiness_claimed: false,
+    production_readiness_claimed: false,
+    safe_summary_only: true,
+  };
+
+  assert.equal(irisTemplate.received_status, "pending");
+  assert.equal(live2dTemplate.received_status, "pending");
+  assert.equal(irisTemplate.acceptance_candidate_status, "pending");
+  assert.equal(live2dTemplate.acceptance_candidate_status, "pending");
+
+  const accepted = validateExternalAcceptanceReceipt(baseReceipt);
+  assert.equal(accepted.status, "pass");
+  assert.equal(accepted.acceptance_candidate_status, "accepted_candidate");
+  assert.match(accepted.receipt_fingerprint, /^[a-f0-9]{64}$/u);
+  assert.equal(accepted.receipt_fingerprint, buildExternalAcceptanceReceiptFingerprint(baseReceipt));
+
+  const pending = validateExternalAcceptanceReceipt({
+    ...baseReceipt,
+    received_status: "pending",
+    parsed_status: "pending",
+    forbidden_material_absent_status: "pending",
+    expected_schema_observed_status: "pending",
+    raw_values_absent_status: "pending",
+    readiness_claim_absent_status: "pending",
+    acceptance_candidate_status: "pending",
+  });
+  assert.equal(pending.acceptance_candidate_status, "pending");
+
+  assert.throws(() =>
+    validateExternalAcceptanceReceipt({ ...baseReceipt, runtime_readiness_claimed: true })
+  );
+  assert.throws(() =>
+    validateExternalAcceptanceReceipt({
+      ...baseReceipt,
+      real_integration_proof_status: "yes",
+    })
+  );
+  assert.throws(() => validateExternalAcceptanceReceipt({ ...baseReceipt, endpoint: "blocked" }));
+  assert.throws(() =>
+    validateExternalAcceptanceReceipt({
+      ...baseReceipt,
+      recipient_role: "token-like-value",
+    })
+  );
+  assert.throws(() => validateExternalAcceptanceReceipt({ ...baseReceipt, extra: true }));
+  assert.throws(() =>
+    validateExternalAcceptanceReceipt({
+      ...baseReceipt,
+      recipient_role: "error_detail",
+    })
+  );
+  assert.throws(() =>
+    validateExternalAcceptanceReceipt({
+      ...baseReceipt,
+      received_status: "pending",
+    })
+  );
+});
+
+test("external receipt validator CLI emits safe JSON without receipt path", async () => {
+  const receiptPath = join(tmpdir(), `voxweave-invalid-receipt-${Date.now()}.json`);
+  await writeFile(
+    receiptPath,
+    JSON.stringify({
+      schema: EXTERNAL_ACCEPTANCE_RECEIPT_SCHEMA,
+      endpoint: "blocked",
+    }),
+    "utf8"
+  );
+  try {
+    const { stdout } = await execFileAsync(
+      process.execPath,
+      ["scripts/voxweave-loopback-integration-evidence.mjs", "--validate-receipt", receiptPath],
+      { cwd: process.cwd(), windowsHide: true }
+    ).catch((error) => ({ stdout: error.stdout }));
+    const summary = JSON.parse(stdout);
+    assert.equal(summary.schema, "voxweave_external_acceptance_receipt_validation_result_v1");
+    assert.equal(summary.status, "fail");
+    assert.equal(summary.safe_summary_only, true);
+    assert.equal(stdout.includes(receiptPath), false);
+    assert.equal(stdout.includes("endpoint"), false);
+    assert.equal(stdout.includes("blocked"), false);
+  } finally {
+    await unlink(receiptPath).catch(() => {});
+  }
 });
 
 async function withRouteServer(callback) {
