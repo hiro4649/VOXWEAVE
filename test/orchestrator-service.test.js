@@ -713,6 +713,127 @@ test("invalid injected request id factory output rejects safely", async () => {
   );
 });
 
+test("cache semantic key matrix hits only non-semantic correlation changes", async () => {
+  const service = makeService();
+  const base = makeTtsPacket({
+    text: "yes",
+    final_text: "yes",
+    trace_id: "trace-cache-matrix-a",
+    event_id: "event-cache-matrix-a",
+    utterance_id: "utterance-cache-matrix-a",
+    display_start_ms: 0,
+    speech_cue: {
+      prosody_style: "natural_speech",
+      pace: "normal",
+      pitch: "medium",
+      volume: "medium",
+      breathiness: "medium",
+      estimated_duration_ms: 900,
+      adapter_validation_required: true,
+    },
+  });
+  const reordered = {
+    adapter_validation_required: true,
+    speech_cue: {
+      adapter_validation_required: true,
+      estimated_duration_ms: 900,
+      breathiness: "medium",
+      volume: "medium",
+      pitch: "medium",
+      pace: "normal",
+      prosody_style: "natural_speech",
+    },
+    display_start_ms: 0,
+    language: "en",
+    final_text: "yes",
+    text: "yes",
+    utterance_id: "utterance-cache-matrix-b",
+    event_id: "event-cache-matrix-b",
+    trace_id: "trace-cache-matrix-b",
+    adapter_kind: "tts",
+    schema: "iris_adapter_packet_v1",
+  };
+
+  const first = await service.orchestrate(base, { routeKind: "tts" });
+  const traceOnly = await service.orchestrate(
+    {
+      ...base,
+      trace_id: "trace-cache-matrix-c",
+      event_id: "event-cache-matrix-c",
+      utterance_id: "utterance-cache-matrix-c",
+    },
+    { routeKind: "tts" }
+  );
+  const propertyOrderOnly = await service.orchestrate(reordered, { routeKind: "tts" });
+  const semanticChanges = [
+    { name: "display_start_ms", patch: { display_start_ms: 200 } },
+    { name: "duration_ms", patch: { speech_cue: { ...base.speech_cue, estimated_duration_ms: 1200 } } },
+    { name: "fallback_allowed", patch: { fallback_allowed: false } },
+    { name: "prosody_style", patch: { speech_cue: { ...base.speech_cue, prosody_style: "focused_speech" } } },
+    { name: "pitch", patch: { speech_cue: { ...base.speech_cue, pitch: "high" } } },
+    { name: "volume", patch: { speech_cue: { ...base.speech_cue, volume: "high" } } },
+    { name: "language", patch: { language: "ja" } },
+  ];
+
+  assert.equal(first.cache.status, "miss");
+  assert.equal(traceOnly.cache.status, "hit");
+  assert.equal(propertyOrderOnly.cache.status, "hit");
+  assert.equal(traceOnly.cache.key, first.cache.key);
+  assert.equal(propertyOrderOnly.cache.key, first.cache.key);
+
+  for (const change of semanticChanges) {
+    const result = await service.orchestrate(
+      {
+        ...base,
+        ...change.patch,
+        trace_id: `trace-cache-matrix-${change.name}`,
+        event_id: `event-cache-matrix-${change.name}`,
+        utterance_id: `utterance-cache-matrix-${change.name}`,
+      },
+      { routeKind: "tts" }
+    );
+    assert.equal(result.cache.status, "miss");
+    assert.notEqual(result.cache.key, first.cache.key);
+    assertNoForbiddenFields(result);
+  }
+});
+
+test("invalid reaction cache entry is deleted and rebuilt as current miss", async () => {
+  const calls = [];
+  const cache = {
+    get(key) {
+      calls.push(["get", key]);
+      return { schema: "invalid_cache_entry", request_id: "cached-request" };
+    },
+    delete(key) {
+      calls.push(["delete", key]);
+      return true;
+    },
+    set(key) {
+      calls.push(["set", key]);
+    },
+    size() {
+      return 1;
+    },
+  };
+  const service = makeService({ cache });
+  const result = await service.orchestrate(
+    makeTtsPacket({
+      text: "yes",
+      final_text: "yes",
+      trace_id: "trace-invalid-cache-entry",
+      event_id: "event-invalid-cache-entry",
+      utterance_id: "utterance-invalid-cache-entry",
+    }),
+    { routeKind: "tts" }
+  );
+
+  assert.equal(result.cache.status, "miss");
+  assert.equal(result.trace_id, "trace-invalid-cache-entry");
+  assert.equal(calls.map((entry) => entry[0]).join(","), "get,delete,set");
+  assertNoForbiddenFields(result);
+});
+
 test("strong live2d motion cue includes recovery requirement", async () => {
   const result = await makeService().orchestrate(
     makeLive2dPacket({
