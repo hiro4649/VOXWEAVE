@@ -246,6 +246,37 @@ test("RenderGroupStore get returns public copy", () => {
   assertNoForbiddenFields(fresh);
 });
 
+test("RenderGroupStore previewUpdate returns public group without committing", () => {
+  const store = new RenderGroupStore({ now: () => 1 });
+  const ids = { traceId: "trace-preview", eventId: "event-preview", utteranceId: "utterance-preview" };
+
+  const preview = store.previewUpdate({ ...ids, adapterKind: "tts", qualityWarningCount: 2 });
+
+  assert.equal(preview.group_id, "utterance-preview");
+  assert.equal(preview.tts_received, true);
+  assert.equal(preview.quality_warning_count, 2);
+  assert.equal(store.get(ids), null);
+  assertNoForbiddenFields(preview);
+});
+
+test("RenderGroupStore previewUpdate composes from existing group without mutating it", () => {
+  const store = new RenderGroupStore({ now: () => 10 });
+  const ids = { utteranceId: "preview-existing" };
+  store.update({ ...ids, adapterKind: "tts", qualityWarningCount: 1 });
+
+  const preview = store.previewUpdate({ ...ids, adapterKind: "subtitle", qualityWarningCount: 3 });
+  const committed = store.get(ids);
+
+  assert.equal(preview.tts_received, true);
+  assert.equal(preview.subtitle_received, true);
+  assert.equal(preview.quality_warning_count, 4);
+  assert.equal(committed.tts_received, true);
+  assert.equal(committed.subtitle_received, false);
+  assert.equal(committed.quality_warning_count, 1);
+  assertNoForbiddenFields(preview);
+  assertNoForbiddenFields(committed);
+});
+
 test("RenderGroupStore group id prefers utterance then event then trace", () => {
   const store = new RenderGroupStore({ now: () => 1 });
 

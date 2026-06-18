@@ -367,14 +367,17 @@ async function materializeReactionPlanResponse({
         renderer_forward_status: "not_live2d_adapter",
       };
   throwIfOperationAborted(signal);
-  const renderGroup = renderGroups.update({
+  const renderGroupInput = {
     adapterKind,
     traceId: trace.traceId,
     eventId: trace.eventId,
     utteranceId: trace.utteranceId,
     requestId,
     qualityWarningCount: reactionPlan.quality.deductions.length,
-  });
+  };
+  const renderGroup = typeof renderGroups.previewUpdate === "function"
+    ? renderGroups.previewUpdate(renderGroupInput)
+    : renderGroups.update(renderGroupInput);
   const responseSummary = buildIrisResponseSummary({
     requestId,
     eventId: trace.eventId,
@@ -448,6 +451,10 @@ async function materializeReactionPlanResponse({
 
   assertSafeResponse(response);
   const safeResponse = assertAiCharacterResponseSafeSummary(response);
+  throwIfOperationAborted(signal);
+  if (typeof renderGroups.previewUpdate === "function") {
+    renderGroups.update(renderGroupInput);
+  }
   throwIfOperationAborted(signal);
   return safeResponse;
 }

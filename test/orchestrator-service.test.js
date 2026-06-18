@@ -57,20 +57,27 @@ function makeSpyCache() {
 
 function makeRenderGroupSpy() {
   const calls = [];
+  const previewCalls = [];
+  const buildGroup = (input) => ({
+    schema: "voxweave_render_group_v1",
+    group_id: "spy-render-group",
+    group_complete: false,
+    tts_received: input.adapterKind === "tts",
+    subtitle_received: input.adapterKind === "subtitle",
+    live2d_received: input.adapterKind === "live2d",
+    first_audio_latency_ms: 0,
+    quality_warning_count: input.qualityWarningCount,
+  });
   return {
     calls,
+    previewCalls,
+    previewUpdate(input) {
+      previewCalls.push(structuredClone(input));
+      return buildGroup(input);
+    },
     update(input) {
       calls.push(structuredClone(input));
-      return {
-        schema: "voxweave_render_group_v1",
-        group_id: "spy-render-group",
-        group_complete: false,
-        tts_received: input.adapterKind === "tts",
-        subtitle_received: input.adapterKind === "subtitle",
-        live2d_received: input.adapterKind === "live2d",
-        first_audio_latency_ms: 0,
-        quality_warning_count: input.qualityWarningCount,
-      };
+      return buildGroup(input);
     },
   };
 }
@@ -571,6 +578,109 @@ test("cancelled cache hit keeps existing cache entry and skips render update", a
   assert.equal(cache.calls.some(([kind]) => kind === "delete"), false);
   assert.equal(renderGroups.calls.length, 1);
   operation.cleanup();
+});
+
+test("abort after Live2D forward before state commit rejects without cache or render commit", async () => {
+  const cache = makeSpyCache();
+  const operation = createOperationContext({ policy: { operationTimeoutMs: 1_000 } });
+  const renderGroups = {
+    previewCalls: [],
+    calls: [],
+    previewUpdate(input) {
+      this.previewCalls.push(structuredClone(input));
+      operation.abort("client_disconnect");
+      return {
+        schema: "voxweave_render_group_v1",
+        group_id: "preview-render-group",
+        group_complete: false,
+        tts_received: false,
+        subtitle_received: false,
+        live2d_received: true,
+        first_audio_latency_ms: null,
+        quality_warning_count: input.qualityWarningCount,
+      };
+    },
+    update(input) {
+      this.calls.push(structuredClone(input));
+      throw new Error("render group commit should not run after cancellation");
+    },
+  };
+  let forwardCount = 0;
+  const service = makeService({
+    cache,
+    renderGroups,
+    live2dForwarder: {
+      configured: true,
+      scope: "loopback",
+      async forward() {
+        forwardCount += 1;
+        return {
+          renderer_forward_configured: true,
+          renderer_forward_scope: "loopback",
+          renderer_forward_attempted: true,
+          renderer_forward_ok: true,
+          renderer_forward_status: "accepted",
+        };
+      },
+    },
+  });
+
+  await assert.rejects(
+    async () =>
+      service.orchestrate(
+        makeLive2dPacket({ text: "yes", final_text: "yes" }),
+        { routeKind: "live2d", signal: operation.signal }
+      ),
+    assertSafeOperationCancellation
+  );
+
+  assert.equal(forwardCount, 1);
+  assert.equal(renderGroups.previewCalls.length, 1);
+  assert.equal(renderGroups.calls.length, 0);
+  assert.equal(cache.calls.some(([kind]) => kind === "set"), false);
+  assert.equal(cache.entries.size, 0);
+  operation.cleanup();
+});
+
+test("failed safe response guard prevents render group and cache commit", async () => {
+  const cache = makeSpyCache();
+  const renderGroups = {
+    previewCalls: [],
+    calls: [],
+    previewUpdate(input) {
+      this.previewCalls.push(structuredClone(input));
+      return {
+        schema: "voxweave_render_group_v1",
+        group_id: "unsafe-preview-render-group",
+        group_complete: false,
+        tts_received: input.adapterKind === "tts",
+        subtitle_received: false,
+        live2d_received: false,
+        first_audio_latency_ms: 0,
+        quality_warning_count: input.qualityWarningCount,
+        canonical_envelope: { action_type: "blocked" },
+      };
+    },
+    update(input) {
+      this.calls.push(structuredClone(input));
+      throw new Error("render group commit should not run after unsafe preview");
+    },
+  };
+  const service = makeService({ cache, renderGroups });
+
+  await assert.rejects(
+    async () =>
+      service.orchestrate(
+        makeTtsPacket({ text: "yes", final_text: "yes" }),
+        { routeKind: "tts" }
+      ),
+    (error) => error instanceof VoxWeaveError && error.code === "unsafe_response"
+  );
+
+  assert.equal(renderGroups.previewCalls.length, 1);
+  assert.equal(renderGroups.calls.length, 0);
+  assert.equal(cache.calls.some(([kind]) => kind === "set"), false);
+  assert.equal(cache.entries.size, 0);
 });
 
 test("orchestrate tts minimal safe packet returns accepted bridge output", async () => {
