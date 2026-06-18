@@ -841,6 +841,124 @@ test("external receipt validator CLI emits safe JSON without receipt path", asyn
   }
 });
 
+test("external receipt binding CLI emits safe candidate-bound JSON only", async () => {
+  const candidate = await loadCandidateBundleForTest();
+  const descriptor = buildExternalAcceptanceCandidateDescriptor(candidate);
+  const boundReceipt = buildSyntheticBoundReceipt(candidate, descriptor);
+  const receiptPath = join(tmpdir(), `voxweave-bound-receipt-${Date.now()}.json`);
+  const pendingPath = join(tmpdir(), `voxweave-pending-receipt-${Date.now()}.json`);
+  const wrongVersionPath = join(tmpdir(), `voxweave-wrong-version-receipt-${Date.now()}.json`);
+  const wrongSourcePath = join(tmpdir(), `voxweave-wrong-source-receipt-${Date.now()}.json`);
+  const wrongFingerprintPath = join(tmpdir(), `voxweave-wrong-fingerprint-receipt-${Date.now()}.json`);
+  const wrongRolePath = join(tmpdir(), `voxweave-wrong-role-receipt-${Date.now()}.json`);
+  const malformedPath = join(tmpdir(), `voxweave-malformed-receipt-${Date.now()}.json`);
+  const unsafePath = join(tmpdir(), `voxweave-unsafe-receipt-${Date.now()}.json`);
+  const missingPath = join(tmpdir(), `voxweave-missing-receipt-${Date.now()}.json`);
+  const paths = [
+    receiptPath,
+    pendingPath,
+    wrongVersionPath,
+    wrongSourcePath,
+    wrongFingerprintPath,
+    wrongRolePath,
+    malformedPath,
+    unsafePath,
+  ];
+  try {
+    await writeFile(receiptPath, JSON.stringify(boundReceipt), "utf8");
+    await writeFile(
+      pendingPath,
+      JSON.stringify(buildSyntheticBoundReceipt(candidate, descriptor, {
+        received_status: "pending",
+        parsed_status: "pending",
+        forbidden_material_absent_status: "pending",
+        expected_schema_observed_status: "pending",
+        raw_values_absent_status: "pending",
+        readiness_claim_absent_status: "pending",
+        acceptance_candidate_status: "pending",
+      })),
+      "utf8"
+    );
+    await writeFile(wrongVersionPath, JSON.stringify({ ...boundReceipt, candidate_bundle_version: "1.0.0" }), "utf8");
+    await writeFile(wrongSourcePath, JSON.stringify({ ...boundReceipt, source_main_sha: "a".repeat(40) }), "utf8");
+    await writeFile(
+      wrongFingerprintPath,
+      JSON.stringify({ ...boundReceipt, candidate_bundle_fingerprint: "b".repeat(64) }),
+      "utf8"
+    );
+    await writeFile(wrongRolePath, JSON.stringify({ ...boundReceipt, recipient_role: "renderer_boundary_owner" }), "utf8");
+    await writeFile(malformedPath, "{", "utf8");
+    await writeFile(unsafePath, JSON.stringify({ ...boundReceipt, runtime_readiness_claimed: true }), "utf8");
+
+    const pass = await runBindingCli(receiptPath, "synthetic_test_only");
+    assert.equal(pass.exitCode, 0);
+    assert.equal(pass.output.schema, EXTERNAL_ACCEPTANCE_RECEIPT_BINDING_RESULT_SCHEMA);
+    assert.equal(pass.output.status, "pass");
+    assert.equal(pass.output.receipt_source_kind, "synthetic_test_only");
+    assert.equal(pass.output.external_team_acceptance_status, "not_claimed_by_validator");
+    assert.equal(pass.output.real_integration_proof_status, "no");
+    assert.equal(pass.output.runtime_readiness_claimed, false);
+    assert.equal(pass.output.production_readiness_claimed, false);
+    assertOneSafeJsonObject(pass.stdout);
+
+    const pending = await runBindingCli(pendingPath, "synthetic_test_only");
+    assert.equal(pending.exitCode, 0);
+    assert.equal(pending.output.status, "pass");
+    assert.equal(pending.output.receipt_candidate_status, "pending");
+
+    const wrongVersion = await runBindingCli(wrongVersionPath, "synthetic_test_only");
+    assert.equal(wrongVersion.exitCode, 1);
+    assert.equal(wrongVersion.output.primary_reason_code, "candidate_bundle_version_mismatch");
+
+    const wrongSource = await runBindingCli(wrongSourcePath, "synthetic_test_only");
+    assert.equal(wrongSource.exitCode, 1);
+    assert.equal(wrongSource.output.primary_reason_code, "candidate_source_head_mismatch");
+
+    const wrongFingerprint = await runBindingCli(wrongFingerprintPath, "synthetic_test_only");
+    assert.equal(wrongFingerprint.exitCode, 1);
+    assert.equal(wrongFingerprint.output.primary_reason_code, "candidate_bundle_fingerprint_mismatch");
+
+    const wrongRole = await runBindingCli(wrongRolePath, "synthetic_test_only");
+    assert.equal(wrongRole.exitCode, 1);
+    assert.equal(wrongRole.output.primary_reason_code, "candidate_recipient_role_mismatch");
+
+    const malformed = await runBindingCli(malformedPath, "synthetic_test_only");
+    assert.equal(malformed.exitCode, 1);
+    assert.equal(malformed.output.primary_reason_code, "invalid_receipt_json");
+
+    const unsafe = await runBindingCli(unsafePath, "synthetic_test_only");
+    assert.equal(unsafe.exitCode, 1);
+    assert.equal(unsafe.output.primary_reason_code, "candidate_receipt_safety_invalid");
+
+    const missing = await runBindingCli(missingPath, "owner_provided");
+    assert.equal(missing.exitCode, 1);
+    assert.equal(missing.output.receipt_source_kind, "owner_provided");
+    assert.equal(missing.output.primary_reason_code, "invalid_receipt_file");
+
+    for (const result of [
+      pass,
+      pending,
+      wrongVersion,
+      wrongSource,
+      wrongFingerprint,
+      wrongRole,
+      malformed,
+      unsafe,
+      missing,
+    ]) {
+      assertExternalAcceptanceReceiptBindingResultSafe(result.output);
+      assert.equal(result.stdout.includes("voxweave-"), false);
+      assert.equal(result.stdout.includes(receiptPath), false);
+      assert.equal(result.stdout.includes(boundReceipt.source_main_sha), false);
+      assert.equal(result.stdout.includes("runtime_readiness_claimed"), true);
+      assert.equal(result.stdout.includes("accepted_candidate"), result.output.receipt_candidate_status === "accepted_candidate");
+      assertNoDangerousCandidateMaterial(result.output);
+    }
+  } finally {
+    await Promise.all(paths.map((path) => unlink(path).catch(() => {})));
+  }
+});
+
 test("external acceptance candidate dry-run matrix composes safe local evidence only", async () => {
   const manifest = await readExternalAcceptanceFixture(
     "voxweave-external-acceptance-candidate.manifest.safe.json"
@@ -1157,6 +1275,36 @@ function buildSyntheticBoundReceipt(candidate, descriptor, overrides = {}) {
     safe_summary_only: true,
     ...overrides,
   };
+}
+
+async function runBindingCli(receiptPath, receiptSourceKind) {
+  const args = [
+    "scripts/voxweave-loopback-integration-evidence.mjs",
+    "--validate-receipt-against-bundle",
+    receiptPath,
+    "--receipt-source-kind",
+    receiptSourceKind,
+  ];
+  const result = await execFileAsync(process.execPath, args, {
+    cwd: process.cwd(),
+    windowsHide: true,
+  })
+    .then(({ stdout }) => ({ exitCode: 0, stdout }))
+    .catch((error) => ({
+      exitCode: typeof error.code === "number" ? error.code : 1,
+      stdout: error.stdout,
+    }));
+  return {
+    ...result,
+    output: JSON.parse(result.stdout),
+  };
+}
+
+function assertOneSafeJsonObject(stdout) {
+  const trimmed = stdout.trim();
+  assert.equal(trimmed.startsWith("{"), true);
+  assert.equal(trimmed.endsWith("}"), true);
+  assert.equal(trimmed.split(/\r?\n/u).length, 1);
 }
 
 function mutateFixture(fixtures, pathSuffix, patch) {
