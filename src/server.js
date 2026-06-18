@@ -16,7 +16,19 @@ export const DEFAULT_SERVER_LIFECYCLE_POLICY = Object.freeze({
   keepAliveTimeoutMs: 5_000,
   maxRequestsPerSocket: 100,
   maxHeadersCount: 64,
+  maxConnections: 128,
+  shutdownTimeoutMs: 2_000,
 });
+export const SERVER_LIFECYCLE_POLICY_LIMITS = Object.freeze({
+  requestTimeoutMs: Object.freeze({ min: 1_000, max: 120_000 }),
+  headersTimeoutMs: Object.freeze({ min: 1_000, max: 60_000 }),
+  keepAliveTimeoutMs: Object.freeze({ min: 500, max: 30_000 }),
+  maxRequestsPerSocket: Object.freeze({ min: 1, max: 1_000 }),
+  maxHeadersCount: Object.freeze({ min: 1, max: 256 }),
+  maxConnections: Object.freeze({ min: 1, max: 1_024 }),
+  shutdownTimeoutMs: Object.freeze({ min: 100, max: 10_000 }),
+});
+const SERVER_LIFECYCLE_POLICY_SYMBOL = Symbol("voxweave.server.lifecycle_policy");
 const ALLOWED_POST_ROUTES = new Set([
   "/v1/orchestrate",
   "/orchestrate",
@@ -194,28 +206,18 @@ export function startServer({
 }
 
 export function normalizeServerLifecyclePolicy(policy = {}) {
-  return {
-    requestTimeoutMs: normalizePositiveInteger(
-      policy.requestTimeoutMs,
-      DEFAULT_SERVER_LIFECYCLE_POLICY.requestTimeoutMs
-    ),
-    headersTimeoutMs: normalizePositiveInteger(
-      policy.headersTimeoutMs,
-      DEFAULT_SERVER_LIFECYCLE_POLICY.headersTimeoutMs
-    ),
-    keepAliveTimeoutMs: normalizePositiveInteger(
-      policy.keepAliveTimeoutMs,
-      DEFAULT_SERVER_LIFECYCLE_POLICY.keepAliveTimeoutMs
-    ),
-    maxRequestsPerSocket: normalizePositiveInteger(
-      policy.maxRequestsPerSocket,
-      DEFAULT_SERVER_LIFECYCLE_POLICY.maxRequestsPerSocket
-    ),
-    maxHeadersCount: normalizePositiveInteger(
-      policy.maxHeadersCount,
-      DEFAULT_SERVER_LIFECYCLE_POLICY.maxHeadersCount
-    ),
+  assertServerLifecyclePolicyObject(policy);
+  const normalized = {
+    requestTimeoutMs: normalizeBoundedPolicyInteger(policy, "requestTimeoutMs"),
+    headersTimeoutMs: normalizeBoundedPolicyInteger(policy, "headersTimeoutMs"),
+    keepAliveTimeoutMs: normalizeBoundedPolicyInteger(policy, "keepAliveTimeoutMs"),
+    maxRequestsPerSocket: normalizeBoundedPolicyInteger(policy, "maxRequestsPerSocket"),
+    maxHeadersCount: normalizeBoundedPolicyInteger(policy, "maxHeadersCount"),
+    maxConnections: normalizeBoundedPolicyInteger(policy, "maxConnections"),
+    shutdownTimeoutMs: normalizeBoundedPolicyInteger(policy, "shutdownTimeoutMs"),
   };
+  assertServerLifecyclePolicyRelationships(normalized);
+  return Object.freeze(normalized);
 }
 
 export function applyServerLifecyclePolicy(server, policy = DEFAULT_SERVER_LIFECYCLE_POLICY) {
@@ -225,6 +227,13 @@ export function applyServerLifecyclePolicy(server, policy = DEFAULT_SERVER_LIFEC
   server.keepAliveTimeout = normalized.keepAliveTimeoutMs;
   server.maxRequestsPerSocket = normalized.maxRequestsPerSocket;
   server.maxHeadersCount = normalized.maxHeadersCount;
+  server.maxConnections = normalized.maxConnections;
+  Object.defineProperty(server, SERVER_LIFECYCLE_POLICY_SYMBOL, {
+    value: normalized,
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
   return normalized;
 }
 
@@ -241,32 +250,36 @@ export function assertContentLengthWithinLimit(request) {
 }
 
 export function buildSafeServerStartupSummary({ policy = DEFAULT_SERVER_LIFECYCLE_POLICY } = {}) {
+  const normalized = normalizeServerLifecyclePolicy(policy);
   return {
     schema: SERVER_STARTUP_SUMMARY_SCHEMA,
     status: "listening",
     bind_scope: "configured",
     lifecycle_policy_applied: true,
-    request_timeout_ms: normalizeServerLifecyclePolicy(policy).requestTimeoutMs,
-    headers_timeout_ms: normalizeServerLifecyclePolicy(policy).headersTimeoutMs,
-    keep_alive_timeout_ms: normalizeServerLifecyclePolicy(policy).keepAliveTimeoutMs,
-    max_requests_per_socket: normalizeServerLifecyclePolicy(policy).maxRequestsPerSocket,
-    max_headers_count: normalizeServerLifecyclePolicy(policy).maxHeadersCount,
+    request_timeout_ms: normalized.requestTimeoutMs,
+    headers_timeout_ms: normalized.headersTimeoutMs,
+    keep_alive_timeout_ms: normalized.keepAliveTimeoutMs,
+    max_requests_per_socket: normalized.maxRequestsPerSocket,
+    max_headers_count: normalized.maxHeadersCount,
+    max_connections: normalized.maxConnections,
+    shutdown_timeout_ms: normalized.shutdownTimeoutMs,
     runtime_readiness_claimed: false,
     production_readiness_claimed: false,
     safe_summary_only: true,
   };
 }
 
-export async function closeVoxWeaveServer(server, { timeoutMs = 1000 } = {}) {
+export async function closeVoxWeaveServer(server, { timeoutMs } = {}) {
   if (!server?.listening) {
     return buildSafeServerShutdownSummary("not_listening");
   }
+  const boundedTimeoutMs = normalizeShutdownTimeout(server, timeoutMs);
   await Promise.race([
     new Promise((resolve, reject) =>
       server.close((error) => error ? reject(error) : resolve())
     ),
     new Promise((_, reject) =>
-      setTimeout(() => reject(new VoxWeaveError("server close timeout", "server_close_timeout", 500)), timeoutMs)
+      setTimeout(() => reject(new VoxWeaveError("server close timeout", "server_close_timeout", 500)), boundedTimeoutMs)
     ),
   ]);
   return buildSafeServerShutdownSummary("closed");
@@ -365,9 +378,55 @@ async function readJson(request) {
   }
 }
 
-function normalizePositiveInteger(value, fallback) {
-  const number = Number(value);
-  return Number.isSafeInteger(number) && number > 0 ? number : fallback;
+function assertServerLifecyclePolicyObject(policy) {
+  if (policy === null || typeof policy !== "object" || Array.isArray(policy)) {
+    throwInvalidServerLifecyclePolicy();
+  }
+  const allowed = new Set(Object.keys(SERVER_LIFECYCLE_POLICY_LIMITS));
+  for (const key of Object.keys(policy)) {
+    if (!allowed.has(key)) throwInvalidServerLifecyclePolicy();
+  }
+}
+
+function normalizeBoundedPolicyInteger(policy, key) {
+  const value = policy[key];
+  if (value === undefined) return DEFAULT_SERVER_LIFECYCLE_POLICY[key];
+  const limit = SERVER_LIFECYCLE_POLICY_LIMITS[key];
+  if (
+    typeof value !== "number" ||
+    !Number.isSafeInteger(value) ||
+    value < limit.min ||
+    value > limit.max
+  ) {
+    throwInvalidServerLifecyclePolicy();
+  }
+  return value;
+}
+
+function assertServerLifecyclePolicyRelationships(policy) {
+  if (
+    policy.headersTimeoutMs > policy.requestTimeoutMs ||
+    policy.keepAliveTimeoutMs >= policy.requestTimeoutMs ||
+    policy.shutdownTimeoutMs > policy.requestTimeoutMs
+  ) {
+    throwInvalidServerLifecyclePolicy();
+  }
+}
+
+function normalizeShutdownTimeout(server, explicitTimeoutMs) {
+  if (explicitTimeoutMs !== undefined) {
+    return normalizeBoundedPolicyInteger({ shutdownTimeoutMs: explicitTimeoutMs }, "shutdownTimeoutMs");
+  }
+  return server?.[SERVER_LIFECYCLE_POLICY_SYMBOL]?.shutdownTimeoutMs
+    ?? DEFAULT_SERVER_LIFECYCLE_POLICY.shutdownTimeoutMs;
+}
+
+function throwInvalidServerLifecyclePolicy() {
+  throw new VoxWeaveError(
+    "invalid server lifecycle policy",
+    "invalid_server_lifecycle_policy",
+    500
+  );
 }
 
 function headerValues(value) {
