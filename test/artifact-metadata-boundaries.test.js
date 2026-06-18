@@ -4,6 +4,10 @@ import {
   assertAiCharacterResponseSafeSummary,
   createVoxWeaveService,
 } from "../src/orchestrator.js";
+import {
+  AI_CHARACTER_CONTRACT_FAMILY_COUNT,
+  AI_CHARACTER_CONTRACT_REGISTRY,
+} from "../src/contracts.js";
 
 const FORBIDDEN_RESPONSE_KEYS = new Set([
   "canonical_envelope",
@@ -1096,6 +1100,22 @@ test("metadata drift guard reports every expected contract presence flag for all
   assertPresenceFlags(result.response_summary.ai_character_contracts, 6);
 });
 
+test("presence flags exactly match registry", async () => {
+  const result = await makeService().orchestrate(
+    makePacket("tts", makeExpectedAllContracts()),
+    { routeKind: "tts" }
+  );
+
+  const presentFlags = AI_CHARACTER_CONTRACT_REGISTRY.map((entry) => entry.presenceFlag);
+  for (const flag of presentFlags) {
+    assert.equal(result.response_summary.ai_character_contracts[flag], true, flag);
+  }
+  assert.equal(
+    result.response_summary.ai_character_contracts.contract_presence_count,
+    presentFlags.length
+  );
+});
+
 test("metadata drift guard keeps contract presence count equal to expected payload contract count", async () => {
   const result = await makeService().orchestrate(
     makePacket("subtitle", makeExpectedAllContracts()),
@@ -1104,7 +1124,7 @@ test("metadata drift guard keeps contract presence count equal to expected paylo
 
   assert.equal(
     result.response_summary.ai_character_contracts.contract_presence_count,
-    EXPECTED_AI_CHARACTER_CONTRACTS.length
+    AI_CHARACTER_CONTRACT_FAMILY_COUNT
   );
 });
 

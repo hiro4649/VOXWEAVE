@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import {
+  AI_CHARACTER_CONTRACT_FAMILY_COUNT,
+  AI_CHARACTER_CONTRACT_REGISTRY,
+} from "../src/contracts.js";
 import { createVoxWeaveService } from "../src/orchestrator.js";
 
 const NOW = 1_777_000_000_000;
@@ -1056,15 +1060,73 @@ test("orchestrator drift guard aligns safe summary and adapter metadata for all 
     routeKind: "tts",
   });
 
-  assertOrchestratorBoundaryMatrix(result, "tts", EXPECTED_AI_CHARACTER_CONTRACTS.length);
+  assertOrchestratorBoundaryMatrix(result, "tts", AI_CHARACTER_CONTRACT_FAMILY_COUNT);
   assert.equal(
     result.ai_character_contract_summary.contract_presence_count,
-    EXPECTED_AI_CHARACTER_CONTRACTS.length
+    AI_CHARACTER_CONTRACT_FAMILY_COUNT
   );
   assert.equal(
     result.ai_character_contract_summary.contract_presence_count,
     result.response_summary.ai_character_adapter_metadata.contract_presence_count
   );
+});
+
+test("each registry family independently accepted", async () => {
+  for (const entry of AI_CHARACTER_CONTRACT_REGISTRY) {
+    const contract = EXPECTED_AI_CHARACTER_CONTRACTS.find(
+      (expected) => expected.payloadKey === entry.snakeCaseField
+    );
+    assert.ok(contract, entry.key);
+
+    const result = await makeService().orchestrate(
+      packet({ [entry.snakeCaseField]: contract.makeContract() }),
+      { routeKind: "tts" }
+    );
+
+    assertOrchestratorBoundaryMatrix(result, "tts", 1);
+    assert.equal(result.response_summary.ai_character_contracts[entry.presenceFlag], true);
+  }
+});
+
+test("all registry families together accepted", async () => {
+  const result = await makeService().orchestrate(packet(makeExpectedAllContracts()), {
+    routeKind: "tts",
+  });
+
+  assertOrchestratorBoundaryMatrix(result, "tts", AI_CHARACTER_CONTRACT_REGISTRY.length);
+});
+
+test("presence/safe summary/adapter metadata aligned", async () => {
+  const result = await makeService().orchestrate(packet(makeExpectedAllContracts()), {
+    routeKind: "tts",
+  });
+
+  assert.equal(
+    result.response_summary.ai_character_contracts.contract_presence_count,
+    AI_CHARACTER_CONTRACT_REGISTRY.length
+  );
+  assert.equal(
+    result.ai_character_contract_summary.contract_presence_count,
+    result.response_summary.ai_character_contracts.contract_presence_count
+  );
+  assert.equal(
+    result.response_summary.ai_character_adapter_metadata.contract_presence_count,
+    result.response_summary.ai_character_contracts.contract_presence_count
+  );
+});
+
+test("unknown extra registry-like payload does not silently become trusted contract", async () => {
+  const result = await makeService().orchestrate(
+    packet({
+      unknown_character_contract: {
+        schema: "voxweave_unknown_character_contract_v1",
+        safe_summary_only: true,
+      },
+    }),
+    { routeKind: "tts" }
+  );
+
+  assertOrchestratorBoundaryMatrix(result, "tts", 0);
 });
 
 test("orchestrator drift guard keeps cache hit metadata aligned for all expected contracts", async () => {

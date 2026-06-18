@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  AI_CHARACTER_CONTRACT_FAMILY_COUNT,
+  AI_CHARACTER_CONTRACT_REGISTRY,
   assertSafeResponse,
   AVATAR_FEEDBACK_CONTRACT_SCHEMA,
   CHARACTER_IDENTITY_CONTRACT_SCHEMA,
   clamp,
+  extractAiCharacterContracts,
   extractAvatarFeedbackContract,
   extractCharacterIdentityContract,
   extractHumanOversightConsentContract,
@@ -2085,6 +2088,71 @@ test("AI character contract drift guard rejects unsafe fixture for every expecte
   }
 });
 
+test("registry contains exactly six families", () => {
+  assert.equal(AI_CHARACTER_CONTRACT_REGISTRY.length, 6);
+  assert.equal(AI_CHARACTER_CONTRACT_FAMILY_COUNT, AI_CHARACTER_CONTRACT_REGISTRY.length);
+});
+
+test("registry keys unique", () => {
+  assertUnique(AI_CHARACTER_CONTRACT_REGISTRY.map((entry) => entry.key));
+});
+
+test("registry schema values unique", () => {
+  assertUnique(AI_CHARACTER_CONTRACT_REGISTRY.map((entry) => entry.schema));
+});
+
+test("registry snake/camel fields unique", () => {
+  assertUnique(AI_CHARACTER_CONTRACT_REGISTRY.map((entry) => entry.snakeCaseField));
+  assertUnique(AI_CHARACTER_CONTRACT_REGISTRY.map((entry) => entry.camelCaseField));
+});
+
+test("registry presence flags unique", () => {
+  assertUnique(AI_CHARACTER_CONTRACT_REGISTRY.map((entry) => entry.presenceFlag));
+});
+
+test("registry entries frozen", () => {
+  for (const entry of AI_CHARACTER_CONTRACT_REGISTRY) {
+    assert.equal(Object.isFrozen(entry), true);
+    assert.equal(Object.hasOwn(entry, "validate"), false);
+    assert.equal(Object.hasOwn(entry, "extract"), false);
+  }
+});
+
+test("registry array frozen", () => {
+  assert.equal(Object.isFrozen(AI_CHARACTER_CONTRACT_REGISTRY), true);
+});
+
+test("family count equals registry length", () => {
+  assert.equal(AI_CHARACTER_CONTRACT_FAMILY_COUNT, AI_CHARACTER_CONTRACT_REGISTRY.length);
+});
+
+test("validateInputPayload uses every registry family", () => {
+  for (const entry of AI_CHARACTER_CONTRACT_REGISTRY) {
+    const expected = EXPECTED_AI_CHARACTER_CONTRACTS.find(
+      (contract) => contract.key === entry.key
+    );
+    assert.ok(expected, entry.key);
+    assert.equal(
+      validateInputPayload({
+        text: "safe sample",
+        [entry.snakeCaseField]: expected.makeContract(),
+      }),
+      undefined
+    );
+  }
+});
+
+test("extractAiCharacterContracts returns normalized map for registry families", () => {
+  const contracts = extractAiCharacterContracts(makeExpectedAllContracts());
+
+  assert.deepEqual(
+    Object.keys(contracts).sort(),
+    AI_CHARACTER_CONTRACT_REGISTRY.map((entry) => entry.key).sort()
+  );
+  assert.equal(contracts.character_identity.schema, CHARACTER_IDENTITY_CONTRACT_SCHEMA);
+  assert.equal(contracts.multilingual_personalization.schema, MULTILINGUAL_PERSONALIZATION_CONTRACT_SCHEMA);
+});
+
 function makeExpectedAllContracts() {
   return Object.fromEntries(
     EXPECTED_AI_CHARACTER_CONTRACTS.map((contract) => [
@@ -2092,4 +2160,8 @@ function makeExpectedAllContracts() {
       contract.makeContract(),
     ])
   );
+}
+
+function assertUnique(values) {
+  assert.equal(new Set(values).size, values.length);
 }
