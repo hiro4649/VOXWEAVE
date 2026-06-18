@@ -5,12 +5,19 @@ import { createVoxWeaveService } from "../src/orchestrator.js";
 import {
   assertSafeServerBind,
   assertCanonicalRequestTarget,
+  assertContentLengthWithinLimit,
   classifyServerHostScope,
+  closeVoxWeaveServer,
   constantTimeCredentialMatch,
   credentialDigest,
   createVoxWeaveServer,
+  DEFAULT_SERVER_LIFECYCLE_POLICY,
   extractWriteCredential,
+  buildSafeServerStartupSummary,
+  normalizeServerLifecyclePolicy,
   parseCanonicalRequestTarget,
+  SERVER_SHUTDOWN_SUMMARY_SCHEMA,
+  SERVER_STARTUP_SUMMARY_SCHEMA,
   startServer,
 } from "../src/server.js";
 
@@ -155,6 +162,77 @@ test("startServer rejects unsafe bind before listen", () => {
   assert.throws(
     () => startServer({ host: "0.0.0.0", port: 0 }),
     safeBindErrorMatcher
+  );
+});
+
+test("server lifecycle policy applies bounded explicit defaults", async () => {
+  const server = createVoxWeaveServer();
+  try {
+    assert.equal(server.requestTimeout, DEFAULT_SERVER_LIFECYCLE_POLICY.requestTimeoutMs);
+    assert.equal(server.headersTimeout, DEFAULT_SERVER_LIFECYCLE_POLICY.headersTimeoutMs);
+    assert.equal(server.keepAliveTimeout, DEFAULT_SERVER_LIFECYCLE_POLICY.keepAliveTimeoutMs);
+    assert.equal(server.maxRequestsPerSocket, DEFAULT_SERVER_LIFECYCLE_POLICY.maxRequestsPerSocket);
+    assert.equal(server.maxHeadersCount, DEFAULT_SERVER_LIFECYCLE_POLICY.maxHeadersCount);
+  } finally {
+    await closeVoxWeaveServer(server);
+  }
+});
+
+test("server lifecycle policy normalizes invalid values", () => {
+  const policy = normalizeServerLifecyclePolicy({
+    requestTimeoutMs: -1,
+    headersTimeoutMs: 0,
+    keepAliveTimeoutMs: "bad",
+    maxRequestsPerSocket: 2,
+    maxHeadersCount: 3,
+  });
+
+  assert.equal(policy.requestTimeoutMs, DEFAULT_SERVER_LIFECYCLE_POLICY.requestTimeoutMs);
+  assert.equal(policy.headersTimeoutMs, DEFAULT_SERVER_LIFECYCLE_POLICY.headersTimeoutMs);
+  assert.equal(policy.keepAliveTimeoutMs, DEFAULT_SERVER_LIFECYCLE_POLICY.keepAliveTimeoutMs);
+  assert.equal(policy.maxRequestsPerSocket, 2);
+  assert.equal(policy.maxHeadersCount, 3);
+});
+
+test("safe startup summary excludes transport values", () => {
+  const summary = buildSafeServerStartupSummary();
+
+  assert.equal(summary.schema, SERVER_STARTUP_SUMMARY_SCHEMA);
+  assert.equal(summary.safe_summary_only, true);
+  assert.equal(summary.runtime_readiness_claimed, false);
+  assert.equal(summary.production_readiness_claimed, false);
+  assertNoForbiddenFields(summary);
+  assert.equal(JSON.stringify(summary).includes("127.0.0.1"), false);
+  assert.equal(JSON.stringify(summary).includes("9011"), false);
+});
+
+test("safe shutdown helper returns bounded safe summary", async () => {
+  const server = createVoxWeaveServer();
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+
+  const summary = await closeVoxWeaveServer(server);
+
+  assert.equal(summary.schema, SERVER_SHUTDOWN_SUMMARY_SCHEMA);
+  assert.equal(summary.status, "closed");
+  assert.equal(summary.safe_summary_only, true);
+  assert.equal(server.listening, false);
+  assertNoForbiddenFields(summary);
+});
+
+test("Content-Length early guard rejects oversized declared body safely", () => {
+  assert.doesNotThrow(() =>
+    assertContentLengthWithinLimit({ headers: { "content-length": "512000" } })
+  );
+  assert.throws(
+    () => assertContentLengthWithinLimit({ headers: { "content-length": "512001" } }),
+    (error) => {
+      assert.equal(error.code, "request_body_too_large");
+      assert.equal(error.statusCode, 413);
+      return true;
+    }
   );
 });
 

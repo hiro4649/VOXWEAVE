@@ -8,6 +8,15 @@ import { normalizeAdapterKind } from "./contracts.js";
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 9011;
 const MAX_BODY_BYTES = 512_000;
+export const SERVER_STARTUP_SUMMARY_SCHEMA = "voxweave_server_startup_summary_v1";
+export const SERVER_SHUTDOWN_SUMMARY_SCHEMA = "voxweave_server_shutdown_summary_v1";
+export const DEFAULT_SERVER_LIFECYCLE_POLICY = Object.freeze({
+  requestTimeoutMs: 30_000,
+  headersTimeoutMs: 10_000,
+  keepAliveTimeoutMs: 5_000,
+  maxRequestsPerSocket: 100,
+  maxHeadersCount: 64,
+});
 const ALLOWED_POST_ROUTES = new Set([
   "/v1/orchestrate",
   "/orchestrate",
@@ -26,9 +35,10 @@ const ALLOWED_POST_ROUTES = new Set([
 export function createVoxWeaveServer({
   service = createVoxWeaveService(),
   requiredApiKey = process.env.VOXWEAVE_API_KEY,
+  lifecyclePolicy = DEFAULT_SERVER_LIFECYCLE_POLICY,
 } = {}) {
   const writeApiKey = String(requiredApiKey ?? "").trim();
-  return createServer(async (request, response) => {
+  const server = createServer(async (request, response) => {
     try {
       const pathname = assertCanonicalRequestTarget(request.url ?? "/");
       if (request.method === "GET" && ["/health", "/v1/health"].includes(pathname)) {
@@ -45,6 +55,7 @@ export function createVoxWeaveServer({
       const routeKind = resolveRouteKind(pathname);
       if (isAllowedPostRoute(pathname)) {
         assertJsonContentType(request);
+        assertContentLengthWithinLimit(request);
         const payload = await readJson(request);
         const result = await service.orchestrate(payload, { routeKind });
         sendJson(response, 200, result);
@@ -57,6 +68,8 @@ export function createVoxWeaveServer({
       sendJson(response, safe.statusCode, safe.body);
     }
   });
+  applyServerLifecyclePolicy(server, lifecyclePolicy);
+  return server;
 }
 
 function isAllowedPostRoute(pathname) {
@@ -168,13 +181,105 @@ export function startServer({
   service = createVoxWeaveService(),
   requiredApiKey = process.env.VOXWEAVE_API_KEY,
   allowNonLoopback = process.env.VOXWEAVE_ALLOW_NON_LOOPBACK,
+  lifecyclePolicy = DEFAULT_SERVER_LIFECYCLE_POLICY,
+  logger = console,
 } = {}) {
   assertSafeServerBind({ host, requiredApiKey, allowNonLoopback });
-  const server = createVoxWeaveServer({ service, requiredApiKey });
+  const policy = normalizeServerLifecyclePolicy(lifecyclePolicy);
+  const server = createVoxWeaveServer({ service, requiredApiKey, lifecyclePolicy: policy });
   server.listen(port, host, () => {
-    console.log(`VoxWeave listening on http://${host}:${port}`);
+    logger?.log?.(JSON.stringify(buildSafeServerStartupSummary({ policy })));
   });
   return server;
+}
+
+export function normalizeServerLifecyclePolicy(policy = {}) {
+  return {
+    requestTimeoutMs: normalizePositiveInteger(
+      policy.requestTimeoutMs,
+      DEFAULT_SERVER_LIFECYCLE_POLICY.requestTimeoutMs
+    ),
+    headersTimeoutMs: normalizePositiveInteger(
+      policy.headersTimeoutMs,
+      DEFAULT_SERVER_LIFECYCLE_POLICY.headersTimeoutMs
+    ),
+    keepAliveTimeoutMs: normalizePositiveInteger(
+      policy.keepAliveTimeoutMs,
+      DEFAULT_SERVER_LIFECYCLE_POLICY.keepAliveTimeoutMs
+    ),
+    maxRequestsPerSocket: normalizePositiveInteger(
+      policy.maxRequestsPerSocket,
+      DEFAULT_SERVER_LIFECYCLE_POLICY.maxRequestsPerSocket
+    ),
+    maxHeadersCount: normalizePositiveInteger(
+      policy.maxHeadersCount,
+      DEFAULT_SERVER_LIFECYCLE_POLICY.maxHeadersCount
+    ),
+  };
+}
+
+export function applyServerLifecyclePolicy(server, policy = DEFAULT_SERVER_LIFECYCLE_POLICY) {
+  const normalized = normalizeServerLifecyclePolicy(policy);
+  server.requestTimeout = normalized.requestTimeoutMs;
+  server.headersTimeout = normalized.headersTimeoutMs;
+  server.keepAliveTimeout = normalized.keepAliveTimeoutMs;
+  server.maxRequestsPerSocket = normalized.maxRequestsPerSocket;
+  server.maxHeadersCount = normalized.maxHeadersCount;
+  return normalized;
+}
+
+export function assertContentLengthWithinLimit(request) {
+  const values = headerValues(request.headers["content-length"]);
+  if (values.length === 0) return;
+  if (values.length !== 1) {
+    throw new VoxWeaveError("request body too large", "request_body_too_large", 413);
+  }
+  const value = values[0].trim();
+  if (!/^\d+$/u.test(value) || Number(value) > MAX_BODY_BYTES) {
+    throw new VoxWeaveError("request body too large", "request_body_too_large", 413);
+  }
+}
+
+export function buildSafeServerStartupSummary({ policy = DEFAULT_SERVER_LIFECYCLE_POLICY } = {}) {
+  return {
+    schema: SERVER_STARTUP_SUMMARY_SCHEMA,
+    status: "listening",
+    bind_scope: "configured",
+    lifecycle_policy_applied: true,
+    request_timeout_ms: normalizeServerLifecyclePolicy(policy).requestTimeoutMs,
+    headers_timeout_ms: normalizeServerLifecyclePolicy(policy).headersTimeoutMs,
+    keep_alive_timeout_ms: normalizeServerLifecyclePolicy(policy).keepAliveTimeoutMs,
+    max_requests_per_socket: normalizeServerLifecyclePolicy(policy).maxRequestsPerSocket,
+    max_headers_count: normalizeServerLifecyclePolicy(policy).maxHeadersCount,
+    runtime_readiness_claimed: false,
+    production_readiness_claimed: false,
+    safe_summary_only: true,
+  };
+}
+
+export async function closeVoxWeaveServer(server, { timeoutMs = 1000 } = {}) {
+  if (!server?.listening) {
+    return buildSafeServerShutdownSummary("not_listening");
+  }
+  await Promise.race([
+    new Promise((resolve, reject) =>
+      server.close((error) => error ? reject(error) : resolve())
+    ),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new VoxWeaveError("server close timeout", "server_close_timeout", 500)), timeoutMs)
+    ),
+  ]);
+  return buildSafeServerShutdownSummary("closed");
+}
+
+function buildSafeServerShutdownSummary(status) {
+  return {
+    schema: SERVER_SHUTDOWN_SUMMARY_SCHEMA,
+    status,
+    runtime_readiness_claimed: false,
+    production_readiness_claimed: false,
+    safe_summary_only: true,
+  };
 }
 
 export function assertSafeServerBind({ host, requiredApiKey, allowNonLoopback } = {}) {
@@ -258,6 +363,17 @@ async function readJson(request) {
   } catch {
     throw new VoxWeaveError("invalid json", "invalid_json", 400);
   }
+}
+
+function normalizePositiveInteger(value, fallback) {
+  const number = Number(value);
+  return Number.isSafeInteger(number) && number > 0 ? number : fallback;
+}
+
+function headerValues(value) {
+  if (Array.isArray(value)) return value.map((item) => String(item ?? ""));
+  if (value === undefined) return [];
+  return [String(value)];
 }
 
 function resolveRouteKind(pathname) {
