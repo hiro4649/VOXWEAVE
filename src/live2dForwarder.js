@@ -1,3 +1,5 @@
+import { isIP } from "node:net";
+
 const DEFAULT_TIMEOUT_MS = 3000;
 
 export function createLive2dForwarder({
@@ -35,6 +37,7 @@ export function createLive2dForwarder({
         if (key) headers["x-api-key"] = key;
         const response = await fetchImpl(target.href, {
           method: "POST",
+          redirect: "error",
           headers,
           body: JSON.stringify(cueDelivery),
           signal: controller.signal,
@@ -95,24 +98,20 @@ function normalizeRendererEndpoint(value) {
 }
 
 function isLoopbackHost(hostname) {
-  const host = String(hostname ?? "").toLowerCase();
-  return host === "localhost" ||
-    host === "127.0.0.1" ||
-    host === "::1" ||
-    host === "[::1]" ||
-    host.startsWith("127.");
+  const host = normalizeEndpointHost(hostname);
+  if (host === "localhost") return true;
+  if (isIP(host) === 4) return host.split(".")[0] === "127";
+  if (isIP(host) === 6) return host === "::1";
+  return false;
 }
 
 function endpointScope(hostname) {
-  const host = String(hostname ?? "").toLowerCase();
-  if (
-    host === "localhost" ||
-    host === "127.0.0.1" ||
-    host === "::1" ||
-    host === "[::1]" ||
-    host.startsWith("127.")
-  ) {
-    return "loopback";
-  }
-  return "blocked";
+  return isLoopbackHost(hostname) ? "loopback" : "blocked";
+}
+
+function normalizeEndpointHost(hostname) {
+  let host = String(hostname ?? "").trim().toLowerCase();
+  if (host.endsWith(".")) host = host.slice(0, -1);
+  if (host.startsWith("[") && host.endsWith("]")) host = host.slice(1, -1);
+  return host;
 }

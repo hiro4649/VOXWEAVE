@@ -119,6 +119,7 @@ test("credentials, query, and fragment endpoints are blocked", async () => {
 test("localhost 127 and IPv6 loopback endpoints are accepted by fake fetch", async () => {
   for (const endpoint of [
     "http://localhost/live2d-engine",
+    "http://localhost./live2d-engine",
     "http://127.0.0.1/live2d-engine",
     "http://127.4.5.6/live2d-engine",
     "http://[::1]/live2d-engine",
@@ -131,6 +132,25 @@ test("localhost 127 and IPv6 loopback endpoints are accepted by fake fetch", asy
     assert.equal(summary.renderer_forward_ok, true);
     assert.equal(summary.renderer_forward_status, "accepted");
     assert.equal(calls.length, 1);
+    assertNoForbiddenSummaryFields(summary);
+  }
+});
+
+test("loopback-looking hostnames are blocked before fake fetch", async () => {
+  for (const endpoint of [
+    "http://127.example.invalid/live2d-engine",
+    "http://127.0.0.1.example.invalid/live2d-engine",
+    "http://localhost.example.invalid/live2d-engine",
+  ]) {
+    const { calls, fetchImpl } = makeFetch({ ok: true });
+    const summary = await forwardWith({ endpoint, fetchImpl });
+
+    assert.equal(summary.renderer_forward_configured, true);
+    assert.equal(summary.renderer_forward_scope, "blocked");
+    assert.equal(summary.renderer_forward_attempted, false);
+    assert.equal(summary.renderer_forward_ok, false);
+    assert.equal(summary.renderer_forward_status, "configured_unusable");
+    assert.equal(calls.length, 0);
     assertNoForbiddenSummaryFields(summary);
   }
 });
@@ -153,6 +173,17 @@ test("private IPv4 endpoints are blocked before fake fetch", async () => {
 test("public endpoint is blocked before fake fetch", async () => {
   const { calls, fetchImpl } = makeFetch();
   const summary = await forwardWith({ endpoint: "https://example.invalid/live2d-engine", fetchImpl });
+
+  assert.equal(summary.renderer_forward_scope, "blocked");
+  assert.equal(summary.renderer_forward_attempted, false);
+  assert.equal(summary.renderer_forward_status, "configured_unusable");
+  assert.equal(calls.length, 0);
+  assertNoForbiddenSummaryFields(summary);
+});
+
+test("non-loopback IPv6 endpoint is blocked before fake fetch", async () => {
+  const { calls, fetchImpl } = makeFetch();
+  const summary = await forwardWith({ endpoint: "http://[2001:db8::1]/live2d-engine", fetchImpl });
 
   assert.equal(summary.renderer_forward_scope, "blocked");
   assert.equal(summary.renderer_forward_attempted, false);
@@ -216,8 +247,22 @@ test("fake fetch receives JSON content type", async () => {
 
   assert.equal(summary.renderer_forward_status, "accepted");
   assert.equal(calls[0].options.method, "POST");
+  assert.equal(calls[0].options.redirect, "error");
   assert.equal(calls[0].options.headers["content-type"], "application/json");
   assert.equal(typeof calls[0].options.body, "string");
+  assertNoForbiddenSummaryFields(summary);
+});
+
+test("redirect failure returns renderer unreachable summary without target material", async () => {
+  const redirectError = new TypeError("fake redirect blocked");
+  const summary = await forwardWith({
+    endpoint: "http://localhost/live2d-engine",
+    fetchImpl: makeFetch({ rejectWith: redirectError }).fetchImpl,
+  });
+
+  assert.equal(summary.renderer_forward_attempted, true);
+  assert.equal(summary.renderer_forward_ok, false);
+  assert.equal(summary.renderer_forward_status, "renderer_unreachable");
   assertNoForbiddenSummaryFields(summary);
 });
 
