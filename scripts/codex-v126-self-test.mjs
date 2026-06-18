@@ -17,6 +17,14 @@ import {
 import { buildWorkerProofCapsule, validateWorkerProofCapsule } from './codex-worker-proof-capsule.mjs';
 import { buildOwnerDecisionBrief, validateOwnerDecisionBrief } from './codex-owner-decision-brief.mjs';
 
+function readText(path) {
+  return fs.readFileSync(path, 'utf8');
+}
+
+function readJson(path) {
+  return JSON.parse(readText(path));
+}
+
 function test(name, fn) {
   try {
     return { name, status: fn() ? 'pass' : 'fail', safeSummaryOnly: true };
@@ -41,6 +49,26 @@ const compatibilityCases = [
   ['v126_preserves_v119_orchestration_artifacts', () => V126_P0_ARTIFACTS.includes('codex-orchestration-capsule.safe.json')],
   ['v126_no_bridge_or_tunnel_default_on', () => !fs.existsSync('scripts/codex-mcp-bridge-daemon.mjs') && !fs.existsSync('scripts/codex-tunnel-daemon.mjs')],
   ['v126_active_authority_tuple_is_current', () => buildOrchestrationCapsule().skillContextRouting.activeAuthorityTuple.activeSelfTestSuite === 'v126'],
+  ['agents_local_task_discipline_uses_v126', () => readText('AGENTS.md').includes('Run v126 self-test and the local quality gate for harness rollout')],
+  ['agents_local_task_discipline_does_not_require_v125_as_current', () => !readText('AGENTS.md').includes('Run v125 self-test and the local quality gate for harness rollout')],
+  ['agents_authority_mentions_v126_observed_state_loop', () => {
+    const text = readText('AGENTS.md');
+    return text.includes('v1.2.6 adds observed workspace state') && text.includes('checker-builder loop');
+  }],
+  ['active_manifest_tuple_matches_v126', () => {
+    const manifest = readJson('docs/process/CODEX_HARNESS_MANIFEST.json');
+    return manifest.activeHarnessVersion === '1.2.6'
+      && manifest.activeSelfTestSuite === 'v126'
+      && manifest.activeSelfTestStatusKey === 'v126SelfTestStatus';
+  }],
+  ['active_policy_required_reads_include_v126_spec', () => {
+    const index = readJson('docs/process/CODEX_ACTIVE_POLICY_INDEX.json');
+    return index.requiredReads.includes('docs/process/CODEX_V126_SPEC.md')
+      && index.profiles.routine.requiredReads.includes('docs/process/CODEX_V126_SPEC.md');
+  }],
+  ['v125_compatibility_self_test_accepts_v126', () => readText('scripts/codex-v125-self-test.mjs').includes("['v125', 'v126'].includes")],
+  ['v124_compatibility_self_test_accepts_v126', () => readText('scripts/codex-v124-self-test.mjs').includes("['v124', 'v125', 'v126'].includes")],
+  ['v122_context_routing_accepts_v126', () => readText('scripts/codex-v122-self-test.mjs').includes("'1.2.6'")],
 ];
 
 const observedStateCases = [
