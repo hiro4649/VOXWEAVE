@@ -6880,6 +6880,9 @@ function normalizeLocalPrePrRemoteEvidenceStatuses(report, env = process.env) {
       const id = String(failure?.id || '');
       return ![...normalizedKeys].some((key) => id === `${key}.failed` || id.startsWith(`${key}.`));
     });
+    if (report.failures.length === 0 && report.targetQualityScoreStatus?.status === 'pass') {
+      report.status = 'pass';
+    }
   }
 
   return report;

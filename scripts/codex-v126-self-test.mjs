@@ -102,6 +102,7 @@ const compatibilityCases = [
       && text.includes('remoteProductBaselineStatus')
       && text.includes('manual_confirmation_required')
       && text.includes('normalizedKeys')
+      && text.includes("report.status = 'pass'")
       && text.includes('local_pre_pr_remote_evidence_not_required');
   }],
   ['same_head_remote_gate_still_required_for_pr_context', () => {
