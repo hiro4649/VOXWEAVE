@@ -26,6 +26,11 @@ import { repairPronunciationText } from "./pronunciationDictionary.js";
 import { ReactionCache } from "./cache.js";
 import { RenderGroupStore } from "./renderGroupStore.js";
 import { createLive2dForwarder } from "./live2dForwarder.js";
+import {
+  buildReactionPlanCacheKey,
+  createReactionPlanCacheEntry,
+  validateReactionPlanCacheEntry,
+} from "./reactionPlanCache.js";
 
 const ALLOWED_LIVE2D_MOTION_STYLES = new Set([
   "talk",
@@ -156,40 +161,40 @@ export function createVoxWeaveService({
       const scriptDirection = extractScriptDirection(payload, language, correctedText);
       const durationMs = extractDurationMs(payload, correctedText);
       const trace = extractTrace(payload);
-      const requestId = createRequestId(payload, now);
-      const cacheKey = hashPayload({
-        schema: payload.schema,
-        adapter_kind: adapterKind,
-        text: correctedText,
-        language,
-        speech_cue: payload.speech_cue ?? null,
-        motion_cue: payload.motion_cue ?? null,
-        ai_character_contracts: aiCharacterContracts,
-        ai_character_contract_summary: aiCharacterContractSummary,
-        ai_character_adapter_metadata: aiCharacterAdapterMetadata,
-        integration_boundary: integrationBoundary,
+      const cacheKey = buildReactionPlanCacheKey({
+        payload,
+        adapterKind,
+        correctedText,
+        dictionaryVersion: dictionary_version,
       });
       const cacheable = isCacheableReaction(correctedText);
       const cached = cacheable ? cache.get(cacheKey) : null;
       if (cached) {
-        const renderGroup = renderGroups.update({
-          adapterKind,
-          traceId: trace.traceId,
-          eventId: trace.eventId,
-          utteranceId: trace.utteranceId,
-          qualityWarningCount: cached.quality?.deductions?.length ?? 0,
-        });
-        const cachedResponse = {
-          ...cached,
-          request_id: requestId,
-          render_group: renderGroup,
-          cache: {
-            status: "hit",
-            key: cacheKey,
-          },
-        };
-        assertSafeResponse(cachedResponse);
-        return assertAiCharacterResponseSafeSummary(cachedResponse);
+        try {
+          const reactionPlan = validateReactionPlanCacheEntry(cached);
+          return await materializeReactionPlanResponse({
+            reactionPlan,
+            payload,
+            adapterKind,
+            trace,
+            cacheKey,
+            cacheStatus: "hit",
+            now,
+            live2dForwarder,
+            renderGroups,
+            aiCharacterContracts,
+            aiCharacterContractSummary,
+            aiCharacterAdapterMetadata,
+            integrationBoundary,
+          });
+        } catch (error) {
+          cache.delete(cacheKey);
+          if (error instanceof VoxWeaveError && error.code === "invalid_cache_entry") {
+            // Rebuild the plan below without exposing stale cached material.
+          } else {
+            throw error;
+          }
+        }
       }
 
       const fallbackAllowed = extractFallbackAllowed(payload);
@@ -211,6 +216,7 @@ export function createVoxWeaveService({
         payload,
       });
       const mouthCues = buildMouthCues({ text: correctedText, durationMs });
+      const requestId = createRequestId(payload, now);
       const live2dCue = buildLive2dCue({
         payload,
         durationMs,
@@ -233,128 +239,38 @@ export function createVoxWeaveService({
         mouthCues,
         live2dCue,
       });
-      const artifact = buildAdapterArtifact({
-        adapterKind,
-        requestId,
-        mockTts,
-        subtitleTiming,
-        live2dCue,
-        localeStatus,
-        aiCharacterContracts,
-        aiCharacterAdapterMetadata,
+      const reactionPlan = createReactionPlanCacheEntry({
+        corrected_text: correctedText,
+        repairs,
+        dictionary_version,
+        language,
+        locale_status: localeStatus,
+        script_direction: scriptDirection,
+        duration_ms: durationMs,
+        prosody,
+        reading_plan: readingPlan,
+        subtitle_timing: subtitleTiming,
+        mouth_cues: mouthCues,
+        live2d_cue_template: stripLive2dCueRequestIdentity(live2dCue),
+        quality,
       });
-      const live2dCueDelivery = {
-        schema: LIVE2D_RENDERER_DELIVERY_SCHEMA,
-        cue: live2dCue,
-        boundary_policy: {
-          renderer_cue_only: true,
-          safe_transport_only: true,
-          file_refs_summary: true,
-          ai_character_contract_adapter_metadata_present:
-            aiCharacterAdapterMetadata.ai_character_contracts_present,
-          raw_ai_character_contracts_excluded: true,
-          ai_character_contract_response_safe_summary_guard: true,
-        },
-        adapter_validation_required: true,
-      };
-      const live2dForward = adapterKind === "live2d"
-        ? await live2dForwarder.forward(live2dCueDelivery)
-        : {
-            renderer_forward_configured: live2dForwarder.configured === true,
-            renderer_forward_attempted: false,
-            renderer_forward_ok: false,
-            renderer_forward_status: "not_live2d_adapter",
-          };
-      const renderGroup = renderGroups.update({
+      const response = await materializeReactionPlanResponse({
+        reactionPlan,
+        payload,
         adapterKind,
-        traceId: trace.traceId,
-        eventId: trace.eventId,
-        utteranceId: trace.utteranceId,
-        qualityWarningCount: quality.deductions.length,
-      });
-      const responseSummary = buildIrisResponseSummary({
-        requestId,
-        eventId: trace.eventId,
-        artifact,
-        durationMs,
-        mockTts,
-        mouthCues,
+        trace,
+        cacheKey,
+        cacheStatus: "miss",
+        now,
+        live2dForwarder,
+        renderGroups,
         aiCharacterContracts,
         aiCharacterContractSummary,
         aiCharacterAdapterMetadata,
-        aiCharacterResponseGuard: buildAiCharacterContractResponseGuard(),
         integrationBoundary,
       });
-
-      const response = {
-        schema: SERVICE_SCHEMA,
-        ok: true,
-        response_kind: "json",
-        request_id: requestId,
-        trace_id: trace.traceId,
-        event_id: trace.eventId,
-        utterance_id: trace.utteranceId,
-        adapter_kind: adapterKind,
-        bridge_status: "accepted",
-        artifact_kind: artifact.artifact_kind,
-        artifact_url: artifact.artifact_url,
-        duration_ms: durationMs,
-        error_kind: null,
-        sample_rate_hz: mockTts.sample_rate_hz,
-        viseme_count: mouthCues.length,
-        runtime_readiness_claimed: false,
-        ai_character_contract_summary: aiCharacterContractSummary,
-        response_summary: responseSummary,
-        pronunciation: {
-          dictionary_version,
-          corrected_text: correctedText,
-          repair_count: repairs.length,
-          repairs,
-        },
-        reading_plan: readingPlan,
-        prosody,
-        mock_tts: mockTts,
-        tts_routing: prosody.tts_routing,
-        subtitle_timing: subtitleTiming,
-        subtitle_segments: subtitleTiming.chunks,
-        mouth_cues: mouthCues,
-        live2d_cue: live2dCue,
-        live2d_cue_delivery: live2dCueDelivery,
-        live2d_forward: live2dForward,
-        quality,
-        render_group: renderGroup,
-        cache: {
-          status: "miss",
-          key: cacheKey,
-        },
-        boundary_policy: {
-          adapter_guidance_only: true,
-          no_core_envelope_returned: true,
-          authority_fields_excluded: true,
-          sensitive_values_excluded: true,
-          binary_content_excluded: true,
-          live2d_renderer_not_replaced: true,
-          iris_core_not_replaced: true,
-          ai_character_contract_response_safe_summary_guard: true,
-          raw_ai_character_contracts_excluded: true,
-          ai_character_contract_values_excluded: true,
-        },
-        adapter_validation_required: true,
-      };
-
-      assertSafeResponse(response);
-      assertAiCharacterResponseSafeSummary(response);
       if (cacheable) {
-        const cachedResponse = {
-          ...response,
-          request_id: "cached",
-          cache: {
-            status: "stored",
-            key: cacheKey,
-          },
-        };
-        assertAiCharacterResponseSafeSummary(cachedResponse);
-        cache.set(cacheKey, cachedResponse);
+        cache.set(cacheKey, reactionPlan);
       }
       return response;
     },
@@ -365,6 +281,154 @@ function createRequestId(payload, now) {
   const base = safeId(payload.trace_id ?? payload.event_id ?? "");
   const suffix = hashPayload({ payload, timeBucket: Math.floor(now() / 1000) }).slice(0, 12);
   return `voxweave-${base || "request"}-${suffix}`;
+}
+
+async function materializeReactionPlanResponse({
+  reactionPlan,
+  payload,
+  adapterKind,
+  trace,
+  cacheKey,
+  cacheStatus,
+  now,
+  live2dForwarder,
+  renderGroups,
+  aiCharacterContracts,
+  aiCharacterContractSummary,
+  aiCharacterAdapterMetadata,
+  integrationBoundary,
+}) {
+  const requestId = createRequestId(payload, now);
+  const mouthCues = structuredClone(reactionPlan.mouth_cues);
+  const subtitleTiming = structuredClone(reactionPlan.subtitle_timing);
+  const live2dCue = {
+    ...structuredClone(reactionPlan.live2d_cue_template),
+    cue_id: `live2d-cue-${safeId(requestId)}`,
+  };
+  const mockTts = buildMockTts({
+    requestId,
+    durationMs: reactionPlan.duration_ms,
+    mouthCues,
+    language: reactionPlan.language,
+    localeStatus: reactionPlan.locale_status,
+  });
+  const artifact = buildAdapterArtifact({
+    adapterKind,
+    requestId,
+    mockTts,
+    subtitleTiming,
+    live2dCue,
+    localeStatus: reactionPlan.locale_status,
+    aiCharacterContracts,
+    aiCharacterAdapterMetadata,
+  });
+  const live2dCueDelivery = {
+    schema: LIVE2D_RENDERER_DELIVERY_SCHEMA,
+    cue: live2dCue,
+    boundary_policy: {
+      renderer_cue_only: true,
+      safe_transport_only: true,
+      file_refs_summary: true,
+      ai_character_contract_adapter_metadata_present:
+        aiCharacterAdapterMetadata.ai_character_contracts_present,
+      raw_ai_character_contracts_excluded: true,
+      ai_character_contract_response_safe_summary_guard: true,
+    },
+    adapter_validation_required: true,
+  };
+  const live2dForward = adapterKind === "live2d"
+    ? await live2dForwarder.forward(live2dCueDelivery)
+    : {
+        renderer_forward_configured: live2dForwarder.configured === true,
+        renderer_forward_attempted: false,
+        renderer_forward_ok: false,
+        renderer_forward_status: "not_live2d_adapter",
+      };
+  const renderGroup = renderGroups.update({
+    adapterKind,
+    traceId: trace.traceId,
+    eventId: trace.eventId,
+    utteranceId: trace.utteranceId,
+    qualityWarningCount: reactionPlan.quality.deductions.length,
+  });
+  const responseSummary = buildIrisResponseSummary({
+    requestId,
+    eventId: trace.eventId,
+    artifact,
+    durationMs: reactionPlan.duration_ms,
+    mockTts,
+    mouthCues,
+    aiCharacterContracts,
+    aiCharacterContractSummary,
+    aiCharacterAdapterMetadata,
+    aiCharacterResponseGuard: buildAiCharacterContractResponseGuard(),
+    integrationBoundary,
+  });
+
+  const response = {
+    schema: SERVICE_SCHEMA,
+    ok: true,
+    response_kind: "json",
+    request_id: requestId,
+    trace_id: trace.traceId,
+    event_id: trace.eventId,
+    utterance_id: trace.utteranceId,
+    adapter_kind: adapterKind,
+    bridge_status: "accepted",
+    artifact_kind: artifact.artifact_kind,
+    artifact_url: artifact.artifact_url,
+    duration_ms: reactionPlan.duration_ms,
+    error_kind: null,
+    sample_rate_hz: mockTts.sample_rate_hz,
+    viseme_count: mouthCues.length,
+    runtime_readiness_claimed: false,
+    ai_character_contract_summary: aiCharacterContractSummary,
+    response_summary: responseSummary,
+    pronunciation: {
+      dictionary_version: reactionPlan.dictionary_version,
+      corrected_text: reactionPlan.corrected_text,
+      repair_count: reactionPlan.repairs.length,
+      repairs: structuredClone(reactionPlan.repairs),
+    },
+    reading_plan: structuredClone(reactionPlan.reading_plan),
+    prosody: structuredClone(reactionPlan.prosody),
+    mock_tts: mockTts,
+    tts_routing: structuredClone(reactionPlan.prosody.tts_routing),
+    subtitle_timing: subtitleTiming,
+    subtitle_segments: subtitleTiming.chunks,
+    mouth_cues: mouthCues,
+    live2d_cue: live2dCue,
+    live2d_cue_delivery: live2dCueDelivery,
+    live2d_forward: live2dForward,
+    quality: structuredClone(reactionPlan.quality),
+    render_group: renderGroup,
+    cache: {
+      status: cacheStatus,
+      key: cacheKey,
+    },
+    boundary_policy: {
+      adapter_guidance_only: true,
+      no_core_envelope_returned: true,
+      authority_fields_excluded: true,
+      sensitive_values_excluded: true,
+      binary_content_excluded: true,
+      live2d_renderer_not_replaced: true,
+      iris_core_not_replaced: true,
+      ai_character_contract_response_safe_summary_guard: true,
+      raw_ai_character_contracts_excluded: true,
+      ai_character_contract_values_excluded: true,
+    },
+    adapter_validation_required: true,
+  };
+
+  assertSafeResponse(response);
+  return assertAiCharacterResponseSafeSummary(response);
+}
+
+function stripLive2dCueRequestIdentity(live2dCue) {
+  const template = structuredClone(live2dCue);
+  delete template.cue_id;
+  return template;
 }
 
 function buildProsody(payload, hints, { fallbackAllowed, localeStatus }) {

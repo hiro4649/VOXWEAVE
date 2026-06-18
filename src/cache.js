@@ -21,6 +21,10 @@ export class ReactionCache {
     }
   }
 
+  delete(key) {
+    return this.map.delete(key);
+  }
+
   size() {
     return this.map.size;
   }

@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createVoxWeaveService } from "../src/orchestrator.js";
 import { VoxWeaveError } from "../src/errors.js";
+import {
+  createReactionPlanCacheEntry,
+  stripTopLevelRequestCorrelation,
+} from "../src/reactionPlanCache.js";
 
 const FORBIDDEN_RESPONSE_KEYS = new Set([
   "canonical_envelope",
@@ -483,6 +487,87 @@ test("cacheable neutral reaction returns miss then hit on repeated request", asy
   assert.equal(second.cache.key, first.cache.key);
   assertIntegrationBoundarySnapshot(second.response_summary.integration_boundary);
   assertNoForbiddenFields(second);
+});
+
+test("cache hit rematerializes current request-bound response values", async () => {
+  let tick = 0;
+  const service = makeService({
+    now: () => 1_777_000_000_000 + tick,
+  });
+  const firstPacket = makeTtsPacket({
+    text: "yes",
+    final_text: "yes",
+    trace_id: "trace-cache-first",
+    event_id: "event-cache-first",
+    utterance_id: "utterance-cache-first",
+  });
+  const secondPacket = makeTtsPacket({
+    text: "yes",
+    final_text: "yes",
+    trace_id: "trace-cache-second",
+    event_id: "event-cache-second",
+    utterance_id: "utterance-cache-second",
+  });
+
+  const first = await service.orchestrate(firstPacket, { routeKind: "tts" });
+  tick = 2_500;
+  const second = await service.orchestrate(secondPacket, { routeKind: "tts" });
+
+  assert.equal(first.cache.status, "miss");
+  assert.equal(second.cache.status, "hit");
+  assert.equal(second.cache.key, first.cache.key);
+  assert.notEqual(second.request_id, first.request_id);
+  assert.equal(second.trace_id, "trace-cache-second");
+  assert.equal(second.event_id, "event-cache-second");
+  assert.equal(second.utterance_id, "utterance-cache-second");
+  assert.equal(second.response_summary.request_id, second.request_id);
+  assert.equal(second.response_summary.event_id, second.event_id);
+  assert.equal(second.response_summary.artifact_url, second.artifact_url);
+  assert.equal(second.mock_tts.artifact_url, second.artifact_url);
+  assert.notEqual(second.artifact_url, first.artifact_url);
+  assert.notEqual(second.live2d_cue.cue_id, first.live2d_cue.cue_id);
+  assert.equal(second.live2d_cue_delivery.cue.cue_id, second.live2d_cue.cue_id);
+  assert.equal(second.render_group.group_id, "utterance-cache-second");
+  assertNoForbiddenFields(second);
+});
+
+test("reaction plan cache strips top-level correlation but rejects cached request values", () => {
+  const stripped = stripTopLevelRequestCorrelation({
+    trace_id: "trace-cache-strip",
+    event_id: "event-cache-strip",
+    utterance_id: "utterance-cache-strip",
+    request_id: "request-cache-strip",
+    nested: {
+      utterance_id: "semantic-nested-utterance",
+    },
+    text: "yes",
+  });
+
+  assert.equal(stripped.trace_id, undefined);
+  assert.equal(stripped.event_id, undefined);
+  assert.equal(stripped.utterance_id, undefined);
+  assert.equal(stripped.request_id, undefined);
+  assert.equal(stripped.nested.utterance_id, "semantic-nested-utterance");
+
+  assert.throws(
+    () =>
+      createReactionPlanCacheEntry({
+        corrected_text: "yes",
+        repairs: [],
+        dictionary_version: "test-dictionary",
+        language: "en",
+        locale_status: "supported",
+        script_direction: "ltr",
+        duration_ms: 500,
+        prosody: { tts_routing: {} },
+        reading_plan: {},
+        subtitle_timing: { chunks: [] },
+        mouth_cues: [],
+        live2d_cue_template: { cue_id: "request-bound-cue" },
+        quality: { deductions: [] },
+      }),
+    (error) => error?.code === "invalid_cache_entry"
+  );
 });
 
 test("strong live2d motion cue includes recovery requirement", async () => {
