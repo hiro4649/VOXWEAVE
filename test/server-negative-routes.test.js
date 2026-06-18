@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
+import { createConnection } from "node:net";
 import { test } from "node:test";
 import { createVoxWeaveService } from "../src/orchestrator.js";
 import {
   assertSafeServerBind,
   classifyServerHostScope,
+  constantTimeCredentialMatch,
+  credentialDigest,
   createVoxWeaveServer,
+  extractWriteCredential,
   startServer,
 } from "../src/server.js";
 
@@ -193,6 +197,79 @@ test("POST /v1/orchestrate rejects wrong API key with safe error", async () => {
     const response = await postJson(`${baseUrl}/v1/orchestrate`, adapterPacket(), {
       authorization: "Bearer wrong-unit-test-key",
     });
+
+    assertSafeError(response, 401, "auth_required");
+  }, { apiKey: FAKE_API_KEY });
+});
+
+test("credential helpers use fixed length digest comparison", () => {
+  const digest = credentialDigest(FAKE_API_KEY);
+
+  assert.equal(Buffer.isBuffer(digest), true);
+  assert.equal(digest.length, 32);
+  assert.equal(constantTimeCredentialMatch(FAKE_API_KEY, FAKE_API_KEY), true);
+  assert.equal(constantTimeCredentialMatch("wrong-unit-test-key", FAKE_API_KEY), false);
+  assert.equal(constantTimeCredentialMatch("", FAKE_API_KEY), false);
+  assert.equal(constantTimeCredentialMatch(FAKE_API_KEY, ""), false);
+});
+
+test("extractWriteCredential accepts exactly one supported credential source", () => {
+  assert.equal(
+    extractWriteCredential({
+      headers: { authorization: `Bearer ${FAKE_API_KEY}` },
+      rawHeaders: ["authorization", `Bearer ${FAKE_API_KEY}`],
+    }),
+    FAKE_API_KEY
+  );
+  assert.equal(
+    extractWriteCredential({
+      headers: { "x-api-key": FAKE_API_KEY },
+      rawHeaders: ["x-api-key", FAKE_API_KEY],
+    }),
+    FAKE_API_KEY
+  );
+  assert.throws(
+    () =>
+      extractWriteCredential({
+        headers: { authorization: `Bearer ${FAKE_API_KEY}`, "x-api-key": FAKE_API_KEY },
+        rawHeaders: ["authorization", `Bearer ${FAKE_API_KEY}`, "x-api-key", FAKE_API_KEY],
+      }),
+    safeAuthErrorMatcher
+  );
+});
+
+test("POST /v1/orchestrate rejects malformed bearer credential safely", async () => {
+  await withRouteServer(async (baseUrl) => {
+    const response = await postJson(`${baseUrl}/v1/orchestrate`, adapterPacket(), {
+      authorization: `Bearer ${FAKE_API_KEY} extra`,
+    });
+
+    assertSafeError(response, 401, "auth_required");
+  }, { apiKey: FAKE_API_KEY });
+});
+
+test("POST /v1/orchestrate rejects multiple credential sources safely", async () => {
+  await withRouteServer(async (baseUrl) => {
+    const response = await postJson(`${baseUrl}/v1/orchestrate`, adapterPacket(), {
+      authorization: `Bearer ${FAKE_API_KEY}`,
+      "x-api-key": FAKE_API_KEY,
+    });
+
+    assertSafeError(response, 401, "auth_required");
+  }, { apiKey: FAKE_API_KEY });
+});
+
+test("POST /v1/orchestrate rejects duplicate authorization header safely", async () => {
+  await withRouteServer(async (baseUrl) => {
+    const response = await postRawJsonWithDuplicateHeader(baseUrl, "Authorization");
+
+    assertSafeError(response, 401, "auth_required");
+  }, { apiKey: FAKE_API_KEY });
+});
+
+test("POST /v1/orchestrate rejects duplicate x-api-key header safely", async () => {
+  await withRouteServer(async (baseUrl) => {
+    const response = await postRawJsonWithDuplicateHeader(baseUrl, "x-api-key");
 
     assertSafeError(response, 401, "auth_required");
   }, { apiKey: FAKE_API_KEY });
@@ -544,6 +621,97 @@ function safeBindErrorMatcher(error) {
   assert.equal(String(error.message).includes("0.0.0.0"), false);
   assert.equal(String(error.message).includes(FAKE_API_KEY), false);
   return true;
+}
+
+function safeAuthErrorMatcher(error) {
+  assert.equal(error.code, "auth_required");
+  assert.equal(error.statusCode, 401);
+  assert.equal(String(error.message).includes(FAKE_API_KEY), false);
+  return true;
+}
+
+async function postRawJsonWithDuplicateHeader(baseUrl, headerName) {
+  const url = new URL(baseUrl);
+  const body = JSON.stringify(adapterPacket());
+  const rawResponse = await sendRawHttpRequest({
+    host: url.hostname,
+    port: Number(url.port),
+    requestLines: [
+      "POST /v1/orchestrate HTTP/1.1",
+      `Host: ${url.hostname}:${url.port}`,
+      "Content-Type: application/json",
+      `Content-Length: ${Buffer.byteLength(body)}`,
+      `${headerName}: ${FAKE_API_KEY}`,
+      `${headerName}: ${FAKE_API_KEY}`,
+      "Connection: close",
+      "",
+      body,
+    ],
+  });
+  return parseRawHttpJson(rawResponse);
+}
+
+async function sendRawHttpRequest({ host, port, requestLines }) {
+  return new Promise((resolve, reject) => {
+    const socket = createConnection({ host, port });
+    const chunks = [];
+    socket.setTimeout(1000, () => {
+      socket.destroy(new Error("raw_http_timeout"));
+    });
+    socket.on("connect", () => {
+      socket.write(requestLines.join("\r\n"));
+    });
+    socket.on("data", (chunk) => {
+      chunks.push(chunk);
+    });
+    socket.on("error", reject);
+    socket.on("end", () => {
+      resolve(Buffer.concat(chunks).toString("utf8"));
+    });
+  });
+}
+
+function parseRawHttpJson(rawResponse) {
+  const [headerBlock, rawBody = "{}"] = rawResponse.split("\r\n\r\n");
+  const status = Number(headerBlock.match(/^HTTP\/1\.1\s+(\d+)/u)?.[1] ?? 0);
+  const headers = Object.fromEntries(
+    headerBlock
+      .split("\r\n")
+      .slice(1)
+      .map((line) => {
+        const separator = line.indexOf(":");
+        return [
+          line.slice(0, separator).trim().toLowerCase(),
+          line.slice(separator + 1).trim(),
+        ];
+      })
+  );
+  return {
+    status,
+    headers: {
+      cacheControl: headers["cache-control"],
+      contentType: headers["content-type"],
+      nosniff: headers["x-content-type-options"],
+    },
+    body: JSON.parse(
+      headers["transfer-encoding"] === "chunked" ? decodeChunkedBody(rawBody) : rawBody
+    ),
+  };
+}
+
+function decodeChunkedBody(rawBody) {
+  let offset = 0;
+  let decoded = "";
+  while (offset < rawBody.length) {
+    const lineEnd = rawBody.indexOf("\r\n", offset);
+    if (lineEnd === -1) break;
+    const size = Number.parseInt(rawBody.slice(offset, lineEnd), 16);
+    if (!Number.isFinite(size) || size <= 0) break;
+    const chunkStart = lineEnd + 2;
+    decoded += rawBody.slice(chunkStart, chunkStart + size);
+    offset = chunkStart + size + 2;
+  }
+  return decoded || "{}";
 }
 
 function assertNoForbiddenFields(value) {
