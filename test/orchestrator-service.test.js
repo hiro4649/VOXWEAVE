@@ -624,6 +624,95 @@ test("live2d cache hit forwards current cue without caching forward side effect"
   assertNoForbiddenFields(second);
 });
 
+test("identical payloads at fixed time receive unique request ids", async () => {
+  const service = makeService();
+  const packet = makeTtsPacket({
+    text: "yes",
+    final_text: "yes",
+    trace_id: "trace-fixed-request",
+    event_id: "event-fixed-request",
+    utterance_id: "utterance-fixed-request",
+  });
+
+  const first = await service.orchestrate(packet, { routeKind: "tts" });
+  const second = await service.orchestrate(packet, { routeKind: "tts" });
+
+  assert.equal(first.cache.status, "miss");
+  assert.equal(second.cache.status, "hit");
+  assert.notEqual(second.request_id, first.request_id);
+  assert.match(first.request_id, /^voxweave-/u);
+  assert.match(second.request_id, /^voxweave-/u);
+  assert.equal(first.request_id.includes("yes"), false);
+  assert.equal(second.request_id.includes("yes"), false);
+  assertNoForbiddenFields(first);
+  assertNoForbiddenFields(second);
+});
+
+test("requests without correlation ids do not share one render group", async () => {
+  const service = makeService();
+  const tts = await service.orchestrate(
+    makeTtsPacket({
+      trace_id: "",
+      event_id: "",
+      utterance_id: "",
+    }),
+    { routeKind: "tts" }
+  );
+  const subtitle = await service.orchestrate(
+    makeSubtitlePacket({
+      trace_id: "",
+      event_id: "",
+      utterance_id: "",
+    }),
+    { routeKind: "subtitle" }
+  );
+
+  assert.notEqual(tts.render_group.group_id, subtitle.render_group.group_id);
+  assert.equal(tts.render_group.group_complete, false);
+  assert.equal(subtitle.render_group.group_complete, false);
+  assertNoForbiddenFields(tts);
+  assertNoForbiddenFields(subtitle);
+});
+
+test("explicit shared utterance correlation still completes one render group", async () => {
+  let counter = 0;
+  const service = makeService({
+    requestIdFactory: () => `voxweave-test-${++counter}`,
+  });
+  const correlation = {
+    trace_id: "trace-explicit-group",
+    event_id: "event-explicit-group",
+    utterance_id: "utterance-explicit-group",
+  };
+
+  const tts = await service.orchestrate(makeTtsPacket(correlation), { routeKind: "tts" });
+  const subtitle = await service.orchestrate(
+    makeSubtitlePacket(correlation),
+    { routeKind: "subtitle" }
+  );
+  const live2d = await service.orchestrate(makeLive2dPacket(correlation), { routeKind: "live2d" });
+
+  assert.equal(tts.render_group.group_id, "utterance-explicit-group");
+  assert.equal(subtitle.render_group.group_id, "utterance-explicit-group");
+  assert.equal(live2d.render_group.group_id, "utterance-explicit-group");
+  assert.equal(live2d.render_group.group_complete, true);
+  assert.equal(live2d.render_group.tts_received, true);
+  assert.equal(live2d.render_group.subtitle_received, true);
+  assert.equal(live2d.render_group.live2d_received, true);
+  assertNoForbiddenFields(live2d);
+});
+
+test("invalid injected request id factory output rejects safely", async () => {
+  const service = makeService({
+    requestIdFactory: () => "unsafe request id",
+  });
+
+  await assert.rejects(
+    async () => service.orchestrate(makeTtsPacket(), { routeKind: "tts" }),
+    (error) => error instanceof VoxWeaveError && error.code === "invalid_request_id"
+  );
+});
+
 test("strong live2d motion cue includes recovery requirement", async () => {
   const result = await makeService().orchestrate(
     makeLive2dPacket({
