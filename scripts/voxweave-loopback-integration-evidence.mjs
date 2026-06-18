@@ -55,6 +55,7 @@ const ALLOWED_EVIDENCE_KEYS = Object.freeze([
   "request_count",
   "failure_count",
   "primary_reason_code",
+  "evidence_fingerprint_algorithm",
   "evidence_fingerprint",
   "runtime_readiness_claimed",
   "production_readiness_claimed",
@@ -78,6 +79,8 @@ const ALLOWED_MATRIX_KEYS = Object.freeze([
   "external_network_execution",
   "real_renderer_execution",
   "raw_failure_material_excluded",
+  "evidence_fingerprint_algorithm",
+  "evidence_fingerprint",
   "runtime_readiness_claimed",
   "production_readiness_claimed",
   "safe_summary_only",
@@ -262,7 +265,58 @@ export function assertLoopbackEvidenceSafe(evidence) {
   if (evidence.safe_summary_only !== true) {
     throw new Error("unsafe_evidence_summary");
   }
+  if (
+    evidence.runtime_readiness_claimed !== false ||
+    evidence.production_readiness_claimed !== false ||
+    evidence.external_network_execution !== false ||
+    evidence.real_provider_execution !== false ||
+    evidence.real_renderer_execution !== false
+  ) {
+    throw new Error("unsafe_evidence_readiness");
+  }
   return evidence;
+}
+
+export function validateLoopbackIntegrationEvidence(evidence) {
+  if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) {
+    throw new Error("invalid_evidence_object");
+  }
+  if (evidence.schema === LOOPBACK_INTEGRATION_EVIDENCE_SCHEMA) {
+    assertLoopbackEvidenceSafe(evidence);
+  } else if (evidence.schema === LOOPBACK_INTEGRATION_FAILURE_MATRIX_SCHEMA) {
+    assertLoopbackFailureMatrixSafe(evidence);
+  } else {
+    throw new Error("invalid_evidence_schema");
+  }
+  if (evidence.evidence_fingerprint_algorithm !== "sha256") {
+    throw new Error("invalid_evidence_fingerprint_algorithm");
+  }
+  if (evidence.evidence_fingerprint !== buildLoopbackEvidenceFingerprint(evidence)) {
+    throw new Error("invalid_evidence_fingerprint");
+  }
+  return evidence;
+}
+
+export function canonicalizeLoopbackEvidence(evidence) {
+  if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) {
+    throw new Error("invalid_evidence_object");
+  }
+  const allowed = evidence.schema === LOOPBACK_INTEGRATION_FAILURE_MATRIX_SCHEMA
+    ? ALLOWED_MATRIX_KEYS
+    : ALLOWED_EVIDENCE_KEYS;
+  const canonical = {};
+  for (const key of [...allowed].sort()) {
+    if (key === "evidence_fingerprint") continue;
+    if (!Object.hasOwn(evidence, key)) throw new Error("missing_evidence_field");
+    canonical[key] = evidence[key];
+  }
+  return canonical;
+}
+
+export function buildLoopbackEvidenceFingerprint(evidence) {
+  const canonical = canonicalizeLoopbackEvidence(evidence);
+  scanEvidenceSafe(canonical);
+  return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
 }
 
 export async function runLoopbackIntegrationFailureMatrix({
@@ -310,10 +364,13 @@ export async function runLoopbackIntegrationFailureMatrix({
     external_network_execution: false,
     real_renderer_execution: false,
     raw_failure_material_excluded: true,
+    evidence_fingerprint_algorithm: "sha256",
+    evidence_fingerprint: "",
     runtime_readiness_claimed: false,
     production_readiness_claimed: false,
     safe_summary_only: true,
   };
+  matrix.evidence_fingerprint = buildLoopbackEvidenceFingerprint(matrix);
   assertLoopbackFailureMatrixSafe(matrix);
   return matrix;
 }
@@ -333,6 +390,14 @@ export function assertLoopbackFailureMatrixSafe(matrix) {
   }
   if (matrix.safe_summary_only !== true) {
     throw new Error("unsafe_matrix_summary");
+  }
+  if (
+    matrix.runtime_readiness_claimed !== false ||
+    matrix.production_readiness_claimed !== false ||
+    matrix.external_network_execution !== false ||
+    matrix.real_renderer_execution !== false
+  ) {
+    throw new Error("unsafe_matrix_readiness");
   }
   return matrix;
 }
@@ -635,18 +700,18 @@ function buildEvidence({
     request_count: requestCount,
     failure_count: failureCount,
     primary_reason_code: primaryReasonCode,
+    evidence_fingerprint_algorithm: "sha256",
     evidence_fingerprint: "",
     runtime_readiness_claimed: false,
     production_readiness_claimed: false,
     safe_summary_only: true,
   };
-  evidence.evidence_fingerprint = fingerprintEvidence(evidence);
+  evidence.evidence_fingerprint = buildLoopbackEvidenceFingerprint(evidence);
   return evidence;
 }
 
 function fingerprintEvidence(evidence) {
-  const stable = { ...evidence, evidence_fingerprint: "" };
-  return createHash("sha256").update(JSON.stringify(stable)).digest("hex").slice(0, 32);
+  return buildLoopbackEvidenceFingerprint(evidence);
 }
 
 function safeHeadSha(value) {
