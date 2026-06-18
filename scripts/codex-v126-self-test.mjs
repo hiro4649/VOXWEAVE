@@ -99,6 +99,7 @@ const compatibilityCases = [
   ['local_pre_pr_remote_evidence_missing_is_not_blocking', () => {
     const text = readText('scripts/codex-local-quality-gate.mjs');
     return text.includes('normalizeLocalPrePrRemoteEvidenceStatuses')
+      && text.includes('remoteProductBaselineStatus')
       && text.includes('local_pre_pr_remote_evidence_not_required');
   }],
   ['same_head_remote_gate_still_required_for_pr_context', () => {
