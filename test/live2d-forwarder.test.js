@@ -381,6 +381,51 @@ test("local timeout remains renderer timeout when parent signal is active", asyn
   operation.cleanup();
 });
 
+test("Live2D cancellation regression matrix distinguishes parent cancel from local renderer outcomes", async () => {
+  const accepted = await forwardWith({
+    endpoint: "http://localhost/live2d-engine",
+    fetchImpl: makeFetch({ ok: true }).fetchImpl,
+  });
+  assert.equal(accepted.renderer_forward_status, "accepted");
+  assertNoForbiddenSummaryFields(accepted);
+
+  const rejected = await forwardWith({
+    endpoint: "http://localhost/live2d-engine",
+    fetchImpl: makeFetch({ ok: false }).fetchImpl,
+  });
+  assert.equal(rejected.renderer_forward_status, "renderer_rejected");
+  assertNoForbiddenSummaryFields(rejected);
+
+  const unreachable = await forwardWith({
+    endpoint: "http://localhost/live2d-engine",
+    fetchImpl: makeFetch({ rejectWith: new Error("fake unreachable") }).fetchImpl,
+  });
+  assert.equal(unreachable.renderer_forward_status, "renderer_unreachable");
+  assertNoForbiddenSummaryFields(unreachable);
+
+  const localTimeoutError = new Error("fake local timeout");
+  localTimeoutError.name = "AbortError";
+  const localTimeout = await forwardWith({
+    endpoint: "http://localhost/live2d-engine",
+    fetchImpl: makeFetch({ rejectWith: localTimeoutError }).fetchImpl,
+  });
+  assert.equal(localTimeout.renderer_forward_status, "renderer_timeout");
+  assertNoForbiddenSummaryFields(localTimeout);
+
+  const operation = createOperationContext({ policy: { operationTimeoutMs: 1_000 } });
+  operation.abort("client_disconnect");
+  await assert.rejects(
+    async () =>
+      forwardWith({
+        endpoint: "http://localhost/live2d-engine",
+        fetchImpl: makeFetch({ ok: true }).fetchImpl,
+        signal: operation.signal,
+      }),
+    assertSafeOperationCancellation
+  );
+  operation.cleanup();
+});
+
 test("generic fetch error returns renderer unreachable summary", async () => {
   const summary = await forwardWith({
     endpoint: "http://localhost/live2d-engine",

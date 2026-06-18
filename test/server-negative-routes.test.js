@@ -420,6 +420,39 @@ test("operation policy accepts safe explicit values and rejects unsafe values", 
   }
 });
 
+test("operation policy regression matrix covers default bounds and unsafe shapes", () => {
+  const validPolicies = [
+    { name: "default", policy: {}, expectedTimeout: DEFAULT_OPERATION_POLICY.operationTimeoutMs },
+    { name: "minimum", policy: { operationTimeoutMs: 50 }, expectedTimeout: 50 },
+    { name: "maximum", policy: { operationTimeoutMs: 60_000 }, expectedTimeout: 60_000 },
+    { name: "disconnect disabled", policy: { cancelOnClientDisconnect: false }, expectedDisconnect: false },
+  ];
+
+  for (const scenario of validPolicies) {
+    const policy = normalizeOperationPolicy(scenario.policy);
+    assert.equal(Object.isFrozen(policy), true);
+    assert.equal(
+      policy.operationTimeoutMs,
+      scenario.expectedTimeout ?? DEFAULT_OPERATION_POLICY.operationTimeoutMs
+    );
+    assert.equal(
+      policy.cancelOnClientDisconnect,
+      scenario.expectedDisconnect ?? DEFAULT_OPERATION_POLICY.cancelOnClientDisconnect
+    );
+  }
+
+  for (const policy of [
+    { operationTimeoutMs: OPERATION_POLICY_LIMITS.operationTimeoutMs.min - 1 },
+    { operationTimeoutMs: OPERATION_POLICY_LIMITS.operationTimeoutMs.max + 1 },
+    { operationTimeoutMs: `${OPERATION_POLICY_LIMITS.operationTimeoutMs.min}` },
+    { operationTimeoutMs: false },
+    { cancelOnClientDisconnect: "false" },
+    { operationTimeoutMs: 1_000, unknownField: true },
+  ]) {
+    assert.throws(() => normalizeOperationPolicy(policy), operationPolicyErrorMatcher);
+  }
+});
+
 test("operation context timeout aborts with safe error and cleanup clears timer", async () => {
   let timeoutCallback;
   let cleared = false;
@@ -571,6 +604,47 @@ test("server passes operation signal to service and releases lease on operation 
     const next = await postJson(`${baseUrl}/v1/orchestrate`, adapterPacket("tts"));
     assertSafeError(next, 504, "operation_timeout");
     assert.equal(controller.snapshot().active_write_count, 0);
+  }, {
+    service,
+    writeAdmissionController: controller,
+    operationPolicy: { operationTimeoutMs: 50 },
+  });
+});
+
+test("operation timeout regression matrix returns equivalent safe bodies and restores writes", async () => {
+  const controller = createWriteAdmissionController({ maxInFlightWrites: 1 });
+  let callCount = 0;
+  const service = {
+    health: () => createVoxWeaveService().health(),
+    async orchestrate() {
+      callCount += 1;
+      await new Promise(() => {});
+    },
+  };
+
+  await withRouteServer(async (baseUrl) => {
+    const first = await postJson(`${baseUrl}/v1/orchestrate`, adapterPacket("tts"));
+    const second = await postJson(`${baseUrl}/v1/orchestrate`, adapterPacket("subtitle"));
+
+    for (const response of [first, second]) {
+      assertSafeError(response, 504, "operation_timeout");
+      const serialized = JSON.stringify(response.body);
+      assert.equal(serialized.includes("operationTimeoutMs"), false);
+      assert.equal(serialized.includes("absolute_deadline"), false);
+      assert.equal(serialized.includes("active_operation_count"), false);
+      assert.equal(serialized.includes("AbortSignal"), false);
+      assert.equal(serialized.includes(FAKE_API_KEY), false);
+      assertNoForbiddenFields(response.body);
+    }
+    assert.equal(first.body.error, second.body.error);
+    assert.equal(first.body.error_kind, second.body.error_kind);
+    assert.equal(controller.snapshot().active_write_count, 0);
+    assert.equal(callCount, 2);
+
+    const health = await fetchJson(`${baseUrl}/health`);
+    assert.equal(health.status, 200);
+    assert.equal(health.body.runtime_readiness_claimed, false);
+    assert.equal(health.body.production_readiness_claimed, false);
   }, {
     service,
     writeAdmissionController: controller,
