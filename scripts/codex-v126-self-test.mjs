@@ -87,6 +87,15 @@ const compatibilityCases = [
       && policy.targetRepoRolloutStatus === 'completed'
       && policy.sourceReleaseAuthorizesTargetRollout === false;
   }],
+  ['representative_real_pr_validation_closed', () => readJson('docs/process/CODEX_HARNESS_MANIFEST.json').representativeRealPrValidation === 'pass'],
+  ['representative_real_pr_replay_closed', () => readJson('docs/process/CODEX_HARNESS_MANIFEST.json').representativeRealPrReplay === 'pass'],
+  ['representative_live_pr_validation_closed', () => readJson('docs/process/CODEX_HARNESS_MANIFEST.json').representativeLivePrValidation === 'pass'],
+  ['synthetic_representative_validation_closed', () => readJson('docs/process/CODEX_HARNESS_MANIFEST.json').syntheticRepresentativeValidation === 'pass'],
+  ['representative_validation_uses_safe_metadata_only', () => readText('docs/process/CODEX_VOXWEAVE_V126_REPRESENTATIVE_VALIDATION_CLOSURE.md').includes('rawLogsRead: no')],
+  ['representative_validation_does_not_claim_readiness', () => {
+    const text = readText('docs/process/CODEX_VOXWEAVE_V126_REPRESENTATIVE_VALIDATION_CLOSURE.md');
+    return text.includes('runtimeReadinessClaimed: no') && text.includes('productionReadinessClaimed: no');
+  }],
 ];
 
 const observedStateCases = [
