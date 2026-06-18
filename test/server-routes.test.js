@@ -77,6 +77,7 @@ test("GET /health returns safe health shape", async () => {
       "voxweave_integration_boundary_snapshot_v1"
     );
     assert.equal(response.body.integration_boundary.runtime_readiness_claimed, false);
+    assertOperationCancellationBoundarySnapshot(response.body.integration_boundary);
     assertNoForbiddenFields(response.body);
   });
 });
@@ -93,6 +94,7 @@ test("GET /v1/health returns safe health shape", async () => {
       "voxweave_integration_boundary_snapshot_v1"
     );
     assert.equal(response.body.integration_boundary.production_readiness_claimed, false);
+    assertOperationCancellationBoundarySnapshot(response.body.integration_boundary);
     assertNoForbiddenFields(response.body);
   });
 });
@@ -109,6 +111,9 @@ test("POST /v1/orchestrate returns safe orchestration envelope", async () => {
     assert.equal(
       response.body.response_summary.integration_boundary.schema,
       "voxweave_integration_boundary_snapshot_v1"
+    );
+    assertOperationCancellationBoundarySnapshot(
+      response.body.response_summary.integration_boundary
     );
     assert.equal(response.body.runtime_readiness_claimed, false);
     assertNoForbiddenFields(response.body);
@@ -1253,6 +1258,32 @@ function assertNoForbiddenFields(value) {
       stack.push({ value: child, path: `${current.path}.${key}` });
     }
   }
+}
+
+function assertOperationCancellationBoundarySnapshot(snapshot) {
+  assert.equal(snapshot.operational_boundary.application_operation_deadline_bounded, true);
+  assert.equal(snapshot.operational_boundary.client_disconnect_cancellation_enabled, true);
+  assert.equal(snapshot.operational_boundary.server_to_service_abort_signal, true);
+  assert.equal(snapshot.operational_boundary.orchestrator_cooperative_cancellation, true);
+  assert.equal(snapshot.operational_boundary.live2d_parent_signal_propagation, true);
+  assert.equal(snapshot.operational_boundary.live2d_local_timeout_preserved, true);
+  assert.equal(snapshot.operational_boundary.parent_abort_distinguished_from_renderer_timeout, true);
+  assert.equal(snapshot.operational_boundary.cache_commit_after_cancellation_prevented, true);
+  assert.equal(snapshot.operational_boundary.render_group_commit_after_cancellation_prevented, true);
+  assert.equal(snapshot.operational_boundary.external_side_effect_rollback_guaranteed, false);
+  assert.equal(snapshot.operational_boundary.operation_timeout_safe_error, true);
+  assert.equal(snapshot.operational_boundary.operation_cancellation_safe_error, true);
+  assert.equal(snapshot.operational_boundary.operation_deadline_values_excluded, true);
+  assert.equal(snapshot.operational_boundary.active_operation_counts_excluded, true);
+
+  const serialized = JSON.stringify(snapshot);
+  assert.equal(serialized.includes("operationTimeoutMs"), false);
+  assert.equal(serialized.includes("operation_timeout_ms"), false);
+  assert.equal(serialized.includes("absolute_deadline"), false);
+  assert.equal(serialized.includes("remaining_time"), false);
+  assert.equal(serialized.includes("\"active_operation_count\":"), false);
+  assert.equal(serialized.includes("abort_reason"), false);
+  assert.equal(serialized.includes("AbortSignal"), false);
 }
 
 const LOOPBACK_EVIDENCE_KEYS = [
