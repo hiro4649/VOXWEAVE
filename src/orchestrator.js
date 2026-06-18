@@ -1,10 +1,12 @@
 import {
   AI_CHARACTER_CONTRACT_REGISTRY,
+  AI_CHARACTER_CONTRACT_FAMILY_COUNT,
   HEALTH_SCHEMA,
   LIVE2D_RENDERER_CUE_SCHEMA,
   LIVE2D_RENDERER_DELIVERY_SCHEMA,
   SERVICE_SCHEMA,
   assertSafeResponse,
+  buildIntegrationBoundarySnapshot,
   clamp,
   extractAiCharacterContracts,
   extractDurationMs,
@@ -86,6 +88,10 @@ export function createVoxWeaveService({
 } = {}) {
   return {
     health() {
+      const integrationBoundary = buildIntegrationBoundarySnapshot({
+        live2dForwarder,
+        contractRegistryFamilyCount: AI_CHARACTER_CONTRACT_FAMILY_COUNT,
+      });
       return assertSafeResponse({
         schema: HEALTH_SCHEMA,
         service: "voxweave",
@@ -113,6 +119,9 @@ export function createVoxWeaveService({
         },
         supported_adapter_kinds: ["tts", "subtitle", "live2d"],
         cache_entries: cache.size(),
+        runtime_readiness_claimed: false,
+        production_readiness_claimed: false,
+        integration_boundary: integrationBoundary,
       });
     },
 
@@ -130,6 +139,10 @@ export function createVoxWeaveService({
       const adapterKind =
         routeKind ||
         normalizeAdapterKind(payload.adapter_kind ?? payload.adapterKind ?? payload.mode);
+      const integrationBoundary = buildIntegrationBoundarySnapshot({
+        live2dForwarder,
+        contractRegistryFamilyCount: AI_CHARACTER_CONTRACT_FAMILY_COUNT,
+      });
       const aiCharacterAdapterMetadata = buildAiCharacterContractAdapterMetadata(
         aiCharacterContracts,
         aiCharacterContractSummary,
@@ -154,6 +167,7 @@ export function createVoxWeaveService({
         ai_character_contracts: aiCharacterContracts,
         ai_character_contract_summary: aiCharacterContractSummary,
         ai_character_adapter_metadata: aiCharacterAdapterMetadata,
+        integration_boundary: integrationBoundary,
       });
       const cacheable = isCacheableReaction(correctedText);
       const cached = cacheable ? cache.get(cacheKey) : null;
@@ -269,6 +283,7 @@ export function createVoxWeaveService({
         aiCharacterContractSummary,
         aiCharacterAdapterMetadata,
         aiCharacterResponseGuard: buildAiCharacterContractResponseGuard(),
+        integrationBoundary,
       });
 
       const response = {
@@ -612,6 +627,7 @@ function buildIrisResponseSummary({
   aiCharacterContractSummary,
   aiCharacterAdapterMetadata,
   aiCharacterResponseGuard,
+  integrationBoundary,
 }) {
   return {
     status: 200,
@@ -636,6 +652,7 @@ function buildIrisResponseSummary({
     ai_character_contract_summary: aiCharacterContractSummary,
     ai_character_adapter_metadata: aiCharacterAdapterMetadata,
     ai_character_contract_response_guard: aiCharacterResponseGuard,
+    integration_boundary: integrationBoundary,
   };
 }
 

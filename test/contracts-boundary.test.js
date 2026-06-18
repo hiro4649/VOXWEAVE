@@ -5,6 +5,7 @@ import {
   AI_CHARACTER_CONTRACT_REGISTRY,
   assertSafeResponse,
   AVATAR_FEEDBACK_CONTRACT_SCHEMA,
+  buildIntegrationBoundarySnapshot,
   CHARACTER_IDENTITY_CONTRACT_SCHEMA,
   clamp,
   extractAiCharacterContracts,
@@ -15,6 +16,7 @@ import {
   extractRealtimeInteractionContract,
   extractStructuredContextContract,
   HUMAN_OVERSIGHT_CONSENT_CONTRACT_SCHEMA,
+  INTEGRATION_BOUNDARY_SNAPSHOT_SCHEMA,
   IRIS_ADAPTER_PACKET_SCHEMA,
   MULTILINGUAL_PERSONALIZATION_CONTRACT_SCHEMA,
   normalizeAdapterKind,
@@ -48,6 +50,34 @@ function assertVoxWeaveError(fn, code) {
   );
 }
 
+function assertNoIntegrationTargetMaterial(value) {
+  const forbidden = new Set([
+    "endpoint",
+    "url",
+    "href",
+    "api_key",
+    "token",
+    "secret",
+    "authorization",
+    "host",
+    "port",
+    "private_path",
+  ]);
+  const stack = [value];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current || typeof current !== "object") continue;
+    if (Array.isArray(current)) {
+      for (const child of current) stack.push(child);
+      continue;
+    }
+    for (const [key, child] of Object.entries(current)) {
+      assert.equal(forbidden.has(key), false);
+      stack.push(child);
+    }
+  }
+}
+
 function minimalCharacterIdentityContract(overrides = {}) {
   return {
     schema: CHARACTER_IDENTITY_CONTRACT_SCHEMA,
@@ -61,6 +91,75 @@ function minimalCharacterIdentityContract(overrides = {}) {
     ...overrides,
   };
 }
+
+test("integration boundary snapshot schema constant is exported", () => {
+  assert.equal(
+    INTEGRATION_BOUNDARY_SNAPSHOT_SCHEMA,
+    "voxweave_integration_boundary_snapshot_v1"
+  );
+});
+
+test("buildIntegrationBoundarySnapshot returns default safe boundary state", () => {
+  const snapshot = buildIntegrationBoundarySnapshot();
+
+  assert.equal(snapshot.schema, INTEGRATION_BOUNDARY_SNAPSHOT_SCHEMA);
+  assert.equal(snapshot.integration_state, "boundary_defined_execution_unverified");
+  assert.deepEqual(snapshot.supported_adapter_kinds, ["tts", "subtitle", "live2d"]);
+  assert.equal(snapshot.contract_registry_family_count, AI_CHARACTER_CONTRACT_FAMILY_COUNT);
+  assert.equal(snapshot.server_bind_policy.default_scope, "loopback");
+  assert.equal(snapshot.server_bind_policy.non_loopback_requires_explicit_opt_in, true);
+  assert.equal(snapshot.server_bind_policy.non_loopback_requires_auth, true);
+  assert.equal(snapshot.server_bind_policy.json_write_content_type_required, true);
+  assert.equal(snapshot.tts_boundary.mode, "mock_only");
+  assert.equal(snapshot.tts_boundary.provider_connected, false);
+  assert.equal(snapshot.asr_boundary.mode, "not_connected");
+  assert.equal(snapshot.asr_boundary.provider_connected, false);
+  assert.equal(snapshot.subtitle_boundary.mode, "metadata_only");
+  assert.equal(snapshot.subtitle_boundary.renderer_connected, false);
+  assert.equal(snapshot.live2d_boundary.cue_generation_available, true);
+  assert.equal(snapshot.live2d_boundary.forwarder_configured, false);
+  assert.equal(snapshot.live2d_boundary.forwarder_scope, "not_configured");
+  assert.equal(snapshot.live2d_boundary.redirect_follow_allowed, false);
+  assert.equal(snapshot.live2d_boundary.renderer_readiness_claimed, false);
+  assert.equal(snapshot.translation_boundary.mode, "not_connected");
+  assert.equal(snapshot.translation_boundary.provider_connected, false);
+  assert.equal(snapshot.runtime_execution_required, false);
+  assert.equal(snapshot.adapter_execution_required, false);
+  assert.equal(snapshot.network_target_material_excluded, true);
+  assert.equal(snapshot.runtime_readiness_claimed, false);
+  assert.equal(snapshot.production_readiness_claimed, false);
+  assert.equal(snapshot.safe_summary_only, true);
+  assertNoIntegrationTargetMaterial(snapshot);
+  assertSafeResponse(snapshot);
+});
+
+test("buildIntegrationBoundarySnapshot exposes only forwarder configured and scope", () => {
+  const forwarder = {
+    configured: true,
+    scope: "loopback",
+    async forward() {
+      throw new Error("forward must not run");
+    },
+  };
+  const snapshot = buildIntegrationBoundarySnapshot({ live2dForwarder: forwarder });
+
+  assert.equal(snapshot.live2d_boundary.forwarder_configured, true);
+  assert.equal(snapshot.live2d_boundary.forwarder_scope, "loopback");
+  assert.equal(snapshot.live2d_boundary.redirect_follow_allowed, false);
+  assertNoIntegrationTargetMaterial(snapshot);
+});
+
+test("buildIntegrationBoundarySnapshot normalizes blocked forwarder scope", () => {
+  const snapshot = buildIntegrationBoundarySnapshot({
+    live2dForwarder: { configured: true, scope: "external" },
+    contractRegistryFamilyCount: 999,
+  });
+
+  assert.equal(snapshot.live2d_boundary.forwarder_configured, true);
+  assert.equal(snapshot.live2d_boundary.forwarder_scope, "blocked");
+  assert.equal(snapshot.contract_registry_family_count, 100);
+  assertNoIntegrationTargetMaterial(snapshot);
+});
 
 function minimalRealtimeInteractionContract(overrides = {}) {
   return {

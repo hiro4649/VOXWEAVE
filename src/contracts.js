@@ -19,6 +19,8 @@ export const AVATAR_FEEDBACK_CONTRACT_SCHEMA =
   "voxweave_avatar_feedback_contract_v1";
 export const MULTILINGUAL_PERSONALIZATION_CONTRACT_SCHEMA =
   "voxweave_multilingual_personalization_contract_v1";
+export const INTEGRATION_BOUNDARY_SNAPSHOT_SCHEMA =
+  "voxweave_integration_boundary_snapshot_v1";
 
 const ADAPTER_KINDS = new Set(["tts", "subtitle", "live2d"]);
 const MAX_TEXT_LENGTH = 4000;
@@ -965,6 +967,61 @@ export function assertSafeResponse(payload) {
   return payload;
 }
 
+export function buildIntegrationBoundarySnapshot({
+  live2dForwarder = {},
+  contractRegistryFamilyCount = AI_CHARACTER_CONTRACT_FAMILY_COUNT,
+} = {}) {
+  const forwarderConfigured = live2dForwarder.configured === true;
+  const forwarderScope = normalizeForwarderScope(
+    live2dForwarder.scope ?? (forwarderConfigured ? "blocked" : "not_configured")
+  );
+  return {
+    schema: INTEGRATION_BOUNDARY_SNAPSHOT_SCHEMA,
+    integration_state: "boundary_defined_execution_unverified",
+    supported_adapter_kinds: ["tts", "subtitle", "live2d"],
+    contract_registry_family_count: clamp(
+      Number(contractRegistryFamilyCount) || 0,
+      0,
+      100
+    ),
+    server_bind_policy: {
+      default_scope: "loopback",
+      non_loopback_requires_explicit_opt_in: true,
+      non_loopback_requires_auth: true,
+      json_write_content_type_required: true,
+    },
+    tts_boundary: {
+      mode: "mock_only",
+      provider_connected: false,
+    },
+    asr_boundary: {
+      mode: "not_connected",
+      provider_connected: false,
+    },
+    subtitle_boundary: {
+      mode: "metadata_only",
+      renderer_connected: false,
+    },
+    live2d_boundary: {
+      cue_generation_available: true,
+      forwarder_configured: forwarderConfigured,
+      forwarder_scope: forwarderScope,
+      redirect_follow_allowed: false,
+      renderer_readiness_claimed: false,
+    },
+    translation_boundary: {
+      mode: "not_connected",
+      provider_connected: false,
+    },
+    runtime_execution_required: false,
+    adapter_execution_required: false,
+    network_target_material_excluded: true,
+    runtime_readiness_claimed: false,
+    production_readiness_claimed: false,
+    safe_summary_only: true,
+  };
+}
+
 export function extractInputText(payload) {
   const text =
     payload.text ??
@@ -1421,4 +1478,11 @@ function detectLanguage(text) {
 
 function isPlainObject(value) {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function normalizeForwarderScope(value) {
+  const scope = safeText(value, 40);
+  return ["not_configured", "loopback", "blocked"].includes(scope)
+    ? scope
+    : "blocked";
 }

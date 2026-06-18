@@ -37,6 +37,11 @@ test("GET /health returns safe health shape", async () => {
     assert.equal(response.body.status, "ok");
     assert.equal(response.body.mode, "external_voice_orchestrator");
     assert.equal(response.body.boundaries.not_tts_engine, true);
+    assert.equal(
+      response.body.integration_boundary.schema,
+      "voxweave_integration_boundary_snapshot_v1"
+    );
+    assert.equal(response.body.integration_boundary.runtime_readiness_claimed, false);
     assertNoForbiddenFields(response.body);
   });
 });
@@ -48,6 +53,11 @@ test("GET /v1/health returns safe health shape", async () => {
     assert.equal(response.status, 200);
     assert.equal(response.body.status, "ok");
     assert.equal(response.body.boundaries.not_live2d_renderer, true);
+    assert.equal(
+      response.body.integration_boundary.schema,
+      "voxweave_integration_boundary_snapshot_v1"
+    );
+    assert.equal(response.body.integration_boundary.production_readiness_claimed, false);
     assertNoForbiddenFields(response.body);
   });
 });
@@ -60,6 +70,11 @@ test("POST /v1/orchestrate returns safe orchestration envelope", async () => {
     assert.equal(response.body.ok, true);
     assert.equal(response.body.schema, "voxweave_orchestration_result_v1");
     assert.equal(response.body.response_summary.ok, true);
+    assert.equal(response.body.integration_boundary, undefined);
+    assert.equal(
+      response.body.response_summary.integration_boundary.schema,
+      "voxweave_integration_boundary_snapshot_v1"
+    );
     assert.equal(response.body.runtime_readiness_claimed, false);
     assertNoForbiddenFields(response.body);
   });
