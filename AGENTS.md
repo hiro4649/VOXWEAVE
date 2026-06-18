@@ -40,9 +40,12 @@ v1.1.9 P0 artifacts and operator-visible statuses remain preserved.
 v1.2.0 adaptive routing, v1.2.1 calibration, v1.2.2 read-budget routing,
 and v1.2.3 observed evidence/decision closure remain compatibility layers.
 v1.2.4 specialist-governance fields remain compatibility layers.
-v1.2.5 adds only internal Goal Shard, Worktree Fleet, Evidence Lane,
+v1.2.5 adds internal Goal Shard, Worktree Fleet, Evidence Lane,
 Typed Monitor Inbox, Fanout Guard, and Yield fields inside the existing P0
-artifacts.
+artifacts. v1.2.6 adds observed workspace state, owner/delegated receipts,
+checker-builder loop, evidence lane state machine, context/skill/validation
+budget routing, and effectiveness fields inside existing P0 artifacts without
+expanding final authority.
 
 ## Target Footprint
 
@@ -66,7 +69,8 @@ proposal-only and owner-approval-required.
 ## Local Task Discipline
 
 Start from clean default branch or clean worktree. Preserve user changes.
-Run v125 self-test and the local quality gate for harness rollout. For product
+Run v126 self-test and the local quality gate for harness rollout. v125, v124,
+v123, and v122 self-tests are compatibility checks when relevant. For product
 work, use the repo-specific commands above and keep product evidence separate
 from harness evidence.
 <!-- CODEX_QUALITY_HARNESS_END -->
