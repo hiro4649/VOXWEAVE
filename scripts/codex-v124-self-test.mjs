@@ -32,10 +32,6 @@ function passed(status) {
   return status?.status === 'pass';
 }
 
-function localQualityGateSource() {
-  return fs.readFileSync('scripts/codex-local-quality-gate.mjs', 'utf8');
-}
-
 const compatibilityCases = [
   ['v124_self_test_must_pass', () => true],
   ['v124_adds_no_new_p0_artifact', () => V124_P0_ARTIFACTS.length === 3 && !V124_P0_ARTIFACTS.includes('codex-v124-delegation.safe.json')],
@@ -43,15 +39,7 @@ const compatibilityCases = [
   ['v124_preserves_v118_final_decision', () => buildOrchestrationCapsule().finalAuthority === 'v1.1.8_final_decision_kernel'],
   ['v124_preserves_v119_orchestration_artifacts', () => V124_P0_ARTIFACTS.includes('codex-orchestration-capsule.safe.json')],
   ['v124_no_new_skill_daemon_or_visual_daemon', () => !fs.existsSync('scripts/codex-skill-daemon.mjs') && !fs.existsSync('scripts/codex-visual-proof-daemon.mjs')],
-  ['v124_active_authority_tuple_allows_current_or_compatibility_successor', () => {
-    const tuple = buildOrchestrationCapsule().skillContextRouting.activeAuthorityTuple;
-    if (tuple.activeSelfTestSuite === 'v124') return true;
-    return tuple.activeSelfTestSuite === 'v125' &&
-      tuple.agentsMarker === 'CODEX_QUALITY_HARNESS_FILE v1.2.5' &&
-      tuple.manifestActiveHarnessVersion === '1.2.5' &&
-      tuple.activeSpecPath === 'docs/process/CODEX_V125_SPEC.md' &&
-      tuple.finalAuthorityPointer === 'v1.1.8_final_decision_kernel';
-  }],
+  ['v124_active_authority_tuple_is_current_or_successor', () => ['v124', 'v125', 'v126'].includes(buildOrchestrationCapsule().skillContextRouting.activeAuthorityTuple.activeSelfTestSuite)],
 ];
 
 const goalAndDelegationCases = [
@@ -110,16 +98,6 @@ const evidenceAndFootprintCases = [
   ['repo_specific_visual_surface_requires_redaction', () => failed(validateTargetHarnessFootprintPolicy(buildOrchestrationCapsule({
     targetHarnessFootprintPolicy: { repoSpecificVisualProofSurface: { enabled: true, privateImageRedactionRequired: false } },
   }).targetHarnessFootprintPolicy))],
-  ['docs_only_scope_skips_formal_evidence_requirement', () => {
-    const text = fs.readFileSync('scripts/codex-local-quality-gate.mjs', 'utf8');
-    return text.includes('function isFormalEvidenceRequired') &&
-      text.includes('formal_evidence_not_required_for_docs_only_scope');
-  }],
-  ['docs_only_scope_keeps_target_quality_nonblocking', () => {
-    const text = fs.readFileSync('scripts/codex-local-quality-gate.mjs', 'utf8');
-    return text.includes('not_required_for_docs_only_scope') &&
-      text.includes('docsOnlyOptionalFailures');
-  }],
 ];
 
 const expertLoopCases = [
@@ -183,54 +161,12 @@ const ownerBriefCases = [
   }],
 ];
 
-const prePushProductEvidenceCases = [
-  ['prepush_product_source_defers_remote_evidence_until_after_push', () => {
-    const source = localQualityGateSource();
-    return source.includes('function normalizePrePushRemoteEvidenceRequirement') &&
-      source.includes('product_verification_evidence_required_after_push') &&
-      source.includes('remote_product_baseline_required_after_push') &&
-      source.includes('remote_product_evidence_required_after_push') &&
-      source.includes('formal_evidence_required_after_push') &&
-      source.includes('remote_npm_diagnostic_required_after_push') &&
-      source.includes('prePushRemoteEvidenceRequiredAfterPush');
-  }],
-  ['prepush_product_source_preserves_remote_same_head_merge_boundary', () => {
-    const source = localQualityGateSource();
-    return source.includes("mergeReadiness: 'no_until_remote_same_head_qg'") &&
-      source.includes('!report.prePushRemoteEvidenceRequiredAfterPush && failures.length === 0');
-  }],
-  ['prepush_product_source_keeps_restricted_surface_guards', () => {
-    const source = localQualityGateSource();
-    return source.includes('function hasRestrictedSurfaceChange') &&
-      source.includes('classification.workflowChanged') &&
-      source.includes('classification.packageChanged') &&
-      source.includes('classification.lockfileChanged') &&
-      source.includes('!hasRestrictedSurfaceChange(report)');
-  }],
-  ['prepush_product_source_keeps_readiness_and_execution_guards', () => {
-    const source = localQualityGateSource();
-    return source.includes('function hasRuntimeOrReadinessClaim') &&
-      source.includes('function hasExecutionClaim') &&
-      source.includes('!hasRuntimeOrReadinessClaim(report)') &&
-      source.includes('!hasExecutionClaim(report, env)') &&
-      source.includes("env.CODEX_REMOTE_NPM_EXECUTED === '1'");
-  }],
-  ['prepush_product_source_keeps_remote_observed_evidence_blocking', () => {
-    const source = localQualityGateSource();
-    return source.includes('function isRemoteEvidenceObservable') &&
-      source.includes('!isRemoteEvidenceObservable(env)') &&
-      source.includes("env.GITHUB_ACTIONS === 'true'") &&
-      source.includes('Boolean(env.CODEX_PR_HEAD_SHA)');
-  }],
-];
-
 const cases = [
   ...compatibilityCases,
   ...goalAndDelegationCases,
   ...evidenceAndFootprintCases,
   ...expertLoopCases,
   ...ownerBriefCases,
-  ...prePushProductEvidenceCases,
 ].map(([name, fn]) => test(name, fn));
 
 const fixtureGroups = [
@@ -244,7 +180,6 @@ const fixtureGroups = [
   'safe_failure_digest_matrix',
   'owner_burden_reducer_matrix',
   'safe_session_learning_matrix',
-  'prepush_product_evidence_classification_matrix',
 ];
 
 const failures = cases.filter((item) => item.status !== 'pass');

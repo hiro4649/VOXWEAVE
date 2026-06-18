@@ -1,12 +1,12 @@
 {
-  "marker": "CODEX_QUALITY_HARNESS_FILE v1.2.4",
-  "harnessVersion": "1.2.4",
-  "sourceHarnessVersion": "1.2.4",
+  "marker": "CODEX_QUALITY_HARNESS_FILE v1.2.6",
+  "harnessVersion": "1.2.6",
+  "sourceHarnessVersion": "1.2.6",
   "profileTemplateVersion": "0.7.0",
   "compatibleProfileTemplateVersions": [
     "0.7.0"
   ],
-  "schemaVersion": "1.2.4",
+  "schemaVersion": "1.2.6",
   "sourceRepoMode": true,
   "genericCore": {
     "mode": "core",
@@ -1309,7 +1309,7 @@
   ],
   "targetHarnessVersion": "1.2.4",
   "evidenceSchemaVersion": 6,
-  "theme": "Goal-Scoped Delegated Autonomy and Evidence Semantics",
+  "theme": "Observed-State Bridge-Safe Loop Runtime with Context-Slim Skill and Validation Routing",
   "requiredStatuses": [
     "v110SelfTestStatus",
     "proSummaryFirstStatus",
@@ -1614,5 +1614,40 @@
     "targetRollout": "not_started",
     "finalAuthority": "v1.1.8_final_decision_kernel",
     "subtitle": "Delegate technical evaluation inside the goal scope; never create owner authority."
+  },
+  "observedStateMinimalLoopRuntime": {
+    "version": "1.2.6",
+    "name": "Observed-State Bridge-Safe Loop Runtime with Context-Slim Skill and Validation Routing",
+    "p0InternalBlocks": [
+      "Observed Workspace, Owner Receipt, and Capability Boundary",
+      "Spec-First Checker/Builder Loop and Stop Circuit",
+      "Evidence Lane State Machine and Safe Failure Capsule",
+      "Context / Skill / Validation Budget Router",
+      "Skill / Review / Product Value Effectiveness"
+    ],
+    "fields": [
+      "orchestrationCapsule.observedWorkspaceOwnerReceiptAndCapability",
+      "orchestrationCapsule.specFirstCheckerBuilderLoopAndStopCircuit",
+      "orchestrationCapsule.evidenceLaneStateMachineAndSafeFailureCapsule",
+      "orchestrationCapsule.contextSkillValidationBudgetRouter",
+      "orchestrationCapsule.skillReviewProductValueEffectiveness",
+      "workerProofCapsule.observedGitWorktreePrState",
+      "ownerDecisionBrief.ownerDecisionReceipt",
+      "ownerDecisionBrief.ownerDelegatedProcessReceipt"
+    ],
+    "p1OptionalSurfaces": [
+      "Knowledge Map Capsule",
+      "Bridge Handoff Extended Mode",
+      "Operator Output Discipline",
+      "Repo-specific Visual Proof",
+      "Safe Session Learning Proposal",
+      "Architecture Entropy Watch"
+    ],
+    "newP0Artifact": false,
+    "newTopLevelStatus": false,
+    "newSkill": false,
+    "targetRollout": "completed",
+    "finalAuthority": "v1.1.8_final_decision_kernel",
+    "subtitle": "Self-reporting becomes observed state; long autonomy uses short safe loops."
   }
 }
