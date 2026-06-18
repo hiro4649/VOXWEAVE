@@ -18,6 +18,8 @@ export const LOOPBACK_INTEGRATION_FAILURE_MATRIX_SCHEMA =
   "voxweave_loopback_integration_failure_matrix_v1";
 export const EXTERNAL_ACCEPTANCE_CANDIDATE_BUNDLE_SUMMARY_SCHEMA =
   "voxweave_external_acceptance_candidate_bundle_summary_v1";
+export const EXTERNAL_ACCEPTANCE_RECEIPT_SCHEMA =
+  "voxweave_external_acceptance_receipt_v1";
 
 const execFileAsync = promisify(execFile);
 const LOOPBACK_HOST = "127.0.0.1";
@@ -104,6 +106,33 @@ const ALLOWED_CANDIDATE_BUNDLE_KEYS = Object.freeze([
   "candidate_bundle_fingerprint_algorithm",
   "candidate_bundle_fingerprint",
 ]);
+const EXTERNAL_ACCEPTANCE_RECEIPT_FIELDS = Object.freeze([
+  "schema",
+  "recipient_project",
+  "recipient_role",
+  "candidate_bundle_version",
+  "source_main_sha",
+  "candidate_bundle_fingerprint",
+  "received_status",
+  "parsed_status",
+  "forbidden_material_absent_status",
+  "expected_schema_observed_status",
+  "raw_values_absent_status",
+  "readiness_claim_absent_status",
+  "acceptance_candidate_status",
+  "real_integration_proof_status",
+  "runtime_readiness_claimed",
+  "production_readiness_claimed",
+  "safe_summary_only",
+]);
+const RECEIPT_PASS_PENDING_STATUSES = new Set(["pass", "fail", "pending"]);
+const RECEIPT_RECEIVED_STATUSES = new Set(["received", "rejected", "pending"]);
+const RECEIPT_ACCEPTANCE_STATUSES = new Set([
+  "accepted_candidate",
+  "rejected_candidate",
+  "pending",
+]);
+const RECEIPT_REAL_PROOF_STATUSES = new Set(["no", "not_claimed"]);
 const FORBIDDEN_OUTPUT_KEYS = new Set([
   "endpoint",
   "url",
@@ -351,6 +380,86 @@ export function buildExternalAcceptanceCandidateBundleFingerprint({
   readmeText,
 }) {
   return buildCandidateBundleFingerprint({ manifest, receipts, readmeText });
+}
+
+export function validateExternalAcceptanceReceipt(receipt) {
+  if (!receipt || typeof receipt !== "object" || Array.isArray(receipt)) {
+    throw new Error("invalid_receipt_object");
+  }
+  const keys = Object.keys(receipt).sort();
+  const allowed = [...EXTERNAL_ACCEPTANCE_RECEIPT_FIELDS].sort();
+  if (JSON.stringify(keys) !== JSON.stringify(allowed)) {
+    throw new Error("invalid_receipt_fields");
+  }
+  scanExternalAcceptanceReceiptSafe(receipt);
+  if (receipt.schema !== EXTERNAL_ACCEPTANCE_RECEIPT_SCHEMA) {
+    throw new Error("invalid_receipt_schema");
+  }
+  if (!["IRIS", "LIVE2D"].includes(receipt.recipient_project)) {
+    throw new Error("invalid_receipt_recipient");
+  }
+  if (!/^[a-f0-9]{40}$/u.test(receipt.source_main_sha)) {
+    throw new Error("invalid_receipt_source_head");
+  }
+  if (!/^[a-f0-9]{64}$/u.test(receipt.candidate_bundle_fingerprint)) {
+    throw new Error("invalid_receipt_fingerprint");
+  }
+  if (!RECEIPT_RECEIVED_STATUSES.has(receipt.received_status)) {
+    throw new Error("invalid_receipt_received_status");
+  }
+  for (const key of [
+    "parsed_status",
+    "forbidden_material_absent_status",
+    "expected_schema_observed_status",
+    "raw_values_absent_status",
+    "readiness_claim_absent_status",
+  ]) {
+    if (!RECEIPT_PASS_PENDING_STATUSES.has(receipt[key])) {
+      throw new Error("invalid_receipt_safety_status");
+    }
+  }
+  if (!RECEIPT_ACCEPTANCE_STATUSES.has(receipt.acceptance_candidate_status)) {
+    throw new Error("invalid_receipt_acceptance_status");
+  }
+  if (!RECEIPT_REAL_PROOF_STATUSES.has(receipt.real_integration_proof_status)) {
+    throw new Error("invalid_receipt_real_proof_status");
+  }
+  if (
+    receipt.runtime_readiness_claimed !== false ||
+    receipt.production_readiness_claimed !== false ||
+    receipt.safe_summary_only !== true
+  ) {
+    throw new Error("unsafe_receipt_readiness");
+  }
+  if (receipt.acceptance_candidate_status === "accepted_candidate") {
+    const allSafetyPass = [
+      receipt.parsed_status,
+      receipt.forbidden_material_absent_status,
+      receipt.expected_schema_observed_status,
+      receipt.raw_values_absent_status,
+      receipt.readiness_claim_absent_status,
+    ].every((status) => status === "pass");
+    if (!allSafetyPass) throw new Error("unsafe_receipt_acceptance_status");
+    if (receipt.received_status === "pending") {
+      throw new Error("unsafe_pending_receipt_acceptance");
+    }
+  }
+  return {
+    status: "pass",
+    acceptance_candidate_status: receipt.acceptance_candidate_status,
+    recipient_project: receipt.recipient_project,
+    receipt_fingerprint: buildExternalAcceptanceReceiptFingerprint(receipt),
+  };
+}
+
+export function buildExternalAcceptanceReceiptFingerprint(receipt) {
+  const canonical = {};
+  for (const key of [...EXTERNAL_ACCEPTANCE_RECEIPT_FIELDS].sort()) {
+    if (!Object.hasOwn(receipt, key)) throw new Error("invalid_receipt_fields");
+    canonical[key] = receipt[key];
+  }
+  scanExternalAcceptanceReceiptSafe(canonical);
+  return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
 }
 
 export function assertExternalAcceptanceCandidateBundleSummarySafe(summary) {
@@ -867,6 +976,29 @@ function validateReceiptTemplate(receipt) {
   }
 }
 
+function scanExternalAcceptanceReceiptSafe(receipt) {
+  const stack = [receipt];
+  const forbiddenKeyOrValue = /(?:endpoint|url|token|secret|authorization|api_key|private_path|raw_log|raw_audio|raw_transcript|raw_payload|raw_renderer_payload|stack|error_detail)/iu;
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (typeof current === "string") {
+      if (forbiddenKeyOrValue.test(current)) throw new Error("unsafe_receipt_material");
+      if (/\bhttps?:\/\//iu.test(current)) throw new Error("unsafe_receipt_material");
+      if (/[A-Za-z]:[\\/]/u.test(current)) throw new Error("unsafe_receipt_material");
+      continue;
+    }
+    if (!current || typeof current !== "object") continue;
+    if (Array.isArray(current)) {
+      for (const child of current) stack.push(child);
+      continue;
+    }
+    for (const [key, child] of Object.entries(current)) {
+      if (forbiddenKeyOrValue.test(key)) throw new Error("unsafe_receipt_material");
+      stack.push(child);
+    }
+  }
+}
+
 function buildCandidateBundleFingerprint({ manifest, receipts, readmeText }) {
   const canonical = {
     manifest: sortObject(manifest),
@@ -972,13 +1104,40 @@ async function resolveCliHeadSha() {
 
 async function main() {
   const headSha = await resolveCliHeadSha();
-  const output = process.argv.includes("--candidate-bundle")
+  const receiptIndex = process.argv.indexOf("--validate-receipt");
+  const output = receiptIndex >= 0
+    ? await runReceiptValidationCli(process.argv[receiptIndex + 1])
+    : process.argv.includes("--candidate-bundle")
     ? await runExternalAcceptanceCandidateBundleSummary()
     : process.argv.includes("--matrix")
       ? await runLoopbackIntegrationFailureMatrix({ headSha })
       : await runLoopbackIntegrationEvidence({ headSha });
   console.log(JSON.stringify(output));
   process.exitCode = output.status === "pass" ? 0 : 1;
+}
+
+async function runReceiptValidationCli(receiptPath) {
+  try {
+    const text = await readFile(receiptPath, "utf8");
+    const receipt = JSON.parse(text);
+    const result = validateExternalAcceptanceReceipt(receipt);
+    return {
+      schema: "voxweave_external_acceptance_receipt_validation_result_v1",
+      status: "pass",
+      reason_code: "none",
+      recipient_project: result.recipient_project,
+      acceptance_candidate_status: result.acceptance_candidate_status,
+      receipt_fingerprint: result.receipt_fingerprint,
+      safe_summary_only: true,
+    };
+  } catch (error) {
+    return {
+      schema: "voxweave_external_acceptance_receipt_validation_result_v1",
+      status: "fail",
+      reason_code: safeReasonCode(error),
+      safe_summary_only: true,
+    };
+  }
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
