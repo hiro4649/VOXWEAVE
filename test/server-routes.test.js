@@ -11,8 +11,11 @@ import {
   LOOPBACK_INTEGRATION_EVIDENCE_SCHEMA,
   assertLoopbackFailureMatrixSafe,
   assertLoopbackEvidenceSafe,
+  buildLoopbackEvidenceFingerprint,
+  canonicalizeLoopbackEvidence,
   runLoopbackIntegrationFailureMatrix,
   runLoopbackIntegrationEvidence,
+  validateLoopbackIntegrationEvidence,
 } from "../scripts/voxweave-loopback-integration-evidence.mjs";
 
 const FORBIDDEN_RESPONSE_KEYS = new Set([
@@ -217,7 +220,10 @@ test("loopback evidence runner returns safe pass summary", async () => {
   assert.equal(evidence.request_count, 1);
   assert.equal(evidence.failure_count, 0);
   assert.equal(evidence.primary_reason_code, "none");
-  assert.match(evidence.evidence_fingerprint, /^[a-f0-9]{32}$/u);
+  assert.equal(evidence.evidence_fingerprint_algorithm, "sha256");
+  assert.match(evidence.evidence_fingerprint, /^[a-f0-9]{64}$/u);
+  assert.equal(evidence.evidence_fingerprint, buildLoopbackEvidenceFingerprint(evidence));
+  validateLoopbackIntegrationEvidence(evidence);
   assert.deepEqual(Object.keys(evidence).sort(), LOOPBACK_EVIDENCE_KEYS);
   assertNoForbiddenEvidenceMaterial(evidence);
   for (const entry of AI_CHARACTER_CONTRACT_REGISTRY) {
@@ -251,8 +257,65 @@ test("loopback failure matrix returns safe rollback summary", async () => {
   assert.equal(matrix.runtime_readiness_claimed, false);
   assert.equal(matrix.production_readiness_claimed, false);
   assert.equal(matrix.safe_summary_only, true);
+  assert.equal(matrix.evidence_fingerprint_algorithm, "sha256");
+  assert.match(matrix.evidence_fingerprint, /^[a-f0-9]{64}$/u);
+  assert.equal(matrix.evidence_fingerprint, buildLoopbackEvidenceFingerprint(matrix));
+  validateLoopbackIntegrationEvidence(matrix);
   assert.deepEqual(Object.keys(matrix).sort(), LOOPBACK_MATRIX_KEYS);
   assertNoForbiddenEvidenceMaterial(matrix);
+});
+
+test("loopback evidence fingerprint is deterministic and rejects unsafe summaries", async () => {
+  const first = await runLoopbackIntegrationEvidence({
+    headSha: "c".repeat(40),
+    now: () => new Date("2026-01-01T00:00:00.000Z"),
+    requestTimeoutMs: 5000,
+  });
+  const second = await runLoopbackIntegrationEvidence({
+    headSha: "c".repeat(40),
+    now: () => new Date("2026-01-01T00:00:00.000Z"),
+    requestTimeoutMs: 5000,
+  });
+  const differentHead = await runLoopbackIntegrationEvidence({
+    headSha: "d".repeat(40),
+    now: () => new Date("2026-01-01T00:00:00.000Z"),
+    requestTimeoutMs: 5000,
+  });
+
+  assert.equal(first.evidence_fingerprint, second.evidence_fingerprint);
+  assert.notEqual(first.evidence_fingerprint, differentHead.evidence_fingerprint);
+  assert.equal(JSON.stringify(canonicalizeLoopbackEvidence(first)).includes("127.0.0.1"), false);
+  assert.throws(() => validateLoopbackIntegrationEvidence({ ...first, extra: true }));
+  assert.throws(() =>
+    validateLoopbackIntegrationEvidence({
+      ...first,
+      source_head_sha: "http://example.invalid",
+      evidence_fingerprint: buildLoopbackEvidenceFingerprint({
+        ...first,
+        source_head_sha: "http://example.invalid",
+      }),
+    })
+  );
+  assert.throws(() =>
+    validateLoopbackIntegrationEvidence({
+      ...first,
+      primary_reason_code: "fake-server-key",
+      evidence_fingerprint: buildLoopbackEvidenceFingerprint({
+        ...first,
+        primary_reason_code: "fake-server-key",
+      }),
+    })
+  );
+  assert.throws(() =>
+    validateLoopbackIntegrationEvidence({
+      ...first,
+      runtime_readiness_claimed: true,
+      evidence_fingerprint: buildLoopbackEvidenceFingerprint({
+        ...first,
+        runtime_readiness_claimed: true,
+      }),
+    })
+  );
 });
 
 async function withRouteServer(callback) {
@@ -337,6 +400,7 @@ const LOOPBACK_EVIDENCE_KEYS = [
   "contract_presence_count",
   "contract_registry_status",
   "evidence_fingerprint",
+  "evidence_fingerprint_algorithm",
   "evidence_mode",
   "execution_scope",
   "external_network_execution",
@@ -375,6 +439,8 @@ const LOOPBACK_MATRIX_KEYS = [
   "all_servers_closed",
   "case_count",
   "connection_reset_case_status",
+  "evidence_fingerprint",
+  "evidence_fingerprint_algorithm",
   "evidence_mode",
   "external_network_execution",
   "failure_count",
