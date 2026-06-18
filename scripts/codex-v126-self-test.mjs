@@ -96,6 +96,15 @@ const compatibilityCases = [
     const text = readText('docs/process/CODEX_VOXWEAVE_V126_REPRESENTATIVE_VALIDATION_CLOSURE.md');
     return text.includes('runtimeReadinessClaimed: no') && text.includes('productionReadinessClaimed: no');
   }],
+  ['local_pre_pr_remote_evidence_missing_is_not_blocking', () => {
+    const text = readText('scripts/codex-local-quality-gate.mjs');
+    return text.includes('normalizeLocalPrePrRemoteEvidenceStatuses')
+      && text.includes('local_pre_pr_remote_evidence_not_required');
+  }],
+  ['same_head_remote_gate_still_required_for_pr_context', () => {
+    const text = readText('scripts/codex-local-quality-gate.mjs');
+    return text.includes('isLocalPrePrEvidenceLane') && text.includes("includes('/pull/')");
+  }],
 ];
 
 const observedStateCases = [

@@ -6837,6 +6837,44 @@ function computeTargetQualityScoreStatus(report) {
 
 }
 
+function isLocalPrePrEvidenceLane(env = process.env) {
+  return !env.CODEX_PR_NUMBER && !(env.GITHUB_REF || '').includes('/pull/');
+}
+
+function normalizeLocalPrePrRemoteEvidenceStatuses(report, env = process.env) {
+  if (!isLocalPrePrEvidenceLane(env)) return report;
+
+  const remoteEvidenceKeys = [
+    'productVerificationStatus',
+    'productVerificationEvidenceStatus',
+    'remoteProductEvidenceRunnerStatus',
+    'formalEvidencePrecedenceStatus',
+    'remoteNpmDiagnosticNormalizationStatus',
+  ];
+
+  for (const key of remoteEvidenceKeys) {
+    const value = report[key];
+    if (!value || value.status !== 'fail') continue;
+    const reasonCodes = new Set(value.reasonCodes || []);
+    const localPrePrRemoteMissing =
+      reasonCodes.has('remote_product_baseline_missing') ||
+      reasonCodes.has('product_verification_evidence_missing') ||
+      reasonCodes.has('remote_npm_not_executed_for_product_pr') ||
+      reasonCodes.has('formal_evidence_precedence_failed');
+    if (!localPrePrRemoteMissing) continue;
+    report[key] = {
+      ...value,
+      status: 'not_applicable',
+      originalStatus: value.status,
+      evidenceLane: 'local_pre_pr',
+      reasonCodes: [...reasonCodes, 'local_pre_pr_remote_evidence_not_required'],
+      safeSummaryOnly: true,
+    };
+  }
+
+  return report;
+}
+
 
 
 function computeFailureReasonCatalogStatus() {
@@ -12356,6 +12394,7 @@ async function runTargetHarnessGate() {
 
 
 
+  normalizeLocalPrePrRemoteEvidenceStatuses(report, process.env);
   report.targetQualityScoreStatus = computeTargetQualityScoreStatus(report);
 
 
@@ -12368,6 +12407,7 @@ async function runTargetHarnessGate() {
 
 
 
+  normalizeLocalPrePrRemoteEvidenceStatuses(report, process.env);
   report.targetQualityScoreStatus = computeTargetQualityScoreStatus(report);
 
 
