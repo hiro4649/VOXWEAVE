@@ -6,6 +6,7 @@ import {
   createReactionPlanCacheEntry,
   stripTopLevelRequestCorrelation,
 } from "../src/reactionPlanCache.js";
+import { createOperationContext } from "../src/operationContext.js";
 
 const FORBIDDEN_RESPONSE_KEYS = new Set([
   "canonical_envelope",
@@ -28,6 +29,68 @@ function makeService(options = {}) {
     now: () => 1_777_000_000_000,
     ...options,
   });
+}
+
+function makeSpyCache() {
+  const entries = new Map();
+  const calls = [];
+  return {
+    calls,
+    entries,
+    get(key) {
+      calls.push(["get", key]);
+      return entries.get(key) ?? null;
+    },
+    set(key, value) {
+      calls.push(["set", key]);
+      entries.set(key, structuredClone(value));
+    },
+    delete(key) {
+      calls.push(["delete", key]);
+      return entries.delete(key);
+    },
+    size() {
+      return entries.size;
+    },
+  };
+}
+
+function makeRenderGroupSpy() {
+  const calls = [];
+  return {
+    calls,
+    update(input) {
+      calls.push(structuredClone(input));
+      return {
+        schema: "voxweave_render_group_v1",
+        group_id: "spy-render-group",
+        group_complete: false,
+        tts_received: input.adapterKind === "tts",
+        subtitle_received: input.adapterKind === "subtitle",
+        live2d_received: input.adapterKind === "live2d",
+        first_audio_latency_ms: 0,
+        quality_warning_count: input.qualityWarningCount,
+      };
+    },
+  };
+}
+
+function makeDeferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((innerResolve, innerReject) => {
+    resolve = innerResolve;
+    reject = innerReject;
+  });
+  return { promise, resolve, reject };
+}
+
+function assertSafeOperationCancellation(error) {
+  assert.equal(error instanceof VoxWeaveError, true);
+  assert.equal(error.code, "operation_cancelled");
+  assert.equal(error.statusCode, 408);
+  assert.equal(String(error.message).includes("raw"), false);
+  return true;
 }
 
 function makeTtsPacket(overrides = {}) {
@@ -368,6 +431,146 @@ test("dry-run integration matrix preserves snapshot on cache hit", async () => {
   assert.equal(second.cache.status, "hit");
   assert.equal(second.cache.key, first.cache.key);
   assertDryRunIntegrationBoundary(second, 6);
+});
+
+test("pre-aborted operation signal rejects before cache forward or render group update", async () => {
+  const cache = makeSpyCache();
+  const renderGroups = makeRenderGroupSpy();
+  let forwardCount = 0;
+  const operation = createOperationContext({ policy: { operationTimeoutMs: 1_000 } });
+  operation.abort("client_disconnect");
+  const service = makeService({
+    cache,
+    renderGroups,
+    live2dForwarder: {
+      configured: true,
+      scope: "loopback",
+      async forward() {
+        forwardCount += 1;
+        return {
+          renderer_forward_configured: true,
+          renderer_forward_scope: "loopback",
+          renderer_forward_attempted: true,
+          renderer_forward_ok: true,
+          renderer_forward_status: "accepted",
+        };
+      },
+    },
+  });
+
+  await assert.rejects(
+    async () =>
+      service.orchestrate(
+        makeLive2dPacket({ text: "yes", final_text: "yes" }),
+        { routeKind: "live2d", signal: operation.signal }
+      ),
+    assertSafeOperationCancellation
+  );
+
+  assert.equal(cache.calls.length, 0);
+  assert.equal(renderGroups.calls.length, 0);
+  assert.equal(forwardCount, 0);
+  operation.cleanup();
+});
+
+test("abort during fake Live2D forward rejects operation without render or cache commit", async () => {
+  const cache = makeSpyCache();
+  const renderGroups = makeRenderGroupSpy();
+  const started = makeDeferred();
+  const operation = createOperationContext({ policy: { operationTimeoutMs: 1_000 } });
+  const service = makeService({
+    cache,
+    renderGroups,
+    live2dForwarder: {
+      configured: true,
+      scope: "loopback",
+      async forward(_cueDelivery, { signal } = {}) {
+        started.resolve(signal);
+        await new Promise((resolve) => signal.addEventListener("abort", resolve, { once: true }));
+        return {
+          renderer_forward_configured: true,
+          renderer_forward_scope: "loopback",
+          renderer_forward_attempted: true,
+          renderer_forward_ok: true,
+          renderer_forward_status: "accepted",
+        };
+      },
+    },
+  });
+  const result = service.orchestrate(
+    makeLive2dPacket({ text: "yes", final_text: "yes" }),
+    { routeKind: "live2d", signal: operation.signal }
+  );
+
+  await started.promise;
+  operation.abort("client_disconnect");
+  await assert.rejects(result, assertSafeOperationCancellation);
+
+  assert.equal(renderGroups.calls.length, 0);
+  assert.equal(cache.entries.size, 0);
+  assert.equal(cache.calls.some(([kind]) => kind === "set"), false);
+  operation.cleanup();
+});
+
+test("cancelled cache hit keeps existing cache entry and skips render update", async () => {
+  const cache = makeSpyCache();
+  const renderGroups = makeRenderGroupSpy();
+  const firstForward = async () => ({
+    renderer_forward_configured: true,
+    renderer_forward_scope: "loopback",
+    renderer_forward_attempted: true,
+    renderer_forward_ok: true,
+    renderer_forward_status: "accepted",
+  });
+  const service = makeService({
+    cache,
+    renderGroups,
+    live2dForwarder: {
+      configured: true,
+      scope: "loopback",
+      forward: firstForward,
+    },
+  });
+  const packet = makeLive2dPacket({ text: "yes", final_text: "yes" });
+  const first = await service.orchestrate(packet, { routeKind: "live2d" });
+  assert.equal(first.cache.status, "miss");
+  assert.equal(cache.entries.size, 1);
+  assert.equal(renderGroups.calls.length, 1);
+
+  const started = makeDeferred();
+  const operation = createOperationContext({ policy: { operationTimeoutMs: 1_000 } });
+  const cancellingService = makeService({
+    cache,
+    renderGroups,
+    live2dForwarder: {
+      configured: true,
+      scope: "loopback",
+      async forward(_cueDelivery, { signal } = {}) {
+        started.resolve(signal);
+        await new Promise((resolve) => signal.addEventListener("abort", resolve, { once: true }));
+        return {
+          renderer_forward_configured: true,
+          renderer_forward_scope: "loopback",
+          renderer_forward_attempted: true,
+          renderer_forward_ok: true,
+          renderer_forward_status: "accepted",
+        };
+      },
+    },
+  });
+  const second = cancellingService.orchestrate(packet, {
+    routeKind: "live2d",
+    signal: operation.signal,
+  });
+
+  await started.promise;
+  operation.abort("client_disconnect");
+  await assert.rejects(second, assertSafeOperationCancellation);
+
+  assert.equal(cache.entries.size, 1);
+  assert.equal(cache.calls.some(([kind]) => kind === "delete"), false);
+  assert.equal(renderGroups.calls.length, 1);
+  operation.cleanup();
 });
 
 test("orchestrate tts minimal safe packet returns accepted bridge output", async () => {

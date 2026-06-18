@@ -1,4 +1,5 @@
 import { isIP } from "node:net";
+import { throwIfOperationAborted } from "./operationContext.js";
 
 const DEFAULT_TIMEOUT_MS = 3000;
 
@@ -16,7 +17,8 @@ export function createLive2dForwarder({
   return {
     configured,
     scope,
-    async forward(cueDelivery) {
+    async forward(cueDelivery, { signal } = {}) {
+      throwIfOperationAborted(signal);
       if (!configured) return dryRunSummary();
       if (!target || typeof fetchImpl !== "function") {
         return {
@@ -29,7 +31,22 @@ export function createLive2dForwarder({
       }
 
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      let localTimedOut = false;
+      let parentAborted = false;
+      const onParentAbort = () => {
+        parentAborted = true;
+        controller.abort();
+      };
+      if (signal?.aborted === true) {
+        parentAborted = true;
+        controller.abort();
+      } else if (typeof signal?.addEventListener === "function") {
+        signal.addEventListener("abort", onParentAbort, { once: true });
+      }
+      const timer = setTimeout(() => {
+        localTimedOut = true;
+        controller.abort();
+      }, timeoutMs);
       try {
         const headers = {
           "content-type": "application/json",
@@ -42,6 +59,7 @@ export function createLive2dForwarder({
           body: JSON.stringify(cueDelivery),
           signal: controller.signal,
         });
+        throwIfOperationAborted(signal);
         return {
           renderer_forward_configured: true,
           renderer_forward_scope: scope,
@@ -50,16 +68,20 @@ export function createLive2dForwarder({
           renderer_forward_status: response.ok ? "accepted" : "renderer_rejected",
         };
       } catch (error) {
+        if (parentAborted || signal?.aborted === true) throwIfOperationAborted(signal);
         return {
           renderer_forward_configured: true,
           renderer_forward_scope: scope,
           renderer_forward_attempted: true,
           renderer_forward_ok: false,
           renderer_forward_status:
-            error?.name === "AbortError" ? "renderer_timeout" : "renderer_unreachable",
+            localTimedOut || error?.name === "AbortError" ? "renderer_timeout" : "renderer_unreachable",
         };
       } finally {
         clearTimeout(timer);
+        if (typeof signal?.removeEventListener === "function") {
+          signal.removeEventListener("abort", onParentAbort);
+        }
       }
     },
   };

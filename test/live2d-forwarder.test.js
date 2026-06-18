@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createLive2dForwarder } from "../src/live2dForwarder.js";
+import { VoxWeaveError } from "../src/errors.js";
+import { createOperationContext } from "../src/operationContext.js";
 
 const FORBIDDEN_SUMMARY_KEYS = new Set([
   "endpoint",
@@ -58,8 +60,26 @@ function makeFetch({ ok = true, rejectWith } = {}) {
   return { calls, fetchImpl };
 }
 
-async function forwardWith({ endpoint, apiKey, fetchImpl, timeoutMs = 25 }) {
-  return createLive2dForwarder({ endpoint, apiKey, fetchImpl, timeoutMs }).forward(SAFE_CUE);
+function makeDeferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((innerResolve, innerReject) => {
+    resolve = innerResolve;
+    reject = innerReject;
+  });
+  return { promise, resolve, reject };
+}
+
+function assertSafeOperationCancellation(error) {
+  assert.equal(error instanceof VoxWeaveError, true);
+  assert.equal(error.code, "operation_cancelled");
+  assert.equal(error.statusCode, 408);
+  assert.equal(String(error.message).includes("raw"), false);
+  return true;
+}
+
+async function forwardWith({ endpoint, apiKey, fetchImpl, timeoutMs = 25, signal }) {
+  return createLive2dForwarder({ endpoint, apiKey, fetchImpl, timeoutMs }).forward(SAFE_CUE, { signal });
 }
 
 test("no endpoint returns dry-run summary without forwarding", async () => {
@@ -295,6 +315,72 @@ test("abort error returns renderer timeout summary", async () => {
   assertNoForbiddenSummaryFields(summary);
 });
 
+test("pre-aborted parent signal rejects safely before fake fetch", async () => {
+  const { calls, fetchImpl } = makeFetch({ ok: true });
+  const operation = createOperationContext({ policy: { operationTimeoutMs: 1_000 } });
+  operation.abort("client_disconnect");
+
+  await assert.rejects(
+    async () =>
+      forwardWith({
+        endpoint: "http://localhost/live2d-engine",
+        fetchImpl,
+        signal: operation.signal,
+      }),
+    assertSafeOperationCancellation
+  );
+
+  assert.equal(calls.length, 0);
+  operation.cleanup();
+});
+
+test("parent abort during fetch rejects operation cancellation not renderer timeout", async () => {
+  const started = makeDeferred();
+  const operation = createOperationContext({ policy: { operationTimeoutMs: 1_000 } });
+  const fetchImpl = async (_target, options) => {
+    started.resolve(options.signal);
+    await new Promise((resolve) => options.signal.addEventListener("abort", resolve, { once: true }));
+    const error = new Error("fake parent abort");
+    error.name = "AbortError";
+    throw error;
+  };
+
+  const result = forwardWith({
+    endpoint: "http://localhost/live2d-engine",
+    fetchImpl,
+    signal: operation.signal,
+    timeoutMs: 500,
+  });
+  await started.promise;
+  operation.abort("client_disconnect");
+
+  await assert.rejects(result, assertSafeOperationCancellation);
+  operation.cleanup();
+});
+
+test("local timeout remains renderer timeout when parent signal is active", async () => {
+  const operation = createOperationContext({ policy: { operationTimeoutMs: 1_000 } });
+  const fetchImpl = async (_target, options) => {
+    await new Promise((resolve) => options.signal.addEventListener("abort", resolve, { once: true }));
+    const error = new Error("fake local timeout");
+    error.name = "AbortError";
+    throw error;
+  };
+
+  const summary = await forwardWith({
+    endpoint: "http://localhost/live2d-engine",
+    fetchImpl,
+    signal: operation.signal,
+    timeoutMs: 5,
+  });
+
+  assert.equal(summary.renderer_forward_attempted, true);
+  assert.equal(summary.renderer_forward_ok, false);
+  assert.equal(summary.renderer_forward_status, "renderer_timeout");
+  assertNoForbiddenSummaryFields(summary);
+  operation.cleanup();
+});
+
 test("generic fetch error returns renderer unreachable summary", async () => {
   const summary = await forwardWith({
     endpoint: "http://localhost/live2d-engine",
@@ -328,6 +414,29 @@ test("timeout timer is cleared after forward completes", async () => {
 
   assert.equal(summary.renderer_forward_status, "accepted");
   assert.equal(signal.aborted, false);
+  assertNoForbiddenSummaryFields(summary);
+});
+
+test("parent abort listener is removed after forward completes", async () => {
+  let listenerCount = 0;
+  const parentSignal = {
+    aborted: false,
+    addEventListener(event) {
+      if (event === "abort") listenerCount += 1;
+    },
+    removeEventListener(event) {
+      if (event === "abort") listenerCount -= 1;
+    },
+  };
+
+  const summary = await forwardWith({
+    endpoint: "http://localhost/live2d-engine",
+    fetchImpl: makeFetch({ ok: true }).fetchImpl,
+    signal: parentSignal,
+  });
+
+  assert.equal(summary.renderer_forward_status, "accepted");
+  assert.equal(listenerCount, 0);
   assertNoForbiddenSummaryFields(summary);
 });
 
