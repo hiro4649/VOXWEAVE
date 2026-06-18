@@ -16,6 +16,7 @@ import {
   buildSafeServerStartupSummary,
   normalizeServerLifecyclePolicy,
   parseCanonicalRequestTarget,
+  SERVER_LIFECYCLE_POLICY_LIMITS,
   SERVER_SHUTDOWN_SUMMARY_SCHEMA,
   SERVER_STARTUP_SUMMARY_SCHEMA,
   startServer,
@@ -173,25 +174,134 @@ test("server lifecycle policy applies bounded explicit defaults", async () => {
     assert.equal(server.keepAliveTimeout, DEFAULT_SERVER_LIFECYCLE_POLICY.keepAliveTimeoutMs);
     assert.equal(server.maxRequestsPerSocket, DEFAULT_SERVER_LIFECYCLE_POLICY.maxRequestsPerSocket);
     assert.equal(server.maxHeadersCount, DEFAULT_SERVER_LIFECYCLE_POLICY.maxHeadersCount);
+    assert.equal(server.maxConnections, DEFAULT_SERVER_LIFECYCLE_POLICY.maxConnections);
   } finally {
     await closeVoxWeaveServer(server);
   }
 });
 
-test("server lifecycle policy normalizes invalid values", () => {
-  const policy = normalizeServerLifecyclePolicy({
-    requestTimeoutMs: -1,
-    headersTimeoutMs: 0,
-    keepAliveTimeoutMs: "bad",
-    maxRequestsPerSocket: 2,
-    maxHeadersCount: 3,
-  });
+test("server lifecycle policy exposes exact frozen defaults in bounds", () => {
+  const policy = normalizeServerLifecyclePolicy();
 
-  assert.equal(policy.requestTimeoutMs, DEFAULT_SERVER_LIFECYCLE_POLICY.requestTimeoutMs);
-  assert.equal(policy.headersTimeoutMs, DEFAULT_SERVER_LIFECYCLE_POLICY.headersTimeoutMs);
-  assert.equal(policy.keepAliveTimeoutMs, DEFAULT_SERVER_LIFECYCLE_POLICY.keepAliveTimeoutMs);
-  assert.equal(policy.maxRequestsPerSocket, 2);
-  assert.equal(policy.maxHeadersCount, 3);
+  assert.deepEqual(Object.keys(policy), Object.keys(DEFAULT_SERVER_LIFECYCLE_POLICY));
+  assert.equal(Object.isFrozen(policy), true);
+  for (const [key, value] of Object.entries(DEFAULT_SERVER_LIFECYCLE_POLICY)) {
+    assert.equal(policy[key], value);
+    assert.equal(value >= SERVER_LIFECYCLE_POLICY_LIMITS[key].min, true);
+    assert.equal(value <= SERVER_LIFECYCLE_POLICY_LIMITS[key].max, true);
+  }
+});
+
+test("server lifecycle policy accepts explicit minimum and maximum values", () => {
+  const minimum = normalizeServerLifecyclePolicy({
+    requestTimeoutMs: 1_000,
+    headersTimeoutMs: 1_000,
+    keepAliveTimeoutMs: 500,
+    maxRequestsPerSocket: 1,
+    maxHeadersCount: 1,
+    maxConnections: 1,
+    shutdownTimeoutMs: 100,
+  });
+  assert.equal(minimum.requestTimeoutMs, 1_000);
+  assert.equal(minimum.maxConnections, 1);
+
+  const maximum = normalizeServerLifecyclePolicy({
+    requestTimeoutMs: 120_000,
+    headersTimeoutMs: 60_000,
+    keepAliveTimeoutMs: 30_000,
+    maxRequestsPerSocket: 1_000,
+    maxHeadersCount: 256,
+    maxConnections: 1_024,
+    shutdownTimeoutMs: 10_000,
+  });
+  assert.equal(maximum.requestTimeoutMs, 120_000);
+  assert.equal(maximum.maxConnections, 1_024);
+});
+
+test("server lifecycle policy rejects out of range and unsafe explicit values", () => {
+  const cases = [
+    { requestTimeoutMs: 999 },
+    { requestTimeoutMs: 120_001 },
+    { headersTimeoutMs: 999 },
+    { headersTimeoutMs: 60_001 },
+    { keepAliveTimeoutMs: 499 },
+    { keepAliveTimeoutMs: 30_001 },
+    { maxRequestsPerSocket: 0 },
+    { maxRequestsPerSocket: 1_001 },
+    { maxHeadersCount: 0 },
+    { maxHeadersCount: 257 },
+    { maxConnections: 0 },
+    { maxConnections: 1_025 },
+    { shutdownTimeoutMs: 99 },
+    { shutdownTimeoutMs: 10_001 },
+    { requestTimeoutMs: 1000.5 },
+    { requestTimeoutMs: "1000" },
+    { requestTimeoutMs: true },
+    { requestTimeoutMs: Number.MAX_SAFE_INTEGER + 1 },
+    [],
+    null,
+  ];
+
+  for (const policy of cases) {
+    assert.throws(
+      () => normalizeServerLifecyclePolicy(policy),
+      lifecyclePolicyErrorMatcher
+    );
+  }
+});
+
+test("server lifecycle policy rejects unknown fields and cross-field violations", () => {
+  const cases = [
+    { extraPolicyField: 1 },
+    { requestTimeoutMs: 1_000, headersTimeoutMs: 1_001 },
+    { requestTimeoutMs: 1_000, keepAliveTimeoutMs: 1_000 },
+    { requestTimeoutMs: 1_000, shutdownTimeoutMs: 1_001 },
+  ];
+
+  for (const policy of cases) {
+    assert.throws(
+      () => normalizeServerLifecyclePolicy(policy),
+      lifecyclePolicyErrorMatcher
+    );
+  }
+});
+
+test("create server rejects invalid lifecycle policy before returning server", () => {
+  assert.throws(
+    () => createVoxWeaveServer({ lifecyclePolicy: { requestTimeoutMs: 999 } }),
+    lifecyclePolicyErrorMatcher
+  );
+});
+
+test("create server applies maxConnections without public policy projection", async () => {
+  const server = createVoxWeaveServer({ lifecyclePolicy: { maxConnections: 7 } });
+  try {
+    assert.equal(server.maxConnections, 7);
+    assert.equal(Object.prototype.hasOwnProperty.call(server, "lifecyclePolicy"), false);
+  } finally {
+    await closeVoxWeaveServer(server);
+  }
+});
+
+test("startServer invalid lifecycle policy rejects before listen", () => {
+  assert.throws(
+    () => startServer({ lifecyclePolicy: { unknownPolicyField: 1 } }),
+    lifecyclePolicyErrorMatcher
+  );
+});
+
+test("invalid lifecycle policy error does not expose values", () => {
+  assert.throws(
+    () => normalizeServerLifecyclePolicy({ requestTimeoutMs: "1000" }),
+    (error) => {
+      assert.equal(error.code, "invalid_server_lifecycle_policy");
+      assert.equal(error.statusCode, 500);
+      assert.equal(String(error.message).includes("1000"), false);
+      assert.equal(String(error.message).includes("127.0.0.1"), false);
+      assert.equal(String(error.message).includes(FAKE_API_KEY), false);
+      return true;
+    }
+  );
 });
 
 test("safe startup summary excludes transport values", () => {
@@ -201,9 +311,12 @@ test("safe startup summary excludes transport values", () => {
   assert.equal(summary.safe_summary_only, true);
   assert.equal(summary.runtime_readiness_claimed, false);
   assert.equal(summary.production_readiness_claimed, false);
+  assert.equal(summary.max_connections, DEFAULT_SERVER_LIFECYCLE_POLICY.maxConnections);
+  assert.equal(summary.shutdown_timeout_ms, DEFAULT_SERVER_LIFECYCLE_POLICY.shutdownTimeoutMs);
   assertNoForbiddenFields(summary);
   assert.equal(JSON.stringify(summary).includes("127.0.0.1"), false);
   assert.equal(JSON.stringify(summary).includes("9011"), false);
+  assert.equal(JSON.stringify(summary).includes(FAKE_API_KEY), false);
 });
 
 test("safe shutdown helper returns bounded safe summary", async () => {
@@ -260,7 +373,7 @@ test("operational request lifecycle matrix keeps boundary decisions aligned", ()
     {
       axis: "lifecycle",
       accepted: normalizeServerLifecyclePolicy({ maxRequestsPerSocket: 2 }).maxRequestsPerSocket === 2,
-      rejected: normalizeServerLifecyclePolicy({ requestTimeoutMs: -1 }).requestTimeoutMs === -1,
+      rejected: doesNotThrowStatus(() => normalizeServerLifecyclePolicy({ requestTimeoutMs: -1 })),
     },
     {
       axis: "safe_snapshot",
@@ -790,6 +903,15 @@ function safeBindErrorMatcher(error) {
   assert.equal(error.statusCode, 500);
   assert.equal(String(error.message).includes("0.0.0.0"), false);
   assert.equal(String(error.message).includes(FAKE_API_KEY), false);
+  return true;
+}
+
+function lifecyclePolicyErrorMatcher(error) {
+  assert.equal(error.code, "invalid_server_lifecycle_policy");
+  assert.equal(error.statusCode, 500);
+  assert.equal(String(error.message).includes(FAKE_API_KEY), false);
+  assert.equal(String(error.message).includes("127.0.0.1"), false);
+  assert.equal(String(error.message).includes("9011"), false);
   return true;
 }
 
