@@ -553,6 +553,94 @@ test("external receipt validator CLI emits safe JSON without receipt path", asyn
   }
 });
 
+test("external acceptance candidate dry-run matrix composes safe local evidence only", async () => {
+  const manifest = await readExternalAcceptanceFixture(
+    "voxweave-external-acceptance-candidate.manifest.safe.json"
+  );
+  const irisTemplate = await readExternalAcceptanceFixture("iris-team-receipt-template.safe.json");
+  const live2dTemplate = await readExternalAcceptanceFixture(
+    "live2d-team-receipt-template.safe.json"
+  );
+  const readmeText = await readExternalAcceptanceText("README.safe.md");
+
+  const bundle = await runExternalAcceptanceCandidateBundleSummary({
+    manifest,
+    receipts: [irisTemplate, live2dTemplate],
+    readmeText,
+  });
+  const happyEvidence = await runLoopbackIntegrationEvidence({
+    headSha: "1".repeat(40),
+    now: () => new Date("2026-01-01T00:00:00.000Z"),
+    requestTimeoutMs: 5000,
+  });
+  const failureMatrix = await runLoopbackIntegrationFailureMatrix({
+    headSha: "1".repeat(40),
+    requestTimeoutMs: 200,
+  });
+  const syntheticAccepted = {
+    schema: EXTERNAL_ACCEPTANCE_RECEIPT_SCHEMA,
+    recipient_project: "IRIS",
+    recipient_role: "synthetic_test_only",
+    candidate_bundle_version: "1.0.0",
+    source_main_sha: "1".repeat(40),
+    candidate_bundle_fingerprint: bundle.candidate_bundle_fingerprint,
+    received_status: "received",
+    parsed_status: "pass",
+    forbidden_material_absent_status: "pass",
+    expected_schema_observed_status: "pass",
+    raw_values_absent_status: "pass",
+    readiness_claim_absent_status: "pass",
+    acceptance_candidate_status: "accepted_candidate",
+    real_integration_proof_status: "no",
+    runtime_readiness_claimed: false,
+    production_readiness_claimed: false,
+    safe_summary_only: true,
+  };
+  const syntheticRejected = {
+    ...syntheticAccepted,
+    recipient_project: "LIVE2D",
+    recipient_role: "synthetic_test_only",
+    acceptance_candidate_status: "rejected_candidate",
+    parsed_status: "fail",
+  };
+
+  assertExternalAcceptanceCandidateBundleSummarySafe(bundle);
+  validateLoopbackIntegrationEvidence(happyEvidence);
+  validateLoopbackIntegrationEvidence(failureMatrix);
+  assert.equal(bundle.external_team_acceptance_status, "not_started");
+  assert.equal(bundle.real_integration_proof_status, "no");
+  assert.equal(irisTemplate.acceptance_candidate_status, "pending");
+  assert.equal(live2dTemplate.acceptance_candidate_status, "pending");
+  assert.equal(validateExternalAcceptanceReceipt(syntheticAccepted).status, "pass");
+  assert.equal(
+    validateExternalAcceptanceReceipt(syntheticAccepted).acceptance_candidate_status,
+    "accepted_candidate"
+  );
+  assert.equal(validateExternalAcceptanceReceipt(syntheticRejected).status, "pass");
+  assert.throws(() => validateExternalAcceptanceReceipt({ schema: EXTERNAL_ACCEPTANCE_RECEIPT_SCHEMA }));
+  assert.throws(() => validateExternalAcceptanceReceipt({ ...syntheticAccepted, raw_payload: "x" }));
+
+  const cliOutputs = await Promise.all([
+    execFileAsync(process.execPath, [
+      "scripts/voxweave-loopback-integration-evidence.mjs",
+      "--candidate-bundle",
+    ], { cwd: process.cwd(), windowsHide: true }),
+    execFileAsync(process.execPath, [
+      "scripts/voxweave-loopback-integration-evidence.mjs",
+    ], { cwd: process.cwd(), windowsHide: true }),
+    execFileAsync(process.execPath, [
+      "scripts/voxweave-loopback-integration-evidence.mjs",
+      "--matrix",
+    ], { cwd: process.cwd(), windowsHide: true }),
+  ]);
+  for (const { stdout } of cliOutputs) {
+    const parsed = JSON.parse(stdout);
+    assert.equal(parsed.status, "pass");
+    assert.equal(parsed.safe_summary_only, true);
+    assertNoDangerousCandidateMaterial(parsed);
+  }
+});
+
 async function withRouteServer(callback) {
   const service = createVoxWeaveService({
     now: () => 1_777_000_000_000,
