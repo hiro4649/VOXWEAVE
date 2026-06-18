@@ -1,0 +1,99 @@
+{
+  "fixture_id": "iris_live2d_all_contracts_v1",
+  "schema": "iris_adapter_packet_v1",
+  "adapter_kind": "live2d",
+  "trace_id": "interop-live2d-trace",
+  "event_id": "interop-live2d-event",
+  "utterance_id": "interop-live2d-utterance",
+  "final_text": "Safe interop Live2D fixture text.",
+  "motion_cue": {
+    "schema": "iris_motion_cue_v1",
+    "motion_style": "talk",
+    "adapter_validation_required": true
+  },
+  "character_identity_contract": {
+    "schema": "voxweave_character_identity_contract_v1",
+    "character_profile_id": "interop-profile-safe",
+    "persona_version": "interop-persona-safe-v1",
+    "visual_identity_id": "interop-visual-safe",
+    "voice_identity_id": "interop-voice-safe",
+    "style_preset_id": "interop-style-safe",
+    "identity_lock_level": "soft",
+    "identity_source_kind": "synthetic",
+    "identity_consent_status": "not_required",
+    "identity_asset_license_status": "not_required",
+    "identity_drift_risk": "low",
+    "safe_summary_only": true
+  },
+  "realtime_interaction_contract": {
+    "schema": "voxweave_realtime_interaction_contract_v1",
+    "session_id": "interop-session-safe",
+    "turn_id": "interop-turn-safe",
+    "utterance_id": "interop-utterance-safe",
+    "input_mode": "text",
+    "output_mode": "mixed",
+    "speech_state": "speaking",
+    "interrupt_policy": "finish_sentence",
+    "latency_class": "interactive",
+    "avatar_expression_hint": "soft smile",
+    "avatar_motion_hint": "talk",
+    "tts_emotion_hint": "neutral",
+    "safe_summary_only": true
+  },
+  "human_oversight_consent_contract": {
+    "schema": "voxweave_human_oversight_consent_contract_v1",
+    "consent_status": "not_required",
+    "human_review_status": "not_required",
+    "brand_guard_status": "not_required",
+    "voice_clone_allowed": false,
+    "likeness_use_allowed": false,
+    "commercial_use_allowed": false,
+    "minor_or_sensitive_context": false,
+    "consent_scope_id": "interop-scope-safe",
+    "review_ticket_id": "interop-review-safe",
+    "policy_profile_id": "interop-policy-safe",
+    "safe_summary_only": true
+  },
+  "structured_context_contract": {
+    "schema": "voxweave_structured_context_contract_v1",
+    "scene_id": "interop-scene-safe",
+    "context_source_kind": "app_state_summary",
+    "context_confidence": "medium",
+    "user_intent": "speak",
+    "last_user_action_summary": "safe summary",
+    "visible_objects_summary": "safe summary",
+    "app_or_game_state_summary": "safe summary",
+    "actor_state_summaries": [],
+    "risk_flags": [
+      "none"
+    ],
+    "allowed_action_kinds": [
+      "speak"
+    ],
+    "safe_summary_only": true
+  },
+  "avatar_feedback_contract": {
+    "schema": "voxweave_avatar_feedback_contract_v1",
+    "expression": "happy",
+    "gaze": "user",
+    "gesture": "idle",
+    "mouth_state": "speaking",
+    "attention_state": "focused",
+    "intensity": "medium",
+    "expression_hint": "soft smile",
+    "motion_hint": "talk",
+    "gaze_target_summary": "user",
+    "safe_summary_only": true
+  },
+  "multilingual_personalization_contract": {
+    "schema": "voxweave_multilingual_personalization_contract_v1",
+    "locale_in": "en",
+    "locale_out": "en",
+    "translation_mode": "none",
+    "recipient_profile_kind": "user",
+    "personalization_scope": "none",
+    "approved_profile_facts": [],
+    "safe_summary_only": true
+  },
+  "adapter_validation_required": true
+}

@@ -1,0 +1,18 @@
+{
+  "schema": "voxweave_safe_interop_fixture_manifest_v1",
+  "fixture_version": "1.0.0",
+  "adapter_packet_schema": "iris_adapter_packet_v1",
+  "service_response_schema": "voxweave_orchestration_result_v1",
+  "live2d_cue_schema": "iris_live2d_renderer_cue_v1",
+  "live2d_delivery_schema": "iris_live2d_renderer_cue_delivery_v1",
+  "loopback_evidence_schema": "voxweave_loopback_integration_evidence_v1",
+  "contract_registry_family_count": 6,
+  "fixture_ids": [
+    "iris_tts_minimal_v1",
+    "iris_subtitle_minimal_v1",
+    "iris_live2d_all_contracts_v1"
+  ],
+  "safe_summary_only": true,
+  "runtime_readiness_claimed": false,
+  "production_readiness_claimed": false
+}
