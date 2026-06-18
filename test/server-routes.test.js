@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import {
+  AI_CHARACTER_CONTRACT_FAMILY_COUNT,
+  AI_CHARACTER_CONTRACT_REGISTRY,
+} from "../src/contracts.js";
 import { createVoxWeaveService } from "../src/orchestrator.js";
 import { createVoxWeaveServer } from "../src/server.js";
+import {
+  LOOPBACK_INTEGRATION_EVIDENCE_SCHEMA,
+  assertLoopbackEvidenceSafe,
+  runLoopbackIntegrationEvidence,
+} from "../scripts/voxweave-loopback-integration-evidence.mjs";
 
 const FORBIDDEN_RESPONSE_KEYS = new Set([
   "canonical_envelope",
@@ -166,6 +175,53 @@ test("invalid JSON returns safe 400 error", async () => {
   });
 });
 
+test("loopback evidence runner returns safe pass summary", async () => {
+  const evidence = await runLoopbackIntegrationEvidence({
+    headSha: "a".repeat(40),
+    now: () => new Date("2026-01-01T00:00:00.000Z"),
+    requestTimeoutMs: 5000,
+  });
+
+  assertLoopbackEvidenceSafe(evidence);
+  assert.equal(evidence.schema, LOOPBACK_INTEGRATION_EVIDENCE_SCHEMA);
+  assert.equal(evidence.status, "pass");
+  assert.equal(evidence.evidence_mode, "local_ephemeral_loopback_fake_only");
+  assert.equal(evidence.execution_scope, "loopback_only");
+  assert.equal(evidence.server_bind_scope, "loopback");
+  assert.equal(evidence.local_http_execution, true);
+  assert.equal(evidence.external_network_execution, false);
+  assert.equal(evidence.real_provider_execution, false);
+  assert.equal(evidence.real_renderer_execution, false);
+  assert.equal(evidence.real_tts_execution, false);
+  assert.equal(evidence.asr_execution, false);
+  assert.equal(evidence.translation_execution, false);
+  assert.equal(evidence.health_path_status, "pass");
+  assert.equal(evidence.auth_boundary_status, "pass");
+  assert.equal(evidence.json_boundary_status, "pass");
+  assert.equal(evidence.route_allowlist_status, "pass");
+  assert.equal(evidence.tts_path_status, "pass");
+  assert.equal(evidence.subtitle_path_status, "pass");
+  assert.equal(evidence.live2d_path_status, "pass");
+  assert.equal(evidence.contract_registry_status, "pass");
+  assert.equal(evidence.contract_presence_count, AI_CHARACTER_CONTRACT_FAMILY_COUNT);
+  assert.equal(evidence.fake_renderer_request_status, "pass");
+  assert.equal(evidence.fake_renderer_auth_status, "pass");
+  assert.equal(evidence.fake_renderer_json_status, "pass");
+  assert.equal(evidence.cleanup_status, "pass");
+  assert.equal(evidence.runtime_readiness_claimed, false);
+  assert.equal(evidence.production_readiness_claimed, false);
+  assert.equal(evidence.safe_summary_only, true);
+  assert.equal(evidence.request_count, 1);
+  assert.equal(evidence.failure_count, 0);
+  assert.equal(evidence.primary_reason_code, "none");
+  assert.match(evidence.evidence_fingerprint, /^[a-f0-9]{32}$/u);
+  assert.deepEqual(Object.keys(evidence).sort(), LOOPBACK_EVIDENCE_KEYS);
+  assertNoForbiddenEvidenceMaterial(evidence);
+  for (const entry of AI_CHARACTER_CONTRACT_REGISTRY) {
+    assert.equal(JSON.stringify(evidence).includes(entry.snakeCaseField), false);
+  }
+});
+
 async function withRouteServer(callback) {
   const service = createVoxWeaveService({
     now: () => 1_777_000_000_000,
@@ -239,4 +295,54 @@ function assertNoForbiddenFields(value) {
       stack.push({ value: child, path: `${current.path}.${key}` });
     }
   }
+}
+
+const LOOPBACK_EVIDENCE_KEYS = [
+  "asr_execution",
+  "auth_boundary_status",
+  "cleanup_status",
+  "contract_presence_count",
+  "contract_registry_status",
+  "evidence_fingerprint",
+  "evidence_mode",
+  "execution_scope",
+  "external_network_execution",
+  "failure_count",
+  "fake_renderer_auth_status",
+  "fake_renderer_json_status",
+  "fake_renderer_request_status",
+  "health_path_status",
+  "json_boundary_status",
+  "live2d_path_status",
+  "local_http_execution",
+  "primary_reason_code",
+  "production_readiness_claimed",
+  "real_provider_execution",
+  "real_renderer_execution",
+  "real_tts_execution",
+  "request_count",
+  "route_allowlist_status",
+  "runtime_readiness_claimed",
+  "safe_summary_guard_status",
+  "safe_summary_only",
+  "schema",
+  "server_bind_scope",
+  "source_head_bound",
+  "source_head_sha",
+  "status",
+  "subtitle_path_status",
+  "target_fixture_version",
+  "target_kind",
+  "translation_execution",
+  "tts_path_status",
+].sort();
+
+function assertNoForbiddenEvidenceMaterial(value) {
+  const text = JSON.stringify(value);
+  assert.equal(/\bhttps?:\/\//iu.test(text), false);
+  assert.equal(/\b127\.0\.0\.1\b/u.test(text), false);
+  assert.equal(/\blocalhost\b/iu.test(text), false);
+  assert.equal(/\bfake-(?:server|renderer)-key\b/iu.test(text), false);
+  assert.equal(/\bBearer\b/iu.test(text), false);
+  assert.equal(/request_body|response_body|raw_contract|raw_cue/iu.test(text), false);
 }
