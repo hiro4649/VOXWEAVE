@@ -15,10 +15,15 @@ import {
   LOOPBACK_INTEGRATION_FAILURE_MATRIX_SCHEMA,
   LOOPBACK_INTEGRATION_EVIDENCE_SCHEMA,
   EXTERNAL_ACCEPTANCE_CANDIDATE_BUNDLE_SUMMARY_SCHEMA,
+  EXTERNAL_ACCEPTANCE_CANDIDATE_DESCRIPTOR_SCHEMA,
+  EXTERNAL_ACCEPTANCE_RECEIPT_BINDING_RESULT_SCHEMA,
   EXTERNAL_ACCEPTANCE_RECEIPT_SCHEMA,
+  assertExternalAcceptanceCandidateDescriptorSafe,
+  assertExternalAcceptanceReceiptBindingResultSafe,
   assertLoopbackFailureMatrixSafe,
   assertLoopbackEvidenceSafe,
   assertExternalAcceptanceCandidateBundleSummarySafe,
+  buildExternalAcceptanceCandidateDescriptor,
   buildExternalAcceptanceCandidateBundleFingerprint,
   buildExternalAcceptanceReceiptFingerprint,
   buildLoopbackEvidenceFingerprint,
@@ -26,6 +31,7 @@ import {
   runExternalAcceptanceCandidateBundleSummary,
   runLoopbackIntegrationFailureMatrix,
   runLoopbackIntegrationEvidence,
+  validateExternalAcceptanceReceiptAgainstCandidate,
   validateExternalAcceptanceReceipt,
   validateLoopbackIntegrationEvidence,
 } from "../scripts/voxweave-loopback-integration-evidence.mjs";
@@ -671,6 +677,142 @@ test("external acceptance receipt validator accepts only safe receipts", async (
   );
 });
 
+test("external receipt binding validator binds safe receipts to current candidate", async () => {
+  const candidate = await loadCandidateBundleForTest();
+  const descriptor = buildExternalAcceptanceCandidateDescriptor(candidate);
+  assertExternalAcceptanceCandidateDescriptorSafe(descriptor);
+  assert.equal(descriptor.schema, EXTERNAL_ACCEPTANCE_CANDIDATE_DESCRIPTOR_SCHEMA);
+  assert.equal(descriptor.status, "pass");
+  assert.equal(descriptor.candidate_bundle_version, "1.1.0");
+  assert.match(descriptor.runtime_source_head_sha, /^[a-f0-9]{40}$/u);
+  assert.equal(descriptor.source_binding_kind, "runtime_source_snapshot");
+  assert.equal(descriptor.bundle_fingerprint_algorithm, "sha256");
+  assert.match(descriptor.candidate_bundle_fingerprint, /^[a-f0-9]{64}$/u);
+  assert.equal(descriptor.fixture_file_count, 4);
+  assert.equal(descriptor.receipt_template_count, 2);
+  assert.deepEqual(descriptor.recipient_projects, ["IRIS", "LIVE2D"]);
+  assertNoDangerousCandidateMaterial(descriptor);
+  assert.equal(JSON.stringify(descriptor).includes("fixture_id"), false);
+  assert.equal(JSON.stringify(descriptor).includes("Safe interop TTS fixture text."), false);
+
+  const boundReceipt = buildSyntheticBoundReceipt(candidate, descriptor, {
+    acceptance_candidate_status: "accepted_candidate",
+  });
+  const accepted = validateExternalAcceptanceReceiptAgainstCandidate({
+    ...candidate,
+    receipt: boundReceipt,
+    receiptSourceKind: "synthetic_test_only",
+  });
+  assertExternalAcceptanceReceiptBindingResultSafe(accepted);
+  assert.equal(accepted.schema, EXTERNAL_ACCEPTANCE_RECEIPT_BINDING_RESULT_SCHEMA);
+  assert.equal(accepted.status, "pass");
+  assert.equal(accepted.receipt_source_kind, "synthetic_test_only");
+  assert.equal(accepted.source_head_binding_status, "pass");
+  assert.equal(accepted.bundle_version_binding_status, "pass");
+  assert.equal(accepted.bundle_fingerprint_binding_status, "pass");
+  assert.equal(accepted.recipient_template_binding_status, "pass");
+  assert.equal(accepted.recipient_role_binding_status, "pass");
+  assert.equal(accepted.receipt_safety_status, "pass");
+  assert.equal(accepted.receipt_candidate_status, "accepted_candidate");
+  assert.equal(accepted.external_team_acceptance_status, "not_claimed_by_validator");
+  assert.equal(accepted.real_integration_proof_status, "no");
+  assert.equal(accepted.primary_reason_code, "none");
+  assert.match(accepted.binding_fingerprint, /^[a-f0-9]{64}$/u);
+  assertNoDangerousCandidateMaterial(accepted);
+
+  const pending = validateExternalAcceptanceReceiptAgainstCandidate({
+    ...candidate,
+    receipt: buildSyntheticBoundReceipt(candidate, descriptor, {
+      received_status: "pending",
+      parsed_status: "pending",
+      forbidden_material_absent_status: "pending",
+      expected_schema_observed_status: "pending",
+      raw_values_absent_status: "pending",
+      readiness_claim_absent_status: "pending",
+      acceptance_candidate_status: "pending",
+    }),
+    receiptSourceKind: "synthetic_test_only",
+  });
+  assert.equal(pending.status, "pass");
+  assert.equal(pending.receipt_candidate_status, "pending");
+
+  const ownerProvided = validateExternalAcceptanceReceiptAgainstCandidate({
+    ...candidate,
+    receipt: boundReceipt,
+    receiptSourceKind: "owner_provided",
+  });
+  assert.equal(ownerProvided.status, "pass");
+  assert.equal(ownerProvided.receipt_source_kind, "owner_provided");
+  assert.equal(ownerProvided.external_team_acceptance_status, "not_claimed_by_validator");
+
+  const versionMismatch = validateExternalAcceptanceReceiptAgainstCandidate({
+    ...candidate,
+    receipt: { ...boundReceipt, candidate_bundle_version: "1.0.0" },
+    receiptSourceKind: "synthetic_test_only",
+  });
+  assert.equal(versionMismatch.status, "fail");
+  assert.equal(versionMismatch.primary_reason_code, "candidate_bundle_version_mismatch");
+
+  const sourceMismatch = validateExternalAcceptanceReceiptAgainstCandidate({
+    ...candidate,
+    receipt: { ...boundReceipt, source_main_sha: "a".repeat(40) },
+    receiptSourceKind: "synthetic_test_only",
+  });
+  assert.equal(sourceMismatch.status, "fail");
+  assert.equal(sourceMismatch.primary_reason_code, "candidate_source_head_mismatch");
+
+  const fingerprintMismatch = validateExternalAcceptanceReceiptAgainstCandidate({
+    ...candidate,
+    receipt: { ...boundReceipt, candidate_bundle_fingerprint: "b".repeat(64) },
+    receiptSourceKind: "synthetic_test_only",
+  });
+  assert.equal(fingerprintMismatch.status, "fail");
+  assert.equal(fingerprintMismatch.primary_reason_code, "candidate_bundle_fingerprint_mismatch");
+
+  const templateMissing = validateExternalAcceptanceReceiptAgainstCandidate({
+    ...candidate,
+    receipts: candidate.receipts.filter((receipt) => receipt.recipient_project !== "LIVE2D"),
+    receipt: buildSyntheticBoundReceipt(candidate, descriptor, {
+      recipient_project: "LIVE2D",
+      recipient_role: "renderer_boundary_owner",
+    }),
+    receiptSourceKind: "synthetic_test_only",
+  });
+  assert.equal(templateMissing.status, "fail");
+  assert.equal(templateMissing.primary_reason_code, "candidate_receipt_binding_invalid");
+
+  const roleMismatch = validateExternalAcceptanceReceiptAgainstCandidate({
+    ...candidate,
+    receipt: { ...boundReceipt, recipient_role: "renderer_boundary_owner" },
+    receiptSourceKind: "synthetic_test_only",
+  });
+  assert.equal(roleMismatch.status, "fail");
+  assert.equal(roleMismatch.primary_reason_code, "candidate_recipient_role_mismatch");
+
+  const unsafeReceipt = validateExternalAcceptanceReceiptAgainstCandidate({
+    ...candidate,
+    receipt: { ...boundReceipt, runtime_readiness_claimed: true },
+    receiptSourceKind: "synthetic_test_only",
+  });
+  assert.equal(unsafeReceipt.status, "fail");
+  assert.equal(unsafeReceipt.primary_reason_code, "candidate_receipt_safety_invalid");
+
+  const incompleteAccepted = validateExternalAcceptanceReceiptAgainstCandidate({
+    ...candidate,
+    receipt: { ...boundReceipt, parsed_status: "pending" },
+    receiptSourceKind: "synthetic_test_only",
+  });
+  assert.equal(incompleteAccepted.status, "fail");
+  assert.equal(incompleteAccepted.primary_reason_code, "candidate_receipt_safety_invalid");
+
+  const acceptedAgain = validateExternalAcceptanceReceiptAgainstCandidate({
+    ...candidate,
+    receipt: boundReceipt,
+    receiptSourceKind: "synthetic_test_only",
+  });
+  assert.equal(accepted.binding_fingerprint, acceptedAgain.binding_fingerprint);
+});
+
 test("external receipt validator CLI emits safe JSON without receipt path", async () => {
   const receiptPath = join(tmpdir(), `voxweave-invalid-receipt-${Date.now()}.json`);
   await writeFile(
@@ -969,6 +1111,52 @@ async function readCandidateFixtureFiles() {
       content: await readFixture(name),
     }))
   );
+}
+
+async function loadCandidateBundleForTest() {
+  const manifest = await readExternalAcceptanceFixture(
+    "voxweave-external-acceptance-candidate.manifest.safe.json"
+  );
+  const irisReceipt = await readExternalAcceptanceFixture("iris-team-receipt-template.safe.json");
+  const live2dReceipt = await readExternalAcceptanceFixture(
+    "live2d-team-receipt-template.safe.json"
+  );
+  const readmeText = await readExternalAcceptanceText("README.safe.md");
+  const fixtureManifest = await readFixture("voxweave-interop-manifest.safe.json");
+  const fixtures = await readCandidateFixtureFiles();
+  return {
+    manifest,
+    receipts: [irisReceipt, live2dReceipt],
+    readmeText,
+    fixtureManifest,
+    fixtures,
+  };
+}
+
+function buildSyntheticBoundReceipt(candidate, descriptor, overrides = {}) {
+  const template = candidate.receipts.find(
+    (receipt) => receipt.recipient_project === (overrides.recipient_project ?? "IRIS")
+  );
+  return {
+    schema: EXTERNAL_ACCEPTANCE_RECEIPT_SCHEMA,
+    recipient_project: template?.recipient_project ?? overrides.recipient_project ?? "IRIS",
+    recipient_role: template?.recipient_role ?? overrides.recipient_role ?? "adapter_packet_owner",
+    candidate_bundle_version: descriptor.candidate_bundle_version,
+    source_main_sha: descriptor.runtime_source_head_sha,
+    candidate_bundle_fingerprint: descriptor.candidate_bundle_fingerprint,
+    received_status: "received",
+    parsed_status: "pass",
+    forbidden_material_absent_status: "pass",
+    expected_schema_observed_status: "pass",
+    raw_values_absent_status: "pass",
+    readiness_claim_absent_status: "pass",
+    acceptance_candidate_status: "accepted_candidate",
+    real_integration_proof_status: "no",
+    runtime_readiness_claimed: false,
+    production_readiness_claimed: false,
+    safe_summary_only: true,
+    ...overrides,
+  };
 }
 
 function mutateFixture(fixtures, pathSuffix, patch) {
