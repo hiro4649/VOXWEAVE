@@ -582,12 +582,140 @@ test("safe shutdown helper returns bounded safe summary", async () => {
 
   const summary = await closeVoxWeaveServer(server);
 
-  assert.equal(summary.schema, SERVER_SHUTDOWN_SUMMARY_SCHEMA);
-  assert.equal(summary.status, "closed");
-  assert.equal(summary.safe_summary_only, true);
+  assertSafeShutdownSummary(summary, "closed");
+  assert.equal(summary.forced_connection_close, false);
+  assert.equal(summary.idle_connection_close_attempted, true);
+  assert.equal(summary.all_connection_close_attempted, false);
   assert.equal(server.listening, false);
-  assertNoForbiddenFields(summary);
 });
+
+test("safe shutdown helper returns not_listening summary without transport values", async () => {
+  const summary = await closeVoxWeaveServer(null);
+
+  assertSafeShutdownSummary(summary, "not_listening");
+  assert.equal(summary.forced_connection_close, false);
+  assert.equal(summary.idle_connection_close_attempted, false);
+  assert.equal(summary.all_connection_close_attempted, false);
+});
+
+test("safe shutdown helper force closes active partial requests after bounded timeout", async () => {
+  const server = createVoxWeaveServer();
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  const socket = createConnection({ host: "127.0.0.1", port: address.port });
+  await new Promise((resolve, reject) => {
+    socket.once("error", reject);
+    socket.once("connect", resolve);
+  });
+  socket.write([
+    "POST /v1/orchestrate HTTP/1.1",
+    `Host: 127.0.0.1:${address.port}`,
+    "Content-Type: application/json",
+    "Content-Length: 64",
+    "Connection: keep-alive",
+    "",
+    "{\"text\"",
+  ].join("\r\n"));
+
+  const summary = await closeVoxWeaveServer(server, { timeoutMs: 100 });
+
+  assertSafeShutdownSummary(summary, "closed");
+  assert.equal(summary.forced_connection_close, true);
+  assert.equal(summary.idle_connection_close_attempted, true);
+  assert.equal(summary.all_connection_close_attempted, true);
+  assert.equal(server.listening, false);
+  socket.destroy();
+});
+
+test("safe shutdown helper reports safe failure when force close is unavailable", async () => {
+  let closeCallback;
+  const fakeServer = {
+    listening: true,
+    close(callback) {
+      closeCallback = callback;
+    },
+    closeIdleConnections() {},
+  };
+
+  const summary = await closeVoxWeaveServer(fakeServer, { timeoutMs: 100 });
+
+  assert.equal(typeof closeCallback, "function");
+  assertSafeShutdownSummary(summary, "server_shutdown_failed");
+  assert.equal(summary.forced_connection_close, true);
+  assert.equal(summary.idle_connection_close_attempted, true);
+  assert.equal(summary.all_connection_close_attempted, false);
+});
+
+test("safe shutdown helper invokes closeAllConnections only after timeout", async () => {
+  let closeCallback;
+  let closeAllCalls = 0;
+  const fakeServer = {
+    listening: true,
+    close(callback) {
+      closeCallback = callback;
+    },
+    closeIdleConnections() {},
+    closeAllConnections() {
+      closeAllCalls += 1;
+      closeCallback();
+    },
+  };
+
+  const summary = await closeVoxWeaveServer(fakeServer, { timeoutMs: 100 });
+
+  assertSafeShutdownSummary(summary, "closed");
+  assert.equal(closeAllCalls, 1);
+  assert.equal(summary.forced_connection_close, true);
+  assert.equal(summary.all_connection_close_attempted, true);
+});
+
+test("safe shutdown helper keeps callback errors safe", async () => {
+  const fakeServer = {
+    listening: true,
+    close(callback) {
+      callback(new Error("unsafe callback detail"));
+    },
+    closeIdleConnections() {},
+    closeAllConnections() {},
+  };
+
+  const summary = await closeVoxWeaveServer(fakeServer, { timeoutMs: 100 });
+
+  assertSafeShutdownSummary(summary, "server_shutdown_failed");
+  assert.equal(JSON.stringify(summary).includes("unsafe callback detail"), false);
+});
+
+function assertSafeShutdownSummary(summary, status) {
+  assert.equal(summary.schema, SERVER_SHUTDOWN_SUMMARY_SCHEMA);
+  if (status) assert.equal(summary.status, status);
+  assert.equal(summary.safe_summary_only, true);
+  assert.equal(summary.shutdown_timeout_bounded, true);
+  assert.equal(summary.transport_values_excluded, true);
+  assert.equal(summary.runtime_readiness_claimed, false);
+  assert.equal(summary.production_readiness_claimed, false);
+  assertNoForbiddenFields(summary);
+  const keys = Object.keys(summary).sort();
+  assert.deepEqual(keys, [
+    "all_connection_close_attempted",
+    "forced_connection_close",
+    "idle_connection_close_attempted",
+    "production_readiness_claimed",
+    "runtime_readiness_claimed",
+    "safe_summary_only",
+    "schema",
+    "shutdown_timeout_bounded",
+    "status",
+    "transport_values_excluded",
+  ]);
+  assert.equal(JSON.stringify(summary).includes("127.0.0.1"), false);
+  assert.equal(JSON.stringify(summary).includes("9011"), false);
+  assert.equal(JSON.stringify(summary).includes("socket"), false);
+  assert.equal(JSON.stringify(summary).includes("100"), false);
+  assert.equal(JSON.stringify(summary).includes(FAKE_API_KEY), false);
+}
 
 test("Content-Length early guard rejects oversized declared body safely", () => {
   assert.doesNotThrow(() =>
