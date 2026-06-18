@@ -31,6 +31,7 @@ import {
   createReactionPlanCacheEntry,
   validateReactionPlanCacheEntry,
 } from "./reactionPlanCache.js";
+import { throwIfOperationAborted } from "./operationContext.js";
 
 const ALLOWED_LIVE2D_MOTION_STYLES = new Set([
   "talk",
@@ -131,9 +132,12 @@ export function createVoxWeaveService({
       });
     },
 
-    async orchestrate(payload, { routeKind = "" } = {}) {
+    async orchestrate(payload, { routeKind = "", signal } = {}) {
+      throwIfOperationAborted(signal);
       validateInputPayload(payload, { routeKind });
+      throwIfOperationAborted(signal);
       const extractedAiCharacterContracts = extractAiCharacterContracts(payload);
+      throwIfOperationAborted(signal);
       const aiCharacterContracts = buildAiCharacterContractPresence(
         extractedAiCharacterContracts
       );
@@ -169,10 +173,12 @@ export function createVoxWeaveService({
         dictionaryVersion: dictionary_version,
       });
       const cacheable = isCacheableReaction(correctedText);
+      throwIfOperationAborted(signal);
       const cached = cacheable ? cache.get(cacheKey) : null;
       if (cached) {
         try {
           const reactionPlan = validateReactionPlanCacheEntry(cached);
+          throwIfOperationAborted(signal);
           return await materializeReactionPlanResponse({
             reactionPlan,
             payload,
@@ -188,10 +194,11 @@ export function createVoxWeaveService({
             aiCharacterContractSummary,
             aiCharacterAdapterMetadata,
             integrationBoundary,
+            signal,
           });
         } catch (error) {
-          cache.delete(cacheKey);
           if (error instanceof VoxWeaveError && error.code === "invalid_cache_entry") {
+            cache.delete(cacheKey);
             // Rebuild the plan below without exposing stale cached material.
           } else {
             throw error;
@@ -233,6 +240,7 @@ export function createVoxWeaveService({
         mouthCues,
         live2dCue,
       });
+      throwIfOperationAborted(signal);
       const reactionPlan = createReactionPlanCacheEntry({
         corrected_text: correctedText,
         repairs,
@@ -263,10 +271,13 @@ export function createVoxWeaveService({
         aiCharacterContractSummary,
         aiCharacterAdapterMetadata,
         integrationBoundary,
+        signal,
       });
+      throwIfOperationAborted(signal);
       if (cacheable) {
         cache.set(cacheKey, reactionPlan);
       }
+      throwIfOperationAborted(signal);
       return response;
     },
   };
@@ -305,7 +316,9 @@ async function materializeReactionPlanResponse({
   aiCharacterContractSummary,
   aiCharacterAdapterMetadata,
   integrationBoundary,
+  signal,
 }) {
+  throwIfOperationAborted(signal);
   const requestId = createRequestId({ trace, adapterKind, requestIdFactory });
   const mouthCues = structuredClone(reactionPlan.mouth_cues);
   const subtitleTiming = structuredClone(reactionPlan.subtitle_timing);
@@ -344,14 +357,16 @@ async function materializeReactionPlanResponse({
     },
     adapter_validation_required: true,
   };
+  throwIfOperationAborted(signal);
   const live2dForward = adapterKind === "live2d"
-    ? await live2dForwarder.forward(live2dCueDelivery)
+    ? await live2dForwarder.forward(live2dCueDelivery, { signal })
     : {
         renderer_forward_configured: live2dForwarder.configured === true,
         renderer_forward_attempted: false,
         renderer_forward_ok: false,
         renderer_forward_status: "not_live2d_adapter",
       };
+  throwIfOperationAborted(signal);
   const renderGroup = renderGroups.update({
     adapterKind,
     traceId: trace.traceId,
@@ -373,6 +388,7 @@ async function materializeReactionPlanResponse({
     aiCharacterResponseGuard: buildAiCharacterContractResponseGuard(),
     integrationBoundary,
   });
+  throwIfOperationAborted(signal);
 
   const response = {
     schema: SERVICE_SCHEMA,
@@ -431,7 +447,9 @@ async function materializeReactionPlanResponse({
   };
 
   assertSafeResponse(response);
-  return assertAiCharacterResponseSafeSummary(response);
+  const safeResponse = assertAiCharacterResponseSafeSummary(response);
+  throwIfOperationAborted(signal);
+  return safeResponse;
 }
 
 function stripLive2dCueRequestIdentity(live2dCue) {
