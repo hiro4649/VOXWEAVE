@@ -29,6 +29,13 @@ export const SERVER_LIFECYCLE_POLICY_LIMITS = Object.freeze({
   shutdownTimeoutMs: Object.freeze({ min: 100, max: 10_000 }),
 });
 const SERVER_LIFECYCLE_POLICY_SYMBOL = Symbol("voxweave.server.lifecycle_policy");
+export const DEFAULT_WRITE_ADMISSION_POLICY = Object.freeze({
+  maxInFlightWrites: 16,
+  queueMode: "reject",
+});
+export const WRITE_ADMISSION_POLICY_LIMITS = Object.freeze({
+  maxInFlightWrites: Object.freeze({ min: 1, max: 256 }),
+});
 const ALLOWED_POST_ROUTES = new Set([
   "/v1/orchestrate",
   "/orchestrate",
@@ -48,8 +55,13 @@ export function createVoxWeaveServer({
   service = createVoxWeaveService(),
   requiredApiKey = process.env.VOXWEAVE_API_KEY,
   lifecyclePolicy = DEFAULT_SERVER_LIFECYCLE_POLICY,
+  writeAdmissionPolicy = DEFAULT_WRITE_ADMISSION_POLICY,
+  writeAdmissionController,
 } = {}) {
   const writeApiKey = String(requiredApiKey ?? "").trim();
+  const admissionController = normalizeWriteAdmissionController(
+    writeAdmissionController ?? createWriteAdmissionController(writeAdmissionPolicy)
+  );
   const server = createServer(async (request, response) => {
     try {
       const pathname = assertCanonicalRequestTarget(request.url ?? "/");
@@ -68,9 +80,19 @@ export function createVoxWeaveServer({
       if (isAllowedPostRoute(pathname)) {
         assertJsonContentType(request);
         assertContentLengthWithinLimit(request);
-        const payload = await readJson(request);
-        const result = await service.orchestrate(payload, { routeKind });
-        sendJson(response, 200, result);
+        const lease = admissionController.tryAcquire();
+        if (!lease) {
+          request.resume();
+          sendServerBusy(response);
+          return;
+        }
+        try {
+          const payload = await readJson(request);
+          const result = await service.orchestrate(payload, { routeKind });
+          sendJson(response, 200, result);
+        } finally {
+          lease.release();
+        }
         return;
       }
 
@@ -218,6 +240,45 @@ export function normalizeServerLifecyclePolicy(policy = {}) {
   };
   assertServerLifecyclePolicyRelationships(normalized);
   return Object.freeze(normalized);
+}
+
+export function normalizeWriteAdmissionPolicy(policy = {}) {
+  assertWriteAdmissionPolicyObject(policy);
+  const normalized = {
+    maxInFlightWrites: normalizeWriteAdmissionLimit(policy.maxInFlightWrites),
+    queueMode: policy.queueMode === undefined ? DEFAULT_WRITE_ADMISSION_POLICY.queueMode : policy.queueMode,
+  };
+  if (normalized.queueMode !== "reject") throwInvalidWriteAdmissionPolicy();
+  return Object.freeze(normalized);
+}
+
+export function createWriteAdmissionController(policy = DEFAULT_WRITE_ADMISSION_POLICY) {
+  const normalized = normalizeWriteAdmissionPolicy(policy);
+  let activeWriteCount = 0;
+  return Object.freeze({
+    tryAcquire() {
+      if (activeWriteCount >= normalized.maxInFlightWrites) return null;
+      activeWriteCount += 1;
+      let released = false;
+      return Object.freeze({
+        release() {
+          if (released) return;
+          released = true;
+          activeWriteCount = Math.max(0, activeWriteCount - 1);
+        },
+      });
+    },
+    snapshot() {
+      const available = Math.max(0, normalized.maxInFlightWrites - activeWriteCount);
+      return Object.freeze({
+        max_in_flight_writes: normalized.maxInFlightWrites,
+        active_write_count: activeWriteCount,
+        available_write_capacity: available,
+        saturated: available === 0,
+        queue_mode: normalized.queueMode,
+      });
+    },
+  });
 }
 
 export function applyServerLifecyclePolicy(server, policy = DEFAULT_SERVER_LIFECYCLE_POLICY) {
@@ -429,6 +490,49 @@ function throwInvalidServerLifecyclePolicy() {
   );
 }
 
+function assertWriteAdmissionPolicyObject(policy) {
+  if (policy === null || typeof policy !== "object" || Array.isArray(policy)) {
+    throwInvalidWriteAdmissionPolicy();
+  }
+  const allowed = new Set(["maxInFlightWrites", "queueMode"]);
+  for (const key of Object.keys(policy)) {
+    if (!allowed.has(key)) throwInvalidWriteAdmissionPolicy();
+  }
+}
+
+function normalizeWriteAdmissionLimit(value) {
+  if (value === undefined) return DEFAULT_WRITE_ADMISSION_POLICY.maxInFlightWrites;
+  const limit = WRITE_ADMISSION_POLICY_LIMITS.maxInFlightWrites;
+  if (
+    typeof value !== "number" ||
+    !Number.isSafeInteger(value) ||
+    value < limit.min ||
+    value > limit.max
+  ) {
+    throwInvalidWriteAdmissionPolicy();
+  }
+  return value;
+}
+
+function normalizeWriteAdmissionController(controller) {
+  if (
+    !controller ||
+    typeof controller.tryAcquire !== "function" ||
+    typeof controller.snapshot !== "function"
+  ) {
+    throwInvalidWriteAdmissionPolicy();
+  }
+  return controller;
+}
+
+function throwInvalidWriteAdmissionPolicy() {
+  throw new VoxWeaveError(
+    "invalid write admission policy",
+    "invalid_write_admission_policy",
+    500
+  );
+}
+
 function headerValues(value) {
   if (Array.isArray(value)) return value.map((item) => String(item ?? ""));
   if (value === undefined) return [];
@@ -442,13 +546,22 @@ function resolveRouteKind(pathname) {
   return "";
 }
 
-function sendJson(response, statusCode, body) {
+function sendJson(response, statusCode, body, headers = {}) {
   response.writeHead(statusCode, {
     "content-type": "application/json; charset=utf-8",
     "cache-control": "no-store",
     "x-content-type-options": "nosniff",
+    ...headers,
   });
   response.end(JSON.stringify(body));
+}
+
+function sendServerBusy(response) {
+  const safe = toSafeError(new VoxWeaveError("server busy", "server_busy", 503));
+  sendJson(response, safe.statusCode, safe.body, {
+    "connection": "close",
+    "retry-after": "1",
+  });
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
