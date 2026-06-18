@@ -107,6 +107,9 @@ const ALLOWED_CANDIDATE_BUNDLE_KEYS = Object.freeze([
   "fixture_manifest_status",
   "fixture_file_count",
   "transitive_fixture_binding_status",
+  "pre_send_checklist_status",
+  "pre_send_checklist_binding_status",
+  "owner_send_authorized",
   "external_team_acceptance_status",
   "real_integration_proof_status",
   "runtime_readiness_claimed",
@@ -127,6 +130,7 @@ const CANDIDATE_MANIFEST_FIELDS = Object.freeze([
   "fixture_files",
   "evidence_runner_script",
   "failure_matrix_command",
+  "pre_send_checklist_path",
   "candidate_status",
   "external_team_acceptance_status",
   "real_integration_proof_status",
@@ -155,6 +159,28 @@ const RECEIPT_TEMPLATE_FIELDS = Object.freeze([
   "production_readiness_claimed",
   "safe_summary_only",
 ]);
+const PRE_SEND_CHECKLIST_FIELDS = Object.freeze([
+  "schema",
+  "candidate_bundle_version",
+  "checklist_status",
+  "owner_send_authorized",
+  "candidate_source_binding_required",
+  "candidate_fingerprint_validation_required",
+  "candidate_cli_pass_required",
+  "loopback_evidence_pass_required",
+  "failure_matrix_pass_required",
+  "receipt_template_required",
+  "forbidden_material_scan_required",
+  "recipient_project_scope",
+  "external_team_contact_confirmation_status",
+  "actual_send_status",
+  "actual_receipt_status",
+  "external_team_acceptance_status",
+  "real_integration_proof_status",
+  "runtime_readiness_claimed",
+  "production_readiness_claimed",
+  "safe_summary_only",
+]);
 const EXPECTED_FIXTURE_MANIFEST_PATH =
   "test/fixtures/interop/voxweave-interop-manifest.safe.json";
 const EXPECTED_FIXTURE_FILES = Object.freeze([
@@ -167,6 +193,8 @@ const EXPECTED_RECEIPT_TEMPLATE_PATHS = Object.freeze([
   "test/fixtures/external-acceptance/iris-team-receipt-template.safe.json",
   "test/fixtures/external-acceptance/live2d-team-receipt-template.safe.json",
 ]);
+const EXPECTED_PRE_SEND_CHECKLIST_PATH =
+  "test/fixtures/external-acceptance/owner-pre-send-checklist.safe.json";
 const ALLOWED_RECEIPT_SOURCE_KINDS = new Set([
   "owner_provided",
   "synthetic_test_only",
@@ -455,11 +483,12 @@ export async function runExternalAcceptanceCandidateBundleSummary({
   manifest = null,
   receipts = null,
   readmeText = null,
+  checklist = null,
   fixtureManifest = null,
   fixtures = null,
 } = {}) {
-  const bundle = manifest && receipts && readmeText !== null && fixtureManifest && fixtures
-    ? { manifest, receipts, readmeText, fixtureManifest, fixtures }
+  const bundle = manifest && receipts && readmeText !== null && checklist && fixtureManifest && fixtures
+    ? { manifest, receipts, readmeText, checklist, fixtureManifest, fixtures }
     : await readCandidateBundleFiles();
   validateCandidateBundle(bundle);
   const summary = {
@@ -475,6 +504,9 @@ export async function runExternalAcceptanceCandidateBundleSummary({
     fixture_manifest_status: "pass",
     fixture_file_count: bundle.fixtures.length,
     transitive_fixture_binding_status: "pass",
+    pre_send_checklist_status: bundle.checklist.checklist_status,
+    pre_send_checklist_binding_status: "pass",
+    owner_send_authorized: bundle.checklist.owner_send_authorized,
     external_team_acceptance_status: "not_started",
     real_integration_proof_status: "no",
     runtime_readiness_claimed: false,
@@ -491,20 +523,22 @@ export function buildExternalAcceptanceCandidateBundleFingerprint({
   manifest,
   receipts,
   readmeText,
+  checklist,
   fixtureManifest,
   fixtures,
 }) {
-  return buildCandidateBundleFingerprint({ manifest, receipts, readmeText, fixtureManifest, fixtures });
+  return buildCandidateBundleFingerprint({ manifest, receipts, readmeText, checklist, fixtureManifest, fixtures });
 }
 
 export function buildExternalAcceptanceCandidateDescriptor({
   manifest,
   receipts,
   readmeText,
+  checklist,
   fixtureManifest,
   fixtures,
 }) {
-  validateCandidateBundle({ manifest, receipts, readmeText, fixtureManifest, fixtures });
+  validateCandidateBundle({ manifest, receipts, readmeText, checklist, fixtureManifest, fixtures });
   const descriptor = {
     schema: EXTERNAL_ACCEPTANCE_CANDIDATE_DESCRIPTOR_SCHEMA,
     status: "pass",
@@ -516,6 +550,7 @@ export function buildExternalAcceptanceCandidateDescriptor({
       manifest,
       receipts,
       readmeText,
+      checklist,
       fixtureManifest,
       fixtures,
     }),
@@ -538,6 +573,7 @@ export function validateExternalAcceptanceReceiptAgainstCandidate({
   manifest,
   receipts,
   readmeText,
+  checklist,
   fixtureManifest,
   fixtures,
   receiptSourceKind = "unclassified",
@@ -550,6 +586,7 @@ export function validateExternalAcceptanceReceiptAgainstCandidate({
       manifest,
       receipts,
       readmeText,
+      checklist,
       fixtureManifest,
       fixtures,
     });
@@ -1191,11 +1228,12 @@ function fingerprintEvidence(evidence) {
 async function readCandidateBundleFiles() {
   const base = new URL("../test/fixtures/external-acceptance/", import.meta.url);
   const interopBase = new URL("../test/fixtures/interop/", import.meta.url);
-  const [manifestText, irisText, live2dText, readmeText] = await Promise.all([
+  const [manifestText, irisText, live2dText, readmeText, checklistText] = await Promise.all([
     readFile(new URL("voxweave-external-acceptance-candidate.manifest.safe.json", base), "utf8"),
     readFile(new URL("iris-team-receipt-template.safe.json", base), "utf8"),
     readFile(new URL("live2d-team-receipt-template.safe.json", base), "utf8"),
     readFile(new URL("README.safe.md", base), "utf8"),
+    readFile(new URL("owner-pre-send-checklist.safe.json", base), "utf8"),
   ]);
   const fixtureTexts = await Promise.all([
     readFile(new URL("voxweave-interop-manifest.safe.json", interopBase), "utf8"),
@@ -1207,6 +1245,7 @@ async function readCandidateBundleFiles() {
     manifest: JSON.parse(manifestText),
     receipts: [JSON.parse(irisText), JSON.parse(live2dText)],
     readmeText,
+    checklist: JSON.parse(checklistText),
     fixtureManifest: JSON.parse(fixtureTexts[0]),
     fixtures: EXPECTED_FIXTURE_FILES.map((path, index) => ({
       path,
@@ -1215,7 +1254,7 @@ async function readCandidateBundleFiles() {
   };
 }
 
-function validateCandidateBundle({ manifest, receipts, readmeText, fixtureManifest, fixtures }) {
+function validateCandidateBundle({ manifest, receipts, readmeText, checklist, fixtureManifest, fixtures }) {
   assertExactFields(manifest, CANDIDATE_MANIFEST_FIELDS, "invalid_candidate_manifest_fields");
   if (manifest?.schema !== "voxweave_external_acceptance_candidate_manifest_v1") {
     throw new Error("invalid_candidate_manifest_schema");
@@ -1244,6 +1283,10 @@ function validateCandidateBundle({ manifest, receipts, readmeText, fixtureManife
     EXPECTED_RECEIPT_TEMPLATE_PATHS,
     "invalid_receipt_template_paths"
   );
+  validateSafeRelativePath(manifest.pre_send_checklist_path);
+  if (manifest.pre_send_checklist_path !== EXPECTED_PRE_SEND_CHECKLIST_PATH) {
+    throw new Error("invalid_pre_send_checklist_path");
+  }
   if (manifest.candidate_status !== "candidate_prepared_not_sent") {
     throw new Error("invalid_candidate_status");
   }
@@ -1269,8 +1312,50 @@ function validateCandidateBundle({ manifest, receipts, readmeText, fixtureManife
   if (typeof readmeText !== "string" || readmeText.trim() === "") {
     throw new Error("invalid_candidate_readme");
   }
+  validatePreSendChecklist(checklist, manifest.candidate_bundle_version);
   validateFixtureBinding(fixtureManifest, fixtures);
-  scanCandidateBundleSafe({ manifest, receipts, readmeText, fixtureManifest, fixtures });
+  scanCandidateBundleSafe({ manifest, receipts, readmeText, checklist, fixtureManifest, fixtures });
+}
+
+function validatePreSendChecklist(checklist, candidateBundleVersion) {
+  assertExactFields(checklist, PRE_SEND_CHECKLIST_FIELDS, "invalid_pre_send_checklist_fields");
+  if (checklist?.schema !== "voxweave_external_acceptance_pre_send_checklist_v1") {
+    throw new Error("invalid_pre_send_checklist_schema");
+  }
+  if (checklist.candidate_bundle_version !== candidateBundleVersion) {
+    throw new Error("invalid_pre_send_checklist_bundle_version");
+  }
+  if (
+    checklist.checklist_status !== "pending_owner_action" ||
+    checklist.owner_send_authorized !== false ||
+    checklist.external_team_contact_confirmation_status !== "pending" ||
+    checklist.actual_send_status !== "not_started" ||
+    checklist.actual_receipt_status !== "none" ||
+    checklist.external_team_acceptance_status !== "not_started" ||
+    checklist.real_integration_proof_status !== "no" ||
+    checklist.runtime_readiness_claimed !== false ||
+    checklist.production_readiness_claimed !== false ||
+    checklist.safe_summary_only !== true
+  ) {
+    throw new Error("unsafe_pre_send_checklist_status");
+  }
+  for (const key of [
+    "candidate_source_binding_required",
+    "candidate_fingerprint_validation_required",
+    "candidate_cli_pass_required",
+    "loopback_evidence_pass_required",
+    "failure_matrix_pass_required",
+    "receipt_template_required",
+    "forbidden_material_scan_required",
+  ]) {
+    if (checklist[key] !== true) throw new Error("invalid_pre_send_checklist_requirement");
+  }
+  if (
+    !Array.isArray(checklist.recipient_project_scope) ||
+    JSON.stringify([...checklist.recipient_project_scope].sort()) !== JSON.stringify(["IRIS", "LIVE2D"])
+  ) {
+    throw new Error("invalid_pre_send_checklist_scope");
+  }
 }
 
 function validateReceiptTemplate(receipt, candidateBundleVersion = null) {
@@ -1395,13 +1480,14 @@ function scanExternalAcceptanceReceiptSafe(receipt) {
   }
 }
 
-function buildCandidateBundleFingerprint({ manifest, receipts, readmeText, fixtureManifest, fixtures }) {
+function buildCandidateBundleFingerprint({ manifest, receipts, readmeText, checklist, fixtureManifest, fixtures }) {
   const canonical = {
     manifest: sortObject(manifest),
     receipts: receipts.map(sortObject).sort((a, b) =>
       String(a.recipient_project).localeCompare(String(b.recipient_project))
     ),
     readmeText: String(readmeText).replace(/\s+/gu, " ").trim(),
+    checklist: sortObject(checklist),
     fixtureManifest: sortObject(fixtureManifest),
     fixtures: fixtures
       .map((fixture) => ({

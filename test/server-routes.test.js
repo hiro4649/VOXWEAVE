@@ -394,12 +394,18 @@ test("external acceptance candidate bundle is safe and not accepted", async () =
     "live2d-team-receipt-template.safe.json"
   );
   const readmeText = await readExternalAcceptanceText("README.safe.md");
+  const checklist = await readExternalAcceptanceFixture("owner-pre-send-checklist.safe.json");
   const receipts = [irisReceipt, live2dReceipt];
   const fixtureManifest = await readFixture("voxweave-interop-manifest.safe.json");
   const fixtures = await readCandidateFixtureFiles();
 
   assert.equal(manifest.schema, "voxweave_external_acceptance_candidate_manifest_v1");
-  assert.equal(manifest.candidate_bundle_version, "1.2.0");
+  assert.equal(manifest.candidate_bundle_version, "1.3.0");
+  assert.equal(manifest.source_main_sha, "00692147aa58003866604b9b9b4bfdca1dcd4637");
+  assert.equal(
+    manifest.pre_send_checklist_path,
+    "test/fixtures/external-acceptance/owner-pre-send-checklist.safe.json"
+  );
   assert.equal(manifest.source_binding_kind, "runtime_source_snapshot");
   assert.equal(manifest.bundle_binding_kind, "transitive_sha256");
   assert.equal(manifest.candidate_status, "candidate_prepared_not_sent");
@@ -415,7 +421,7 @@ test("external acceptance candidate bundle is safe and not accepted", async () =
   );
   for (const receipt of receipts) {
     assert.equal(receipt.schema, "voxweave_external_acceptance_receipt_template_v1");
-    assert.equal(receipt.candidate_bundle_version, "1.2.0");
+    assert.equal(receipt.candidate_bundle_version, "1.3.0");
     assert.equal(receipt.received_status, "pending");
     assert.equal(receipt.parsed_status, "pending");
     assert.equal(receipt.acceptance_candidate_status, "pending");
@@ -426,7 +432,20 @@ test("external acceptance candidate bundle is safe and not accepted", async () =
   }
   assert.equal(/\bhttps?:\/\//iu.test(readmeText), false);
   assert.equal(readmeText.includes("not acceptance"), true);
+  assert.equal(readmeText.includes("not send authorization"), true);
   assert.equal(readmeText.includes("not runtime readiness"), true);
+  assert.equal(checklist.schema, "voxweave_external_acceptance_pre_send_checklist_v1");
+  assert.equal(checklist.candidate_bundle_version, "1.3.0");
+  assert.equal(checklist.checklist_status, "pending_owner_action");
+  assert.equal(checklist.owner_send_authorized, false);
+  assert.deepEqual(checklist.recipient_project_scope, ["IRIS", "LIVE2D"]);
+  assert.equal(checklist.actual_send_status, "not_started");
+  assert.equal(checklist.actual_receipt_status, "none");
+  assert.equal(checklist.external_team_acceptance_status, "not_started");
+  assert.equal(checklist.real_integration_proof_status, "no");
+  assert.equal(checklist.runtime_readiness_claimed, false);
+  assert.equal(checklist.production_readiness_claimed, false);
+  assert.equal(checklist.safe_summary_only, true);
   assert.equal(fixtureManifest.contract_registry_family_count, AI_CHARACTER_CONTRACT_FAMILY_COUNT);
   assert.equal(fixtures.length, 4);
   assert.deepEqual(
@@ -439,19 +458,27 @@ test("external acceptance candidate bundle is safe and not accepted", async () =
     ]
   );
   for (const fixture of fixtures) assertNoDangerousCandidateMaterial(fixture);
-  assertNoDangerousCandidateMaterial({ manifest, receipts, readmeText, fixtureManifest, fixtures });
+  assertNoDangerousCandidateMaterial({
+    manifest,
+    receipts,
+    readmeText,
+    checklist,
+    fixtureManifest,
+    fixtures,
+  });
 
   const summary = await runExternalAcceptanceCandidateBundleSummary({
     manifest,
     receipts,
     readmeText,
+    checklist,
     fixtureManifest,
     fixtures,
   });
   assertExternalAcceptanceCandidateBundleSummarySafe(summary);
   assert.equal(summary.schema, EXTERNAL_ACCEPTANCE_CANDIDATE_BUNDLE_SUMMARY_SCHEMA);
   assert.equal(summary.status, "pass");
-  assert.equal(summary.candidate_bundle_version, "1.2.0");
+  assert.equal(summary.candidate_bundle_version, "1.3.0");
   assert.equal(summary.source_binding_kind, "runtime_source_snapshot");
   assert.equal(summary.bundle_binding_kind, "transitive_sha256");
   assert.equal(summary.manifest_status, "pass");
@@ -461,6 +488,9 @@ test("external acceptance candidate bundle is safe and not accepted", async () =
   assert.equal(summary.fixture_manifest_status, "pass");
   assert.equal(summary.fixture_file_count, 4);
   assert.equal(summary.transitive_fixture_binding_status, "pass");
+  assert.equal(summary.pre_send_checklist_status, "pending_owner_action");
+  assert.equal(summary.pre_send_checklist_binding_status, "pass");
+  assert.equal(summary.owner_send_authorized, false);
   assert.equal(summary.external_team_acceptance_status, "not_started");
   assert.equal(summary.real_integration_proof_status, "no");
   assert.equal(summary.runtime_readiness_claimed, false);
@@ -473,6 +503,7 @@ test("external acceptance candidate bundle is safe and not accepted", async () =
       manifest,
       receipts,
       readmeText,
+      checklist,
       fixtureManifest,
       fixtures,
     })
@@ -480,6 +511,7 @@ test("external acceptance candidate bundle is safe and not accepted", async () =
   const changedVersionSummary = await runExternalAcceptanceCandidateBundleSummary({
     manifest: { ...manifest, candidate_bundle_version: "1.0.1" },
     receipts: receipts.map((receipt) => ({ ...receipt, candidate_bundle_version: "1.0.1" })),
+    checklist: { ...checklist, candidate_bundle_version: "1.0.1" },
     readmeText,
     fixtureManifest,
     fixtures,
@@ -492,6 +524,7 @@ test("external acceptance candidate bundle is safe and not accepted", async () =
     manifest,
     receipts,
     readmeText,
+    checklist,
     fixtureManifest,
     fixtures: mutateFixture(fixtures, "iris-tts-packet.safe.json", { trace_id: "changed-tts" }),
   });
@@ -499,6 +532,7 @@ test("external acceptance candidate bundle is safe and not accepted", async () =
     manifest,
     receipts,
     readmeText,
+    checklist,
     fixtureManifest,
     fixtures: mutateFixture(fixtures, "iris-subtitle-packet.safe.json", { trace_id: "changed-subtitle" }),
   });
@@ -506,6 +540,7 @@ test("external acceptance candidate bundle is safe and not accepted", async () =
     manifest,
     receipts,
     readmeText,
+    checklist,
     fixtureManifest,
     fixtures: mutateFixture(fixtures, "iris-live2d-packet.safe.json", { trace_id: "changed-live2d" }),
   });
@@ -513,6 +548,7 @@ test("external acceptance candidate bundle is safe and not accepted", async () =
     manifest,
     receipts,
     readmeText,
+    checklist,
     fixtureManifest: { ...fixtureManifest, fixture_version: "1.0.1" },
     fixtures,
   });
@@ -520,6 +556,7 @@ test("external acceptance candidate bundle is safe and not accepted", async () =
     manifest,
     receipts: [{ ...irisReceipt, recipient_role: "adapter_packet_owner_v2" }, live2dReceipt],
     readmeText,
+    checklist,
     fixtureManifest,
     fixtures,
   });
@@ -527,6 +564,15 @@ test("external acceptance candidate bundle is safe and not accepted", async () =
     manifest,
     receipts,
     readmeText: `${readmeText}\nSafe candidate bundle note.\n`,
+    checklist,
+    fixtureManifest,
+    fixtures,
+  });
+  const changedChecklistSummary = await runExternalAcceptanceCandidateBundleSummary({
+    manifest,
+    receipts,
+    readmeText,
+    checklist: { ...checklist, recipient_project_scope: ["LIVE2D", "IRIS"] },
     fixtureManifest,
     fixtures,
   });
@@ -536,12 +582,14 @@ test("external acceptance candidate bundle is safe and not accepted", async () =
   assert.notEqual(summary.candidate_bundle_fingerprint, changedFixtureManifestSummary.candidate_bundle_fingerprint);
   assert.notEqual(summary.candidate_bundle_fingerprint, changedReceiptSummary.candidate_bundle_fingerprint);
   assert.notEqual(summary.candidate_bundle_fingerprint, changedReadmeSummary.candidate_bundle_fingerprint);
+  assert.notEqual(summary.candidate_bundle_fingerprint, changedChecklistSummary.candidate_bundle_fingerprint);
   assert.equal(
     summary.candidate_bundle_fingerprint,
     buildExternalAcceptanceCandidateBundleFingerprint({
       manifest,
       receipts: [live2dReceipt, irisReceipt],
       readmeText,
+      checklist,
       fixtureManifest,
       fixtures: [...fixtures].reverse(),
     })
@@ -551,6 +599,7 @@ test("external acceptance candidate bundle is safe and not accepted", async () =
       manifest: { ...manifest, unknown_field: "blocked" },
       receipts,
       readmeText,
+      checklist,
       fixtureManifest,
       fixtures,
     })
@@ -560,6 +609,7 @@ test("external acceptance candidate bundle is safe and not accepted", async () =
       manifest,
       receipts: [{ ...irisReceipt, unknown_field: "blocked" }, live2dReceipt],
       readmeText,
+      checklist,
       fixtureManifest,
       fixtures,
     })
@@ -569,6 +619,7 @@ test("external acceptance candidate bundle is safe and not accepted", async () =
       manifest: { ...manifest, fixture_files: ["../blocked"] },
       receipts,
       readmeText,
+      checklist,
       fixtureManifest,
       fixtures,
     })
@@ -578,6 +629,7 @@ test("external acceptance candidate bundle is safe and not accepted", async () =
       manifest: { ...manifest, fixture_files: ["C:/blocked"] },
       receipts,
       readmeText,
+      checklist,
       fixtureManifest,
       fixtures,
     })
@@ -587,6 +639,7 @@ test("external acceptance candidate bundle is safe and not accepted", async () =
       manifest,
       receipts,
       readmeText,
+      checklist,
       fixtureManifest,
       fixtures: fixtures.slice(1),
     })
@@ -596,6 +649,7 @@ test("external acceptance candidate bundle is safe and not accepted", async () =
       manifest,
       receipts,
       readmeText,
+      checklist,
       fixtureManifest,
       fixtures: [fixtures[0], fixtures[0], fixtures[1], fixtures[2]],
     })
@@ -688,7 +742,7 @@ test("external receipt binding validator binds safe receipts to current candidat
   assertExternalAcceptanceCandidateDescriptorSafe(descriptor);
   assert.equal(descriptor.schema, EXTERNAL_ACCEPTANCE_CANDIDATE_DESCRIPTOR_SCHEMA);
   assert.equal(descriptor.status, "pass");
-  assert.equal(descriptor.candidate_bundle_version, "1.2.0");
+  assert.equal(descriptor.candidate_bundle_version, "1.3.0");
   assert.match(descriptor.runtime_source_head_sha, /^[a-f0-9]{40}$/u);
   assert.equal(descriptor.source_binding_kind, "runtime_source_snapshot");
   assert.equal(descriptor.bundle_fingerprint_algorithm, "sha256");
@@ -752,7 +806,7 @@ test("external receipt binding validator binds safe receipts to current candidat
 
   const versionMismatch = validateExternalAcceptanceReceiptAgainstCandidate({
     ...candidate,
-    receipt: { ...boundReceipt, candidate_bundle_version: "1.0.0" },
+    receipt: { ...boundReceipt, candidate_bundle_version: "1.2.0" },
     receiptSourceKind: "synthetic_test_only",
   });
   assert.equal(versionMismatch.status, "fail");
@@ -884,7 +938,7 @@ test("external receipt binding CLI emits safe candidate-bound JSON only", async 
       })),
       "utf8"
     );
-    await writeFile(wrongVersionPath, JSON.stringify({ ...boundReceipt, candidate_bundle_version: "1.0.0" }), "utf8");
+    await writeFile(wrongVersionPath, JSON.stringify({ ...boundReceipt, candidate_bundle_version: "1.2.0" }), "utf8");
     await writeFile(wrongSourcePath, JSON.stringify({ ...boundReceipt, source_main_sha: "a".repeat(40) }), "utf8");
     await writeFile(
       wrongFingerprintPath,
@@ -995,7 +1049,7 @@ test("acceptance provenance drift matrix rejects unsafe or stale bindings", asyn
   assert.equal(candidate.receipts.find((receipt) => receipt.recipient_project === "LIVE2D").recipient_role, "renderer_boundary_owner");
 
   const mismatchCases = [
-    ["version", { candidate_bundle_version: "1.0.0" }, "candidate_bundle_version_mismatch"],
+    ["version", { candidate_bundle_version: "1.2.0" }, "candidate_bundle_version_mismatch"],
     ["source", { source_main_sha: "a".repeat(40) }, "candidate_source_head_mismatch"],
     ["fingerprint", { candidate_bundle_fingerprint: "b".repeat(64) }, "candidate_bundle_fingerprint_mismatch"],
     ["recipient_project", { recipient_project: "LIVE2D", recipient_role: "adapter_packet_owner" }, "candidate_recipient_role_mismatch"],
@@ -1018,13 +1072,13 @@ test("acceptance provenance drift matrix rejects unsafe or stale bindings", asyn
   assert.throws(() => validateExternalAcceptanceReceipt({ ...exactReceipt, raw_payload: "x" }));
   assert.throws(() => validateExternalAcceptanceReceipt({ ...exactReceipt, recipient_role: "error_detail" }));
   assert.equal(
-    validateExternalAcceptanceReceipt({ ...exactReceipt, candidate_bundle_version: "1.0.0" }).status,
+    validateExternalAcceptanceReceipt({ ...exactReceipt, candidate_bundle_version: "1.2.0" }).status,
     "pass"
   );
   assert.equal(
     validateExternalAcceptanceReceiptAgainstCandidate({
       ...candidate,
-      receipt: { ...exactReceipt, candidate_bundle_version: "1.0.0" },
+      receipt: { ...exactReceipt, candidate_bundle_version: "1.2.0" },
       receiptSourceKind: "synthetic_test_only",
     }).status,
     "fail"
@@ -1038,7 +1092,8 @@ test("acceptance provenance drift matrix rejects unsafe or stale bindings", asyn
     { fixtures: mutateFixture(candidate.fixtures, "iris-live2d-packet.safe.json", { trace_id: "drift-live2d" }) },
     { receipts: [{ ...candidate.receipts[0], recipient_role: "adapter_packet_owner_v2" }, candidate.receipts[1]] },
     { readmeText: `${candidate.readmeText}\nSafe drift note.\n` },
-    { manifest: { ...candidate.manifest, candidate_bundle_version: "1.1.1" }, receipts: candidate.receipts.map((receipt) => ({ ...receipt, candidate_bundle_version: "1.1.1" })) },
+    { checklist: { ...candidate.checklist, recipient_project_scope: ["LIVE2D", "IRIS"] } },
+    { manifest: { ...candidate.manifest, candidate_bundle_version: "1.1.1" }, receipts: candidate.receipts.map((receipt) => ({ ...receipt, candidate_bundle_version: "1.1.1" })), checklist: { ...candidate.checklist, candidate_bundle_version: "1.1.1" } },
     { manifest: { ...candidate.manifest, source_main_sha: "c".repeat(40) } },
   ];
   for (const mutation of fingerprintMutations) {
@@ -1102,6 +1157,7 @@ test("external acceptance candidate dry-run matrix composes safe local evidence 
     "live2d-team-receipt-template.safe.json"
   );
   const readmeText = await readExternalAcceptanceText("README.safe.md");
+  const checklist = await readExternalAcceptanceFixture("owner-pre-send-checklist.safe.json");
   const fixtureManifest = await readFixture("voxweave-interop-manifest.safe.json");
   const fixtures = await readCandidateFixtureFiles();
 
@@ -1109,6 +1165,7 @@ test("external acceptance candidate dry-run matrix composes safe local evidence 
     manifest,
     receipts: [irisTemplate, live2dTemplate],
     readmeText,
+    checklist,
     fixtureManifest,
     fixtures,
   });
@@ -1125,7 +1182,7 @@ test("external acceptance candidate dry-run matrix composes safe local evidence 
     schema: EXTERNAL_ACCEPTANCE_RECEIPT_SCHEMA,
     recipient_project: "IRIS",
     recipient_role: "synthetic_test_only",
-    candidate_bundle_version: "1.2.0",
+    candidate_bundle_version: "1.3.0",
     source_main_sha: "1".repeat(40),
     candidate_bundle_fingerprint: bundle.candidate_bundle_fingerprint,
     received_status: "received",
@@ -1400,12 +1457,14 @@ async function loadCandidateBundleForTest() {
     "live2d-team-receipt-template.safe.json"
   );
   const readmeText = await readExternalAcceptanceText("README.safe.md");
+  const checklist = await readExternalAcceptanceFixture("owner-pre-send-checklist.safe.json");
   const fixtureManifest = await readFixture("voxweave-interop-manifest.safe.json");
   const fixtures = await readCandidateFixtureFiles();
   return {
     manifest,
     receipts: [irisReceipt, live2dReceipt],
     readmeText,
+    checklist,
     fixtureManifest,
     fixtures,
   };
