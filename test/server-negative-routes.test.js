@@ -236,6 +236,45 @@ test("Content-Length early guard rejects oversized declared body safely", () => 
   );
 });
 
+test("operational request lifecycle matrix keeps boundary decisions aligned", () => {
+  const matrix = [
+    {
+      axis: "credential",
+      accepted: constantTimeCredentialMatch(FAKE_API_KEY, FAKE_API_KEY),
+      rejected: constantTimeCredentialMatch("wrong-unit-test-key", FAKE_API_KEY),
+    },
+    {
+      axis: "request_target",
+      accepted: parseCanonicalRequestTarget("/v1/orchestrate") === "/v1/orchestrate",
+      rejected: parseCanonicalRequestTarget("/v1/orchestrate?debug=1") !== "",
+    },
+    {
+      axis: "content_length",
+      accepted: doesNotThrowStatus(() =>
+        assertContentLengthWithinLimit({ headers: { "content-length": "512000" } })
+      ),
+      rejected: doesNotThrowStatus(() =>
+        assertContentLengthWithinLimit({ headers: { "content-length": "512001" } })
+      ),
+    },
+    {
+      axis: "lifecycle",
+      accepted: normalizeServerLifecyclePolicy({ maxRequestsPerSocket: 2 }).maxRequestsPerSocket === 2,
+      rejected: normalizeServerLifecyclePolicy({ requestTimeoutMs: -1 }).requestTimeoutMs === -1,
+    },
+    {
+      axis: "safe_snapshot",
+      accepted: buildSafeServerStartupSummary().safe_summary_only === true,
+      rejected: JSON.stringify(buildSafeServerStartupSummary()).includes("127.0.0.1"),
+    },
+  ];
+
+  for (const row of matrix) {
+    assert.equal(row.accepted, true, `${row.axis} accepted case`);
+    assert.equal(row.rejected, false, `${row.axis} rejected case`);
+  }
+});
+
 test("POST /v1/orchestrate without auth returns safe auth_required error", async () => {
   await withRouteServer(async (baseUrl) => {
     const response = await postJson(`${baseUrl}/v1/orchestrate`, adapterPacket());
@@ -766,6 +805,15 @@ function safeRequestTargetErrorMatcher(error) {
   assert.equal(error.statusCode, 400);
   assert.equal(String(error.message).includes("/v1/orchestrate"), false);
   return true;
+}
+
+function doesNotThrowStatus(callback) {
+  try {
+    callback();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function postRawJsonWithDuplicateHeader(baseUrl, headerName) {
