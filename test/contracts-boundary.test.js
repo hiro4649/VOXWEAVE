@@ -110,6 +110,15 @@ test("buildIntegrationBoundarySnapshot returns default safe boundary state", () 
   assert.equal(snapshot.server_bind_policy.non_loopback_requires_explicit_opt_in, true);
   assert.equal(snapshot.server_bind_policy.non_loopback_requires_auth, true);
   assert.equal(snapshot.server_bind_policy.json_write_content_type_required, true);
+  assert.equal(snapshot.operational_boundary.fixed_length_credential_digest_comparison, true);
+  assert.equal(snapshot.operational_boundary.duplicate_credential_headers_rejected, true);
+  assert.equal(snapshot.operational_boundary.multiple_credential_sources_rejected, true);
+  assert.equal(snapshot.operational_boundary.canonical_request_target_required, true);
+  assert.equal(snapshot.operational_boundary.content_length_early_guard, true);
+  assert.equal(snapshot.operational_boundary.explicit_server_lifecycle_policy, true);
+  assert.equal(snapshot.operational_boundary.safe_startup_summary, true);
+  assert.equal(snapshot.operational_boundary.safe_shutdown_summary, true);
+  assert.equal(snapshot.operational_boundary.transport_values_excluded, true);
   assert.equal(snapshot.tts_boundary.mode, "mock_only");
   assert.equal(snapshot.tts_boundary.provider_connected, false);
   assert.equal(snapshot.asr_boundary.mode, "not_connected");

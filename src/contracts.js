@@ -990,6 +990,18 @@ export function buildIntegrationBoundarySnapshot({
       non_loopback_requires_auth: true,
       json_write_content_type_required: true,
     },
+    operational_boundary: {
+      fixed_length_credential_digest_comparison: true,
+      duplicate_credential_headers_rejected: true,
+      multiple_credential_sources_rejected: true,
+      canonical_request_target_required: true,
+      query_bearing_write_target_rejected: true,
+      content_length_early_guard: true,
+      explicit_server_lifecycle_policy: true,
+      safe_startup_summary: true,
+      safe_shutdown_summary: true,
+      transport_values_excluded: true,
+    },
     tts_boundary: {
       mode: "mock_only",
       provider_connected: false,
