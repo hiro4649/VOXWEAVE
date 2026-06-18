@@ -1,8 +1,8 @@
 # VOXWEAVE External Acceptance Candidate Bundle
 
 This bundle is a safe candidate package for IRIS and LIVE2D collaborators. It is
-not acceptance, not external receipt evidence, not runtime readiness, and not
-production readiness.
+candidate bundle version 1.2.0. It is not acceptance, not external receipt
+evidence, not runtime readiness, and not production readiness.
 
 The manifest `source_main_sha` binds only the runtime source snapshot used for
 this unsent candidate bundle. The `candidate_bundle_fingerprint` binds the
@@ -27,4 +27,6 @@ An accepted candidate, if one is provided in the future, still will not be
 production readiness, real renderer readiness, real TTS readiness, or ASR
 readiness.
 
-This bundle remains not sent, not accepted, and not real integration proof.
+Version 1.2.0 is rebound to the cache and request correlation milestone source
+snapshot. This bundle remains not sent, not accepted, and not real integration
+proof.
