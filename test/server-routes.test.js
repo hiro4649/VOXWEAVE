@@ -3,7 +3,7 @@ import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { readFile, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { test } from "node:test";
 import {
   AI_CHARACTER_CONTRACT_FAMILY_COUNT,
@@ -746,6 +746,69 @@ test("external acceptance receipt validator accepts only safe receipts", async (
       received_status: "pending",
     })
   );
+  assert.throws(() =>
+    validateExternalAcceptanceReceipt({
+      ...baseReceipt,
+      received_status: "rejected",
+    })
+  );
+  assert.throws(() =>
+    validateExternalAcceptanceReceipt({
+      ...baseReceipt,
+      acceptance_candidate_status: "pending",
+      received_status: "rejected",
+    })
+  );
+  assert.throws(() =>
+    validateExternalAcceptanceReceipt({
+      ...baseReceipt,
+      acceptance_candidate_status: "rejected_candidate",
+      received_status: "pending",
+    })
+  );
+  assert.throws(() =>
+    validateExternalAcceptanceReceipt({
+      ...baseReceipt,
+      recipient_role: " adapter_packet_owner",
+    })
+  );
+  assert.throws(() =>
+    validateExternalAcceptanceReceipt({
+      ...baseReceipt,
+      candidate_bundle_version: "01.2.0",
+    })
+  );
+  assert.throws(() =>
+    validateExternalAcceptanceReceipt({
+      ...baseReceipt,
+      source_main_sha: "E".repeat(40),
+    })
+  );
+  assert.throws(() =>
+    validateExternalAcceptanceReceipt({
+      ...baseReceipt,
+      candidate_bundle_fingerprint: "F".repeat(64),
+    })
+  );
+  assert.throws(() =>
+    validateExternalAcceptanceReceipt({
+      ...baseReceipt,
+      recipient_role: { nested: true },
+    })
+  );
+  assert.throws(() =>
+    validateExternalAcceptanceReceipt({
+      ...baseReceipt,
+      recipient_role: ["adapter_packet_owner"],
+    })
+  );
+  assert.throws(() => {
+    const cyclicReceipt = { ...baseReceipt };
+    cyclicReceipt.recipient_role = cyclicReceipt;
+    validateExternalAcceptanceReceipt(cyclicReceipt);
+  });
+  const nullPrototypeReceipt = Object.assign(Object.create(null), baseReceipt);
+  assert.equal(validateExternalAcceptanceReceipt(nullPrototypeReceipt).status, "pass");
 });
 
 test("external receipt binding validator binds safe receipts to current candidate", async () => {
@@ -769,15 +832,56 @@ test("external receipt binding validator binds safe receipts to current candidat
   const boundReceipt = buildSyntheticBoundReceipt(candidate, descriptor, {
     acceptance_candidate_status: "accepted_candidate",
   });
-  const accepted = validateExternalAcceptanceReceiptAgainstCandidate({
+  const syntheticAccepted = validateExternalAcceptanceReceiptAgainstCandidate({
     ...candidate,
     receipt: boundReceipt,
     receiptSourceKind: "synthetic_test_only",
   });
+  assertExternalAcceptanceReceiptBindingResultSafe(syntheticAccepted);
+  assert.equal(syntheticAccepted.status, "fail");
+  assert.equal(syntheticAccepted.receipt_source_kind, "synthetic_test_only");
+  assert.equal(syntheticAccepted.receipt_provenance_class, "synthetic_non_authoritative");
+  assert.equal(syntheticAccepted.acceptance_authority_created, false);
+  assert.equal(syntheticAccepted.external_acceptance_effective, false);
+  assert.equal(syntheticAccepted.primary_reason_code, "synthetic_receipt_acceptance_claim_forbidden");
+
+  const unclassifiedAccepted = validateExternalAcceptanceReceiptAgainstCandidate({
+    ...candidate,
+    receipt: boundReceipt,
+  });
+  assertExternalAcceptanceReceiptBindingResultSafe(unclassifiedAccepted);
+  assert.equal(unclassifiedAccepted.status, "fail");
+  assert.equal(unclassifiedAccepted.receipt_source_kind, "unclassified");
+  assert.equal(unclassifiedAccepted.receipt_provenance_class, "unclassified_non_authoritative");
+  assert.equal(
+    unclassifiedAccepted.primary_reason_code,
+    "receipt_acceptance_claim_requires_owner_provenance"
+  );
+
+  const invalidSourceKind = validateExternalAcceptanceReceiptAgainstCandidate({
+    ...candidate,
+    receipt: boundReceipt,
+    receiptSourceKind: "externally_verified",
+  });
+  assertExternalAcceptanceReceiptBindingResultSafe(invalidSourceKind);
+  assert.equal(invalidSourceKind.status, "fail");
+  assert.equal(invalidSourceKind.receipt_source_kind, "unclassified");
+  assert.equal(invalidSourceKind.receipt_source_status, "fail");
+  assert.equal(invalidSourceKind.primary_reason_code, "invalid_receipt_source_kind");
+
+  const accepted = validateExternalAcceptanceReceiptAgainstCandidate({
+    ...candidate,
+    receipt: boundReceipt,
+    receiptSourceKind: "owner_provided",
+  });
   assertExternalAcceptanceReceiptBindingResultSafe(accepted);
   assert.equal(accepted.schema, EXTERNAL_ACCEPTANCE_RECEIPT_BINDING_RESULT_SCHEMA);
   assert.equal(accepted.status, "pass");
-  assert.equal(accepted.receipt_source_kind, "synthetic_test_only");
+  assert.equal(accepted.receipt_source_kind, "owner_provided");
+  assert.equal(accepted.receipt_provenance_class, "owner_supplied_unverified_metadata");
+  assert.equal(accepted.acceptance_authority_created, false);
+  assert.equal(accepted.external_acceptance_effective, false);
+  assert.equal(accepted.intake_disposition, "bound_accepted_candidate_unverified");
   assert.equal(accepted.source_head_binding_status, "pass");
   assert.equal(accepted.bundle_version_binding_status, "pass");
   assert.equal(accepted.bundle_fingerprint_binding_status, "pass");
@@ -819,15 +923,16 @@ test("external receipt binding validator binds safe receipts to current candidat
   const versionMismatch = validateExternalAcceptanceReceiptAgainstCandidate({
     ...candidate,
     receipt: { ...boundReceipt, candidate_bundle_version: "1.2.0" },
-    receiptSourceKind: "synthetic_test_only",
+    receiptSourceKind: "owner_provided",
   });
   assert.equal(versionMismatch.status, "fail");
   assert.equal(versionMismatch.primary_reason_code, "candidate_bundle_version_mismatch");
+  assert.equal(versionMismatch.candidate_bundle_version, descriptor.candidate_bundle_version);
 
   const sourceMismatch = validateExternalAcceptanceReceiptAgainstCandidate({
     ...candidate,
     receipt: { ...boundReceipt, source_main_sha: "a".repeat(40) },
-    receiptSourceKind: "synthetic_test_only",
+    receiptSourceKind: "owner_provided",
   });
   assert.equal(sourceMismatch.status, "fail");
   assert.equal(sourceMismatch.primary_reason_code, "candidate_source_head_mismatch");
@@ -835,7 +940,7 @@ test("external receipt binding validator binds safe receipts to current candidat
   const fingerprintMismatch = validateExternalAcceptanceReceiptAgainstCandidate({
     ...candidate,
     receipt: { ...boundReceipt, candidate_bundle_fingerprint: "b".repeat(64) },
-    receiptSourceKind: "synthetic_test_only",
+    receiptSourceKind: "owner_provided",
   });
   assert.equal(fingerprintMismatch.status, "fail");
   assert.equal(fingerprintMismatch.primary_reason_code, "candidate_bundle_fingerprint_mismatch");
@@ -847,7 +952,7 @@ test("external receipt binding validator binds safe receipts to current candidat
       recipient_project: "LIVE2D",
       recipient_role: "renderer_boundary_owner",
     }),
-    receiptSourceKind: "synthetic_test_only",
+    receiptSourceKind: "owner_provided",
   });
   assert.equal(templateMissing.status, "fail");
   assert.equal(templateMissing.primary_reason_code, "candidate_receipt_binding_invalid");
@@ -855,7 +960,7 @@ test("external receipt binding validator binds safe receipts to current candidat
   const roleMismatch = validateExternalAcceptanceReceiptAgainstCandidate({
     ...candidate,
     receipt: { ...boundReceipt, recipient_role: "renderer_boundary_owner" },
-    receiptSourceKind: "synthetic_test_only",
+    receiptSourceKind: "owner_provided",
   });
   assert.equal(roleMismatch.status, "fail");
   assert.equal(roleMismatch.primary_reason_code, "candidate_recipient_role_mismatch");
@@ -863,7 +968,7 @@ test("external receipt binding validator binds safe receipts to current candidat
   const unsafeReceipt = validateExternalAcceptanceReceiptAgainstCandidate({
     ...candidate,
     receipt: { ...boundReceipt, runtime_readiness_claimed: true },
-    receiptSourceKind: "synthetic_test_only",
+    receiptSourceKind: "owner_provided",
   });
   assert.equal(unsafeReceipt.status, "fail");
   assert.equal(unsafeReceipt.primary_reason_code, "candidate_receipt_safety_invalid");
@@ -871,15 +976,23 @@ test("external receipt binding validator binds safe receipts to current candidat
   const incompleteAccepted = validateExternalAcceptanceReceiptAgainstCandidate({
     ...candidate,
     receipt: { ...boundReceipt, parsed_status: "pending" },
-    receiptSourceKind: "synthetic_test_only",
+    receiptSourceKind: "owner_provided",
   });
   assert.equal(incompleteAccepted.status, "fail");
   assert.equal(incompleteAccepted.primary_reason_code, "candidate_receipt_safety_invalid");
 
+  const rejectedAccepted = validateExternalAcceptanceReceiptAgainstCandidate({
+    ...candidate,
+    receipt: { ...boundReceipt, received_status: "rejected" },
+    receiptSourceKind: "owner_provided",
+  });
+  assert.equal(rejectedAccepted.status, "fail");
+  assert.equal(rejectedAccepted.primary_reason_code, "candidate_receipt_safety_invalid");
+
   const acceptedAgain = validateExternalAcceptanceReceiptAgainstCandidate({
     ...candidate,
     receipt: boundReceipt,
-    receiptSourceKind: "synthetic_test_only",
+    receiptSourceKind: "owner_provided",
   });
   assert.equal(accepted.binding_fingerprint, acceptedAgain.binding_fingerprint);
 });
@@ -925,6 +1038,13 @@ test("external receipt binding CLI emits safe candidate-bound JSON only", async 
   const malformedPath = join(tmpdir(), `voxweave-malformed-receipt-${Date.now()}.json`);
   const unsafePath = join(tmpdir(), `voxweave-unsafe-receipt-${Date.now()}.json`);
   const missingPath = join(tmpdir(), `voxweave-missing-receipt-${Date.now()}.json`);
+  const duplicatePath = join(tmpdir(), `voxweave-duplicate-receipt-${Date.now()}.json`);
+  const escapedDuplicatePath = join(tmpdir(), `voxweave-escaped-duplicate-receipt-${Date.now()}.json`);
+  const nestedPath = join(tmpdir(), `voxweave-nested-receipt-${Date.now()}.json`);
+  const invalidUtf8Path = join(tmpdir(), `voxweave-invalid-utf8-receipt-${Date.now()}.json`);
+  const bomPath = join(tmpdir(), `voxweave-bom-receipt-${Date.now()}.json`);
+  const oversizedPath = join(tmpdir(), `voxweave-oversized-receipt-${Date.now()}.json`);
+  const directoryPath = join(tmpdir(), `voxweave-directory-receipt-${Date.now()}`);
   const paths = [
     receiptPath,
     pendingPath,
@@ -934,6 +1054,12 @@ test("external receipt binding CLI emits safe candidate-bound JSON only", async 
     wrongRolePath,
     malformedPath,
     unsafePath,
+    duplicatePath,
+    escapedDuplicatePath,
+    nestedPath,
+    invalidUtf8Path,
+    bomPath,
+    oversizedPath,
   ];
   try {
     await writeFile(receiptPath, JSON.stringify(boundReceipt), "utf8");
@@ -960,36 +1086,65 @@ test("external receipt binding CLI emits safe candidate-bound JSON only", async 
     await writeFile(wrongRolePath, JSON.stringify({ ...boundReceipt, recipient_role: "renderer_boundary_owner" }), "utf8");
     await writeFile(malformedPath, "{", "utf8");
     await writeFile(unsafePath, JSON.stringify({ ...boundReceipt, runtime_readiness_claimed: true }), "utf8");
+    await writeFile(
+      duplicatePath,
+      `{"schema":"${EXTERNAL_ACCEPTANCE_RECEIPT_SCHEMA}","schema":"${EXTERNAL_ACCEPTANCE_RECEIPT_SCHEMA}"}`,
+      "utf8"
+    );
+    await writeFile(
+      escapedDuplicatePath,
+      `{"recipient_project":"IRIS","recipient\\u005fproject":"LIVE2D"}`,
+      "utf8"
+    );
+    await writeFile(nestedPath, `{"schema":{"nested":true}}`, "utf8");
+    await writeFile(invalidUtf8Path, Buffer.from([0x7b, 0x22, 0xc3, 0x28, 0x22, 0x7d]));
+    await writeFile(bomPath, Buffer.concat([
+      Buffer.from([0xef, 0xbb, 0xbf]),
+      Buffer.from(JSON.stringify(boundReceipt)),
+    ]));
+    await writeFile(oversizedPath, Buffer.alloc(32769, 0x20));
+    await mkdir(directoryPath);
 
-    const pass = await runBindingCli(receiptPath, "synthetic_test_only");
+    const pass = await runBindingCli(receiptPath, "owner_provided");
     assert.equal(pass.exitCode, 0);
     assert.equal(pass.output.schema, EXTERNAL_ACCEPTANCE_RECEIPT_BINDING_RESULT_SCHEMA);
     assert.equal(pass.output.status, "pass");
-    assert.equal(pass.output.receipt_source_kind, "synthetic_test_only");
+    assert.equal(pass.output.receipt_source_kind, "owner_provided");
+    assert.equal(pass.output.receipt_provenance_class, "owner_supplied_unverified_metadata");
+    assert.equal(pass.output.acceptance_authority_created, false);
+    assert.equal(pass.output.external_acceptance_effective, false);
+    assert.equal(pass.output.intake_disposition, "bound_accepted_candidate_unverified");
     assert.equal(pass.output.external_team_acceptance_status, "not_claimed_by_validator");
     assert.equal(pass.output.real_integration_proof_status, "no");
     assert.equal(pass.output.runtime_readiness_claimed, false);
     assert.equal(pass.output.production_readiness_claimed, false);
     assertOneSafeJsonObject(pass.stdout);
 
+    const syntheticAccepted = await runBindingCli(receiptPath, "synthetic_test_only");
+    assert.equal(syntheticAccepted.exitCode, 1);
+    assert.equal(
+      syntheticAccepted.output.primary_reason_code,
+      "synthetic_receipt_acceptance_claim_forbidden"
+    );
+
     const pending = await runBindingCli(pendingPath, "synthetic_test_only");
     assert.equal(pending.exitCode, 0);
     assert.equal(pending.output.status, "pass");
     assert.equal(pending.output.receipt_candidate_status, "pending");
 
-    const wrongVersion = await runBindingCli(wrongVersionPath, "synthetic_test_only");
+    const wrongVersion = await runBindingCli(wrongVersionPath, "owner_provided");
     assert.equal(wrongVersion.exitCode, 1);
     assert.equal(wrongVersion.output.primary_reason_code, "candidate_bundle_version_mismatch");
 
-    const wrongSource = await runBindingCli(wrongSourcePath, "synthetic_test_only");
+    const wrongSource = await runBindingCli(wrongSourcePath, "owner_provided");
     assert.equal(wrongSource.exitCode, 1);
     assert.equal(wrongSource.output.primary_reason_code, "candidate_source_head_mismatch");
 
-    const wrongFingerprint = await runBindingCli(wrongFingerprintPath, "synthetic_test_only");
+    const wrongFingerprint = await runBindingCli(wrongFingerprintPath, "owner_provided");
     assert.equal(wrongFingerprint.exitCode, 1);
     assert.equal(wrongFingerprint.output.primary_reason_code, "candidate_bundle_fingerprint_mismatch");
 
-    const wrongRole = await runBindingCli(wrongRolePath, "synthetic_test_only");
+    const wrongRole = await runBindingCli(wrongRolePath, "owner_provided");
     assert.equal(wrongRole.exitCode, 1);
     assert.equal(wrongRole.output.primary_reason_code, "candidate_recipient_role_mismatch");
 
@@ -997,7 +1152,7 @@ test("external receipt binding CLI emits safe candidate-bound JSON only", async 
     assert.equal(malformed.exitCode, 1);
     assert.equal(malformed.output.primary_reason_code, "invalid_receipt_json");
 
-    const unsafe = await runBindingCli(unsafePath, "synthetic_test_only");
+    const unsafe = await runBindingCli(unsafePath, "owner_provided");
     assert.equal(unsafe.exitCode, 1);
     assert.equal(unsafe.output.primary_reason_code, "candidate_receipt_safety_invalid");
 
@@ -1006,8 +1161,83 @@ test("external receipt binding CLI emits safe candidate-bound JSON only", async 
     assert.equal(missing.output.receipt_source_kind, "owner_provided");
     assert.equal(missing.output.primary_reason_code, "invalid_receipt_file");
 
+    const duplicate = await runBindingCli(duplicatePath, "owner_provided");
+    assert.equal(duplicate.exitCode, 1);
+    assert.equal(duplicate.output.primary_reason_code, "invalid_receipt_duplicate_key");
+
+    const escapedDuplicate = await runBindingCli(escapedDuplicatePath, "owner_provided");
+    assert.equal(escapedDuplicate.exitCode, 1);
+    assert.equal(escapedDuplicate.output.primary_reason_code, "invalid_receipt_duplicate_key");
+
+    const nested = await runBindingCli(nestedPath, "owner_provided");
+    assert.equal(nested.exitCode, 1);
+    assert.equal(nested.output.primary_reason_code, "invalid_receipt_nested_value");
+
+    const invalidUtf8 = await runBindingCli(invalidUtf8Path, "owner_provided");
+    assert.equal(invalidUtf8.exitCode, 1);
+    assert.equal(invalidUtf8.output.primary_reason_code, "invalid_receipt_utf8");
+
+    const bom = await runBindingCli(bomPath, "owner_provided");
+    assert.equal(bom.exitCode, 1);
+    assert.equal(bom.output.primary_reason_code, "invalid_receipt_bom");
+
+    const oversized = await runBindingCli(oversizedPath, "owner_provided");
+    assert.equal(oversized.exitCode, 1);
+    assert.equal(oversized.output.primary_reason_code, "invalid_receipt_file_size");
+
+    const directory = await runBindingCli(directoryPath, "owner_provided");
+    assert.equal(directory.exitCode, 1);
+    assert.equal(directory.output.primary_reason_code, "invalid_receipt_file_type");
+
+    const invalidSourceKind = await runReceiptScriptCli([
+      "--validate-receipt-against-bundle",
+      receiptPath,
+      "--receipt-source-kind",
+      "externally_verified",
+    ]);
+    assert.equal(invalidSourceKind.exitCode, 1);
+    assert.equal(invalidSourceKind.output.primary_reason_code, "invalid_receipt_source_kind");
+    assert.equal(invalidSourceKind.output.receipt_source_kind, "unclassified");
+
+    const duplicateSourceKind = await runReceiptScriptCli([
+      "--validate-receipt-against-bundle",
+      receiptPath,
+      "--receipt-source-kind",
+      "owner_provided",
+      "--receipt-source-kind",
+      "synthetic_test_only",
+    ]);
+    assert.equal(duplicateSourceKind.exitCode, 1);
+    assert.equal(duplicateSourceKind.output.primary_reason_code, "invalid_receipt_cli_arguments");
+
+    const sourceKindOutsideBinding = await runReceiptScriptCli([
+      "--validate-receipt",
+      receiptPath,
+      "--receipt-source-kind",
+      "owner_provided",
+    ]);
+    assert.equal(sourceKindOutsideBinding.exitCode, 1);
+    assert.equal(sourceKindOutsideBinding.output.primary_reason_code, "invalid_receipt_cli_arguments");
+
+    const conflictingMode = await runReceiptScriptCli([
+      "--validate-receipt-against-bundle",
+      receiptPath,
+      "--candidate-bundle",
+    ]);
+    assert.equal(conflictingMode.exitCode, 1);
+    assert.equal(conflictingMode.output.primary_reason_code, "invalid_receipt_cli_arguments");
+
+    const unknownArg = await runReceiptScriptCli(["--unknown-receipt-mode"]);
+    assert.equal(unknownArg.exitCode, 1);
+    assert.equal(unknownArg.output.primary_reason_code, "invalid_receipt_cli_arguments");
+
+    const missingPathArgument = await runReceiptScriptCli(["--validate-receipt-against-bundle"]);
+    assert.equal(missingPathArgument.exitCode, 1);
+    assert.equal(missingPathArgument.output.primary_reason_code, "invalid_receipt_cli_arguments");
+
     for (const result of [
       pass,
+      syntheticAccepted,
       pending,
       wrongVersion,
       wrongSource,
@@ -1016,6 +1246,19 @@ test("external receipt binding CLI emits safe candidate-bound JSON only", async 
       malformed,
       unsafe,
       missing,
+      duplicate,
+      escapedDuplicate,
+      nested,
+      invalidUtf8,
+      bom,
+      oversized,
+      directory,
+      invalidSourceKind,
+      duplicateSourceKind,
+      sourceKindOutsideBinding,
+      conflictingMode,
+      unknownArg,
+      missingPathArgument,
     ]) {
       assertExternalAcceptanceReceiptBindingResultSafe(result.output);
       assert.equal(result.stdout.includes("voxweave-"), false);
@@ -1027,6 +1270,7 @@ test("external receipt binding CLI emits safe candidate-bound JSON only", async 
     }
   } finally {
     await Promise.all(paths.map((path) => unlink(path).catch(() => {})));
+    await rm(directoryPath, { recursive: true, force: true }).catch(() => {});
   }
 });
 
@@ -1046,7 +1290,7 @@ test("acceptance provenance drift matrix rejects unsafe or stale bindings", asyn
   const exact = validateExternalAcceptanceReceiptAgainstCandidate({
     ...candidate,
     receipt: exactReceipt,
-    receiptSourceKind: "synthetic_test_only",
+    receiptSourceKind: "owner_provided",
   });
   const pending = validateExternalAcceptanceReceiptAgainstCandidate({
     ...candidate,
@@ -1056,6 +1300,8 @@ test("acceptance provenance drift matrix rejects unsafe or stale bindings", asyn
   assert.equal(exact.status, "pass");
   assert.equal(pending.status, "pass");
   assert.equal(exact.external_team_acceptance_status, "not_claimed_by_validator");
+  assert.equal(exact.acceptance_authority_created, false);
+  assert.equal(exact.external_acceptance_effective, false);
   assert.equal(pending.external_team_acceptance_status, "not_claimed_by_validator");
   assert.equal(candidate.receipts.find((receipt) => receipt.recipient_project === "IRIS").recipient_role, "adapter_packet_owner");
   assert.equal(candidate.receipts.find((receipt) => receipt.recipient_project === "LIVE2D").recipient_role, "renderer_boundary_owner");
@@ -1074,7 +1320,7 @@ test("acceptance provenance drift matrix rejects unsafe or stale bindings", asyn
     const result = validateExternalAcceptanceReceiptAgainstCandidate({
       ...candidate,
       receipt: { ...exactReceipt, ...patch },
-      receiptSourceKind: "synthetic_test_only",
+      receiptSourceKind: "owner_provided",
     });
     assert.equal(result.status, "fail");
     assert.equal(result.primary_reason_code, reason);
@@ -1091,7 +1337,7 @@ test("acceptance provenance drift matrix rejects unsafe or stale bindings", asyn
     validateExternalAcceptanceReceiptAgainstCandidate({
       ...candidate,
       receipt: { ...exactReceipt, candidate_bundle_version: "1.2.0" },
-      receiptSourceKind: "synthetic_test_only",
+      receiptSourceKind: "owner_provided",
     }).status,
     "fail"
   );
@@ -1118,7 +1364,7 @@ test("acceptance provenance drift matrix rejects unsafe or stale bindings", asyn
     const staleReceipt = validateExternalAcceptanceReceiptAgainstCandidate({
       ...mutated,
       receipt: exactReceipt,
-      receiptSourceKind: "synthetic_test_only",
+      receiptSourceKind: "owner_provided",
     });
     assert.equal(staleReceipt.status, "fail");
   }
@@ -1509,14 +1755,19 @@ function buildSyntheticBoundReceipt(candidate, descriptor, overrides = {}) {
 }
 
 async function runBindingCli(receiptPath, receiptSourceKind) {
-  const args = [
-    "scripts/voxweave-loopback-integration-evidence.mjs",
+  return runReceiptScriptCli([
     "--validate-receipt-against-bundle",
     receiptPath,
     "--receipt-source-kind",
     receiptSourceKind,
-  ];
-  const result = await execFileAsync(process.execPath, args, {
+  ]);
+}
+
+async function runReceiptScriptCli(args) {
+  const result = await execFileAsync(process.execPath, [
+    "scripts/voxweave-loopback-integration-evidence.mjs",
+    ...args,
+  ], {
     cwd: process.cwd(),
     windowsHide: true,
   })
