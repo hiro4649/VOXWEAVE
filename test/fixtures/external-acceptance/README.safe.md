@@ -1,7 +1,7 @@
 # VOXWEAVE External Acceptance Candidate Bundle
 
 This bundle is a safe candidate package for IRIS and LIVE2D collaborators. It is
-candidate bundle version 1.3.0. It is not acceptance, not external receipt
+candidate bundle version 1.4.0. It is not acceptance, not external receipt
 evidence, not send authorization, not runtime readiness, and not production
 readiness.
 
@@ -29,7 +29,7 @@ An accepted candidate, if one is provided in the future, still will not be
 production readiness, real renderer readiness, real TTS readiness, or ASR
 readiness.
 
-Version 1.3.0 is rebound to the operation deadline and cancellation milestone
-source snapshot. The owner pre-send checklist remains pending owner action and
-does not authorize sending. This bundle remains not sent, not accepted, and not
-real integration proof.
+Version 1.4.0 is rebound after the orchestrator module boundary refactor and
+module boundary matrix milestones. The owner pre-send checklist remains pending
+owner action and does not authorize sending. This bundle remains not sent, not
+accepted, and not real integration proof.
