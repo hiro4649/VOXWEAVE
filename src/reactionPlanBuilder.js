@@ -1,4 +1,4 @@
-import {
+﻿import {
   LIVE2D_RENDERER_CUE_SCHEMA,
   clamp,
   extractProsodyHints,
@@ -27,12 +27,25 @@ const STRONG_LIVE2D_MOTION_STYLES = new Set([
 
 const VISEME_PATTERN = ["A", "I", "U", "E", "O", "N"];
 const CACHEABLE_NEUTRAL_REACTIONS = new Set([
-  "縺・ｓ",
-  "縺ゅｊ縺後→縺・",
+  "うん",
+  "えっ",
+  "ふふっ",
+  "ありがとう",
+  "ちょっと待って",
   "yes",
   "thanks",
   "one moment",
 ]);
+const TRAILING_REACTION_PUNCTUATION_PATTERN = /[、。.!?！？]+$/u;
+const PERSONAL_REACTION_CACHE_RISK_PATTERN =
+  /さん|様|くん|ちゃん|remember|memory|sorry|apolog|personal|relationship/iu;
+const KNOWN_MOJIBAKE_REACTION_FRAGMENTS = [
+  "邵ｺ繝ｻ・・",
+  "邵ｺ繧・ｽ顔ｸｺ蠕娯・邵ｺ繝ｻ",
+  "邵ｺ霈費ｽ・",
+  "隶偵・邵ｺ荳奇ｽ・",
+  "邵ｺ・｡郢ｧ繝ｻ・・",
+];
 const SUPPORTED_LOCALES = new Set([
   "ar",
   "bn",
@@ -449,7 +462,7 @@ function buildReadingCandidates(text, language) {
   const candidates = Array.from(
     new Set(
       String(text ?? "")
-        .split(/[\s、。,.!?！？]+/u)
+        .split(/[\s、。.!?！？]+/u)
         .map((part) => part.trim())
         .filter((part) => part.length > 0 && containsTargetScript(part, language))
         .slice(0, 8)
@@ -474,18 +487,36 @@ function containsTargetScript(text, language) {
 }
 
 export function isCacheableReaction(text) {
-  const normalized = String(text ?? "").trim().replace(/[、。,.!?！？]+$/u, "");
-  if (/[@#]|\d|縺輔ｓ|讒・縺上ｓ|縺｡繧・ｓ|螟|驛|弱|＆|薙|隕|壹|∴|繧|薙|ｋ|remember|memory|sorry|apolog/i.test(normalized)) {
+  const normalized = normalizeReactionCacheText(text);
+  if (!normalized) return false;
+  if (
+    /[@#]|\d/u.test(normalized) ||
+    PERSONAL_REACTION_CACHE_RISK_PATTERN.test(normalized) ||
+    KNOWN_MOJIBAKE_REACTION_FRAGMENTS.some((fragment) => normalized.includes(fragment))
+  ) {
     return false;
   }
-  if (CACHEABLE_NEUTRAL_REACTIONS.has(normalized)) return true;
-  return Array.from(normalized).length <= 16;
+  return CACHEABLE_NEUTRAL_REACTIONS.has(normalized);
 }
 
 export function isPersonalReactionCacheRisk(value) {
-  return /personal|relationship|memory|remember|apolog|sorry|螟|驛|弱|＆|薙|隕|壹|∴|繧|ｋ/i.test(
-    JSON.stringify(value ?? {})
-  );
+  try {
+    const serialized = JSON.stringify(value ?? {});
+    if (typeof serialized !== "string") return true;
+    const normalized = normalizeReactionCacheText(serialized);
+    return (
+      PERSONAL_REACTION_CACHE_RISK_PATTERN.test(normalized) ||
+      KNOWN_MOJIBAKE_REACTION_FRAGMENTS.some((fragment) => normalized.includes(fragment))
+    );
+  } catch {
+    return true;
+  }
+}
+
+function normalizeReactionCacheText(text) {
+  let normalized = String(text ?? "").trim();
+  normalized = normalized.replace(TRAILING_REACTION_PUNCTUATION_PATTERN, "").trim();
+  return normalized;
 }
 
 function expressionForMotion(motionStyle, prosody) {

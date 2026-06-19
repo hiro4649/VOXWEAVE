@@ -837,6 +837,59 @@ test("cacheable neutral reaction returns miss then hit on repeated request", asy
   assertNoForbiddenFields(second);
 });
 
+test("Japanese neutral reaction cache ignores correlation-only changes", async () => {
+  const service = makeService();
+  const first = await service.orchestrate(
+    makeTtsPacket({
+      text: "ありがとう",
+      final_text: "ありがとう",
+      trace_id: "trace-japanese-neutral-first",
+      event_id: "event-japanese-neutral-first",
+      utterance_id: "utterance-japanese-neutral-first",
+    }),
+    { routeKind: "tts" }
+  );
+  const second = await service.orchestrate(
+    makeTtsPacket({
+      text: "ありがとう",
+      final_text: "ありがとう",
+      trace_id: "trace-japanese-neutral-second",
+      event_id: "event-japanese-neutral-second",
+      utterance_id: "utterance-japanese-neutral-second",
+    }),
+    { routeKind: "tts" }
+  );
+
+  assert.equal(first.cache.status, "miss");
+  assert.equal(second.cache.status, "hit");
+  assert.equal(second.cache.key, first.cache.key);
+  assert.equal(second.trace_id, "trace-japanese-neutral-second");
+  assert.equal(second.event_id, "event-japanese-neutral-second");
+  assert.equal(second.utterance_id, "utterance-japanese-neutral-second");
+  assert.notEqual(second.request_id, first.request_id);
+  assert.notEqual(second.artifact_url, first.artifact_url);
+  assertNoForbiddenFields(second);
+});
+
+test("non-neutral short Japanese and honorific reactions stay uncached", async () => {
+  for (const text of ["会いたい", "田中さん", "山田様", "太郎くん", "お兄ちゃん"]) {
+    const service = makeService();
+    const first = await service.orchestrate(
+      makeTtsPacket({ text, final_text: text, event_id: `event-${text}-first` }),
+      { routeKind: "tts" }
+    );
+    const second = await service.orchestrate(
+      makeTtsPacket({ text, final_text: text, event_id: `event-${text}-second` }),
+      { routeKind: "tts" }
+    );
+
+    assert.equal(first.cache.status, "miss");
+    assert.equal(second.cache.status, "miss");
+    assertNoForbiddenFields(first);
+    assertNoForbiddenFields(second);
+  }
+});
+
 test("cache hit rematerializes current request-bound response values", async () => {
   let tick = 0;
   const service = makeService({
