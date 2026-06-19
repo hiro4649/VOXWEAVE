@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node src/server.js",
-    "test": "node --test test/voxweave.test.js test/server-routes.test.js test/contracts-boundary.test.js test/orchestrator-service.test.js test/live2d-forwarder.test.js test/stateful-helpers.test.js test/server-negative-routes.test.js test/contracts-extraction.test.js test/orchestrator-extraction-integration.test.js test/multi-route-render-group.test.js test/timing-boundaries.test.js test/artifact-metadata-boundaries.test.js test/quality-score-boundaries.test.js"
+    "test": "node --test test/voxweave.test.js test/server-routes.test.js test/contracts-boundary.test.js test/orchestrator-service.test.js test/live2d-forwarder.test.js test/stateful-helpers.test.js test/server-negative-routes.test.js test/contracts-extraction.test.js test/orchestrator-extraction-integration.test.js test/multi-route-render-group.test.js test/timing-boundaries.test.js test/artifact-metadata-boundaries.test.js test/quality-score-boundaries.test.js test/failure-taxonomy.test.js"
   },
   "license": "UNLICENSED"
 }
