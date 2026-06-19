@@ -25,6 +25,10 @@ export const INTEGRATION_BOUNDARY_SNAPSHOT_SCHEMA =
 const ADAPTER_KINDS = new Set(["tts", "subtitle", "live2d"]);
 const MAX_TEXT_LENGTH = 4000;
 const MAX_STRING_LENGTH = 8000;
+const MAX_INPUT_SCAN_DEPTH = 64;
+const MAX_INPUT_SCAN_NODES = 20_000;
+const MAX_INPUT_ARRAY_LENGTH = 2_048;
+const MAX_INPUT_OBJECT_KEYS = 512;
 const MAX_PERSONA_VERSION_LENGTH = 80;
 
 const IDENTITY_LOCK_LEVELS = new Set(["none", "soft", "strict"]);
@@ -1170,10 +1174,11 @@ export function safeId(value, maxLength = 96) {
 }
 
 export function safeText(value, maxLength = 240) {
-  return String(value ?? "")
+  return Array.from(String(value ?? "")
     .replace(/\s+/gu, " ")
-    .trim()
-    .slice(0, maxLength);
+    .trim())
+    .slice(0, maxLength)
+    .join("");
 }
 
 export function clamp(value, min, max) {
@@ -1192,36 +1197,98 @@ function hasDigestWorthyMutation(raw, normalized, limit) {
 }
 
 function scanUnsafeInput(value, path) {
-  if (value === null || value === undefined) return;
-  if (typeof value === "string") {
-    if (value.length > MAX_STRING_LENGTH) {
-      throw new VoxWeaveError("string value too large", "payload_too_large");
+  const stack = [{ value, path, depth: 0 }];
+  const seen = new WeakSet();
+  let scannedNodeCount = 0;
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+    scannedNodeCount += 1;
+    if (scannedNodeCount > MAX_INPUT_SCAN_NODES) {
+      throw new VoxWeaveError("payload structure too large", "payload_too_large");
     }
-    if (UNSAFE_VALUE_PATTERNS.some((pattern) => pattern.test(value))) {
-      throw new VoxWeaveError("unsafe payload value", "unsafe_payload");
+    scanUnsafeScalarInput(current.value);
+    if (current.value === null || current.value === undefined) continue;
+    if (typeof current.value !== "object") continue;
+    if (current.depth > MAX_INPUT_SCAN_DEPTH) {
+      throw new VoxWeaveError("payload structure too deep", "payload_too_large");
     }
-    return;
-  }
-  if (typeof value !== "object") return;
-  if (Array.isArray(value)) {
-    value.forEach((item, index) => scanUnsafeInput(item, `${path}[${index}]`));
-    return;
-  }
-  if (path.endsWith(".canonical_envelope") || path === "root.canonical_envelope") {
-    for (const [field, child] of Object.entries(value)) {
-      if (!CANONICAL_ENVELOPE_ALLOWED_KEYS.has(field)) {
-        throw new VoxWeaveError("unsafe canonical envelope field", "unsafe_payload");
+    if (seen.has(current.value)) {
+      throw new VoxWeaveError("cyclic payload rejected", "unsafe_payload");
+    }
+    seen.add(current.value);
+
+    if (Array.isArray(current.value)) {
+      if (current.value.length > MAX_INPUT_ARRAY_LENGTH) {
+        throw new VoxWeaveError("payload array too large", "payload_too_large");
       }
-      scanUnsafeInput(child, `${path}.${field}`);
+      for (let index = current.value.length - 1; index >= 0; index -= 1) {
+        stack.push({
+          value: current.value[index],
+          path: `${current.path}[${index}]`,
+          depth: current.depth + 1,
+        });
+      }
+      continue;
     }
-    return;
-  }
-  for (const [field, child] of Object.entries(value)) {
-    if (isForbiddenField(field, FORBIDDEN_KEYS)) {
-      throw new VoxWeaveError("unsafe payload field", "unsafe_payload");
+
+    const entries = Object.entries(current.value);
+    if (entries.length > MAX_INPUT_OBJECT_KEYS) {
+      throw new VoxWeaveError("payload object too large", "payload_too_large");
     }
-    scanUnsafeInput(child, `${path}.${field}`);
+    const isCanonicalEnvelope =
+      current.path.endsWith(".canonical_envelope") ||
+      current.path === "root.canonical_envelope";
+    for (let index = entries.length - 1; index >= 0; index -= 1) {
+      const [field, child] = entries[index];
+      if (isCanonicalEnvelope) {
+        if (!CANONICAL_ENVELOPE_ALLOWED_KEYS.has(field)) {
+          throw new VoxWeaveError("unsafe canonical envelope field", "unsafe_payload");
+        }
+      } else if (isForbiddenField(field, FORBIDDEN_KEYS)) {
+        throw new VoxWeaveError("unsafe payload field", "unsafe_payload");
+      }
+      stack.push({
+        value: child,
+        path: `${current.path}.${field}`,
+        depth: current.depth + 1,
+      });
+    }
   }
+}
+
+function scanUnsafeScalarInput(value) {
+  const valueType = typeof value;
+  if (valueType === "bigint" || valueType === "function" || valueType === "symbol") {
+    throw new VoxWeaveError("unsupported payload value", "unsafe_payload");
+  }
+  if (valueType === "number" && !Number.isFinite(value)) {
+    throw new VoxWeaveError("unsupported payload number", "unsafe_payload");
+  }
+  if (valueType !== "string") return;
+  if (value.length > MAX_STRING_LENGTH) {
+    throw new VoxWeaveError("string value too large", "payload_too_large");
+  }
+  if (/[\u0000\uFEFF\uFFFD]/u.test(value) || hasUnpairedSurrogate(value)) {
+    throw new VoxWeaveError("unsafe payload value", "unsafe_payload");
+  }
+  if (UNSAFE_VALUE_PATTERNS.some((pattern) => pattern.test(value))) {
+    throw new VoxWeaveError("unsafe payload value", "unsafe_payload");
+  }
+}
+
+function hasUnpairedSurrogate(value) {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return true;
+      index += 1;
+    } else if (code >= 0xdc00 && code <= 0xdfff) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function scanUnsafeResponse(value, path) {
