@@ -112,6 +112,12 @@ const ALLOWED_CANDIDATE_BUNDLE_KEYS = Object.freeze([
   "owner_send_authorized",
   "external_team_acceptance_status",
   "real_integration_proof_status",
+  "safe_failure_taxonomy_registry_present",
+  "http_safe_error_projection_metadata_present",
+  "live2d_forward_taxonomy_metadata_present",
+  "safe_failure_event_envelope_available",
+  "public_metrics_endpoint_present",
+  "runtime_event_sink_present",
   "runtime_readiness_claimed",
   "production_readiness_claimed",
   "safe_summary_only",
@@ -134,6 +140,12 @@ const CANDIDATE_MANIFEST_FIELDS = Object.freeze([
   "candidate_status",
   "external_team_acceptance_status",
   "real_integration_proof_status",
+  "safe_failure_taxonomy_registry_present",
+  "http_safe_error_projection_metadata_present",
+  "live2d_forward_taxonomy_metadata_present",
+  "safe_failure_event_envelope_available",
+  "public_metrics_endpoint_present",
+  "runtime_event_sink_present",
   "runtime_readiness_claimed",
   "production_readiness_claimed",
   "safe_summary_only",
@@ -509,6 +521,12 @@ export async function runExternalAcceptanceCandidateBundleSummary({
     owner_send_authorized: bundle.checklist.owner_send_authorized,
     external_team_acceptance_status: "not_started",
     real_integration_proof_status: "no",
+    safe_failure_taxonomy_registry_present: bundle.manifest.safe_failure_taxonomy_registry_present,
+    http_safe_error_projection_metadata_present: bundle.manifest.http_safe_error_projection_metadata_present,
+    live2d_forward_taxonomy_metadata_present: bundle.manifest.live2d_forward_taxonomy_metadata_present,
+    safe_failure_event_envelope_available: bundle.manifest.safe_failure_event_envelope_available,
+    public_metrics_endpoint_present: bundle.manifest.public_metrics_endpoint_present,
+    runtime_event_sink_present: bundle.manifest.runtime_event_sink_present,
     runtime_readiness_claimed: false,
     production_readiness_claimed: false,
     safe_summary_only: true,
@@ -1293,6 +1311,12 @@ function validateCandidateBundle({ manifest, receipts, readmeText, checklist, fi
   if (
     manifest.external_team_acceptance_status !== "not_started" ||
     manifest.real_integration_proof_status !== "no" ||
+    manifest.safe_failure_taxonomy_registry_present !== true ||
+    manifest.http_safe_error_projection_metadata_present !== true ||
+    manifest.live2d_forward_taxonomy_metadata_present !== true ||
+    manifest.safe_failure_event_envelope_available !== true ||
+    manifest.public_metrics_endpoint_present !== false ||
+    manifest.runtime_event_sink_present !== false ||
     manifest.runtime_readiness_claimed !== false ||
     manifest.production_readiness_claimed !== false ||
     manifest.safe_summary_only !== true
