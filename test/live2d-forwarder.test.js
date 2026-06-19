@@ -50,12 +50,12 @@ function assertNoForbiddenSummaryFields(value) {
   }
 }
 
-function makeFetch({ ok = true, rejectWith } = {}) {
+function makeFetch({ ok = true, rejectWith, responseBody } = {}) {
   const calls = [];
   const fetchImpl = async (target, options) => {
     calls.push({ target, options });
     if (rejectWith) throw rejectWith;
-    return { ok };
+    return { ok, body: responseBody };
   };
   return { calls, fetchImpl };
 }
@@ -78,8 +78,8 @@ function assertSafeOperationCancellation(error) {
   return true;
 }
 
-async function forwardWith({ endpoint, apiKey, fetchImpl, timeoutMs = 25, signal }) {
-  return createLive2dForwarder({ endpoint, apiKey, fetchImpl, timeoutMs }).forward(SAFE_CUE, { signal });
+async function forwardWith({ endpoint, apiKey, fetchImpl, timeoutMs = 25, signal, cueDelivery = SAFE_CUE }) {
+  return createLive2dForwarder({ endpoint, apiKey, fetchImpl, timeoutMs }).forward(cueDelivery, { signal });
 }
 
 test("no endpoint returns dry-run summary without forwarding", async () => {
@@ -250,6 +250,24 @@ test("fake fetch ok true returns accepted summary", async () => {
   assertNoForbiddenSummaryFields(summary);
 });
 
+test("unsafe cue delivery is rejected before fake fetch", async () => {
+  const { calls, fetchImpl } = makeFetch({ ok: true });
+  await assert.rejects(
+    () =>
+      forwardWith({
+        endpoint: "http://localhost/live2d-engine",
+        fetchImpl,
+        cueDelivery: {
+          ...SAFE_CUE,
+          renderer_endpoint: "blocked",
+        },
+      }),
+    (error) => error?.code === "unsafe_response"
+  );
+
+  assert.equal(calls.length, 0);
+});
+
 test("fake fetch ok false returns renderer rejected summary", async () => {
   const summary = await forwardWith({
     endpoint: "http://localhost/live2d-engine",
@@ -270,6 +288,24 @@ test("fake fetch receives JSON content type", async () => {
   assert.equal(calls[0].options.redirect, "error");
   assert.equal(calls[0].options.headers["content-type"], "application/json");
   assert.equal(typeof calls[0].options.body, "string");
+  assertNoForbiddenSummaryFields(summary);
+});
+
+test("fake fetch response body is cancelled without reading raw body", async () => {
+  let cancelCount = 0;
+  const { calls, fetchImpl } = makeFetch({
+    ok: true,
+    responseBody: {
+      async cancel() {
+        cancelCount += 1;
+      },
+    },
+  });
+  const summary = await forwardWith({ endpoint: "http://localhost/live2d-engine", fetchImpl });
+
+  assert.equal(summary.renderer_forward_status, "accepted");
+  assert.equal(calls.length, 1);
+  assert.equal(cancelCount, 1);
   assertNoForbiddenSummaryFields(summary);
 });
 

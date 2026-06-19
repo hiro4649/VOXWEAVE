@@ -1,7 +1,10 @@
 import { isIP } from "node:net";
+import { assertSafeResponse } from "./contracts.js";
 import { throwIfOperationAborted } from "./operationContext.js";
 
 const DEFAULT_TIMEOUT_MS = 3000;
+const MIN_TIMEOUT_MS = 1;
+const MAX_TIMEOUT_MS = 10_000;
 
 export function createLive2dForwarder({
   endpoint = process.env.VOXWEAVE_LIVE2D_RENDERER_ENDPOINT ?? "",
@@ -13,12 +16,14 @@ export function createLive2dForwarder({
   const configured = String(endpoint ?? "").trim() !== "";
   const scope = target?.scope ?? (configured ? "blocked" : "not_configured");
   const key = String(apiKey ?? "").trim();
+  const boundedTimeoutMs = normalizeTimeoutMs(timeoutMs);
 
   return {
     configured,
     scope,
     async forward(cueDelivery, { signal } = {}) {
       throwIfOperationAborted(signal);
+      assertSafeResponse(cueDelivery);
       if (!configured) return dryRunSummary();
       if (!target || typeof fetchImpl !== "function") {
         return {
@@ -46,7 +51,7 @@ export function createLive2dForwarder({
       const timer = setTimeout(() => {
         localTimedOut = true;
         controller.abort();
-      }, timeoutMs);
+      }, boundedTimeoutMs);
       try {
         const headers = {
           "content-type": "application/json",
@@ -59,6 +64,7 @@ export function createLive2dForwarder({
           body: JSON.stringify(cueDelivery),
           signal: controller.signal,
         });
+        await cancelResponseBody(response);
         throwIfOperationAborted(signal);
         return {
           renderer_forward_configured: true,
@@ -85,6 +91,24 @@ export function createLive2dForwarder({
       }
     },
   };
+}
+
+async function cancelResponseBody(response) {
+  if (typeof response?.body?.cancel === "function") {
+    try {
+      await response.body.cancel();
+    } catch {
+      // Safe summary only; response body cancellation failures are not projected.
+    }
+  }
+}
+
+function normalizeTimeoutMs(value) {
+  const number = Number(value);
+  if (!Number.isSafeInteger(number) || number < MIN_TIMEOUT_MS || number > MAX_TIMEOUT_MS) {
+    return DEFAULT_TIMEOUT_MS;
+  }
+  return number;
 }
 
 function dryRunSummary() {

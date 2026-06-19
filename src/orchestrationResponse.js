@@ -73,6 +73,7 @@ export async function materializeReactionPlanResponse({
     live2dCue,
     aiCharacterAdapterMetadata,
   });
+  assertSafeResponse(live2dCueDelivery);
   throwIfOperationAborted(signal);
   const live2dForward = adapterKind === "live2d"
     ? await live2dForwarder.forward(live2dCueDelivery, { signal })
