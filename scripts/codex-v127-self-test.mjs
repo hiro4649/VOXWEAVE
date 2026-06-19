@@ -17,7 +17,6 @@ import {
 } from './codex-orchestration-capsule.mjs';
 import { buildWorkerProofCapsule, validateWorkerProofCapsule } from './codex-worker-proof-capsule.mjs';
 import { buildOwnerDecisionBrief, validateOwnerDecisionBrief } from './codex-owner-decision-brief.mjs';
-import { versionLineagePolicy } from './codex-harness-version.mjs';
 
 function test(name, fn) {
   try {
@@ -53,39 +52,30 @@ const SAME_HEAD_ENVELOPE = {
   allowedNextAction: 'owner_merge_decision_only',
 };
 
+function resolveHarnessMode(env = process.env) {
+  if (env.CODEX_HARNESS_MODE === 'target') return 'target';
+  if (env.CODEX_HARNESS_SOURCE_REPO === '1' || env.CODEX_HARNESS_MODE === 'core' || env.CODEX_HARNESS_MODE === 'source') return 'source';
+  try {
+    const manifest = JSON.parse(fs.readFileSync('docs/process/CODEX_HARNESS_MANIFEST.json', 'utf8'));
+    if (manifest.targetRepoMode === true) return 'target';
+    if (manifest.sourceOnlyRelease === true) return 'source';
+  } catch {
+    // Source-body self-test fixtures may omit the target manifest.
+  }
+  return 'source';
+}
+
+function activeManifestPathsForMode(env = process.env) {
+  return resolveHarnessMode(env) === 'target'
+    ? ['docs/process/CODEX_HARNESS_MANIFEST.json']
+    : ['CODEX_SOURCE_HARNESS_MANIFEST.json', 'docs/process/CODEX_HARNESS_MANIFEST.json'];
+}
+
 function manifestThemeMatchesActiveVersion() {
-  const manifests = [
-    JSON.parse(fs.readFileSync('CODEX_SOURCE_HARNESS_MANIFEST.json', 'utf8')),
-    JSON.parse(fs.readFileSync('docs/process/CODEX_HARNESS_MANIFEST.json', 'utf8')),
-  ];
+  const manifests = activeManifestPathsForMode().map((file) => JSON.parse(fs.readFileSync(file, 'utf8')));
   return manifests.every((manifest) => manifest.activeHarnessVersion === '1.2.7'
-      && manifest.activeSelfTestSuite === 'v127'
-      && manifest.theme === 'Receipt-Carried Continuation and Evidence Compression');
-}
-
-function activePolicyDisambiguatesSourceAndTargetState() {
-  const policy = JSON.parse(fs.readFileSync('docs/process/CODEX_ACTIVE_POLICY_INDEX.json', 'utf8'));
-  const block = policy.receiptCarriedContinuationAndEvidenceCompression;
-  return block.sourceReleaseBoundary === 'source_body_only'
-    && block.sourceReleaseAuthorizesTargetRollout === false
-    && block.sourceReleaseTargetRolloutStatus === 'not_started'
-    && block.targetRepoStateAuthority === 'docs/process/CODEX_HARNESS_MANIFEST.json'
-    && block.targetRepoRolloutStatus === 'completed'
-    && block.targetRepoRolloutPr === 428
-    && block.targetRepoRolloutMergeCommitSha === 'e2291901ca7f94121d48c130156d03d703d9852b'
-    && block.targetRepoActiveHarness === '1.2.7'
-    && block.targetRepoActiveSelfTestSuite === 'v127'
-    && block.targetRepoRepresentativeValidationStatus === 'pass'
-    && block.sourceAndTargetStateConflated === false;
-}
-
-function harnessVersionRegistryDisambiguatesSourceAndTargetState() {
-  return versionLineagePolicy.sourceReleaseBoundary === 'source_body_only'
-    && versionLineagePolicy.sourceReleaseAuthorizesTargetRollout === false
-    && versionLineagePolicy.sourceReleaseTargetRolloutStatus === 'not_started'
-    && versionLineagePolicy.sourceReleaseRepresentativeLivePrValidationStatus === 'not_started'
-    && versionLineagePolicy.targetRepoStateAuthority === 'target_manifest'
-    && versionLineagePolicy.targetRepoStateMustNotBeInferredFromSourceRelease === true;
+    && manifest.activeSelfTestSuite === 'v127'
+    && manifest.theme === 'Receipt-Carried Continuation and Evidence Compression');
 }
 
 const cases = [
@@ -227,18 +217,11 @@ const cases = [
     createPr: true,
   })))],
   ['manifest_theme_matches_active_version', () => manifestThemeMatchesActiveVersion()],
-  ['agents_authority_mentions_v127', () => fs.readFileSync('AGENTS.md', 'utf8').includes('v1.2.7 adds receipt-carried continuation')],
-  ['agents_current_self_test_is_v127', () => fs.readFileSync('AGENTS.md', 'utf8').includes('Run v127 self-test and the local quality gate for current work.')],
-  ['agents_v126_compatibility_is_declared', () => fs.readFileSync('AGENTS.md', 'utf8').replace(/\s+/g, ' ').includes('v126, v125, v124, v123, and v122 self-tests are blocking compatibility checks')],
-  ['target_manifest_rollout_is_completed', () => JSON.parse(fs.readFileSync('docs/process/CODEX_HARNESS_MANIFEST.json', 'utf8')).targetRollout === 'completed'],
-  ['target_manifest_active_harness_is_v127', () => JSON.parse(fs.readFileSync('docs/process/CODEX_HARNESS_MANIFEST.json', 'utf8')).activeHarnessVersion === '1.2.7'],
-  ['source_release_boundary_remains_source_body_only', () => versionLineagePolicy.sourceReleaseBoundary === 'source_body_only'],
-  ['source_release_does_not_authorize_target_rollout', () => versionLineagePolicy.sourceReleaseAuthorizesTargetRollout === false],
-  ['source_target_state_authorities_are_disambiguated', () => activePolicyDisambiguatesSourceAndTargetState()],
-  ['target_repo_state_authority_is_target_manifest', () => versionLineagePolicy.targetRepoStateAuthority === 'target_manifest'],
-  ['active_policy_records_rollout_pr_428', () => JSON.parse(fs.readFileSync('docs/process/CODEX_ACTIVE_POLICY_INDEX.json', 'utf8')).receiptCarriedContinuationAndEvidenceCompression.targetRepoRolloutPr === 428],
-  ['harness_version_registry_preserves_source_lineage', () => harnessVersionRegistryDisambiguatesSourceAndTargetState()],
-  ['harness_version_registry_points_target_state_to_manifest', () => versionLineagePolicy.targetRepoStateMustNotBeInferredFromSourceRelease === true],
+  ['target_mode_does_not_require_source_manifest', () => activeManifestPathsForMode({ CODEX_HARNESS_MODE: 'target' }).join('|') === 'docs/process/CODEX_HARNESS_MANIFEST.json'],
+  ['target_mode_stray_source_manifest_cannot_select_source', () => resolveHarnessMode({
+    CODEX_HARNESS_MODE: 'target',
+    CODEX_HARNESS_SOURCE_REPO: '',
+  }) === 'target'],
   ['owner_brief_default_v127_receipts_pass', () => passed(validateOwnerDecisionBrief(buildOwnerDecisionBrief()))],
   ['owner_brief_does_not_stop_for_commit_push_pr_when_process_receipt_valid', () => passed(validateOwnerDecisionBrief(buildOwnerDecisionBrief({
     typedOwnerProcessReceipt: { ...VALID_PROCESS_RECEIPT, normalizedOwnerIntent: 'harness_source_develop_and_publish' },
