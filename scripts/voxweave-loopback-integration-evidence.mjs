@@ -773,6 +773,16 @@ export function validateExternalAcceptanceReceiptAgainstCandidate({
   fixtures,
   receiptSourceKind = "unclassified",
 }) {
+  const effectiveSourceKind = receiptSourceKind === undefined
+    ? "unclassified"
+    : receiptSourceKind;
+  if (!externalReceiptModule.isExternalAcceptanceReceiptSourceKind(effectiveSourceKind)) {
+    return externalReceiptModule.buildExternalAcceptanceReceiptBindingFailure({
+      receiptSourceKind: effectiveSourceKind,
+      receipt,
+      reasonCode: "invalid_receipt_source_kind",
+    });
+  }
   try {
     const descriptor = buildExternalAcceptanceCandidateDescriptor({
       manifest,
@@ -788,11 +798,11 @@ export function validateExternalAcceptanceReceiptAgainstCandidate({
       descriptor,
       receipt,
       receiptTemplates: receipts,
-      receiptSourceKind,
+      receiptSourceKind: effectiveSourceKind,
     });
   } catch (error) {
     return externalReceiptModule.buildExternalAcceptanceReceiptBindingFailure({
-      receiptSourceKind,
+      receiptSourceKind: effectiveSourceKind,
       receipt,
       reasonCode: safeReceiptCandidateBindingReason(error),
     });

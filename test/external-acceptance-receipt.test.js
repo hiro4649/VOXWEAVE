@@ -104,6 +104,9 @@ test("external receipt module exports frozen source kind authority", () => {
   ]);
   assert.equal(Object.isFrozen(EXTERNAL_ACCEPTANCE_RECEIPT_SOURCE_KINDS), true);
   assert.equal(isExternalAcceptanceReceiptSourceKind("owner_provided"), true);
+  for (const sourceKind of EXTERNAL_ACCEPTANCE_RECEIPT_SOURCE_KINDS) {
+    assert.equal(isExternalAcceptanceReceiptSourceKind(sourceKind), true);
+  }
   assert.equal(isExternalAcceptanceReceiptSourceKind("externally_verified"), false);
 });
 
@@ -213,6 +216,98 @@ test("invalid source kind binding failure is safe and fail closed", () => {
   assert.equal(result.primary_reason_code, "invalid_receipt_source_kind");
 });
 
+test("invalid source kind has precedence over descriptor and receipt failures", async () => {
+  const bundle = await readCandidateBundleFixture();
+  const descriptorForBundle = buildExternalAcceptanceCandidateDescriptor(bundle);
+  const bundleReceipt = buildBundleReceipt(bundle, descriptorForBundle);
+
+  const invalidSourceWithBadBundle = validateExternalAcceptanceReceiptAgainstCandidate({
+    ...bundle,
+    manifest: { ...bundle.manifest, candidate_bundle_version: "bad-version" },
+    receipt: bundleReceipt,
+    receiptSourceKind: "externally_verified",
+  });
+  const invalidSourceWithUnsafeReceipt = validateExternalAcceptanceReceiptAgainstCandidate({
+    ...bundle,
+    receipt: { ...bundleReceipt, raw_audio: "blocked" },
+    receiptSourceKind: "externally_verified",
+  });
+  const moduleInvalidSourceWithBadDescriptor = bindExternalAcceptanceReceiptToCandidateDescriptor({
+    descriptor: null,
+    receipt: bundleReceipt,
+    receiptTemplates: bundle.receipts,
+    receiptSourceKind: "externally_verified",
+  });
+
+  for (const result of [
+    invalidSourceWithBadBundle,
+    invalidSourceWithUnsafeReceipt,
+    moduleInvalidSourceWithBadDescriptor,
+  ]) {
+    assertExternalAcceptanceReceiptBindingResultSafe(result);
+    assert.equal(result.status, "fail");
+    assert.equal(result.primary_reason_code, "invalid_receipt_source_kind");
+    assert.equal(result.receipt_source_kind, "unclassified");
+    assert.equal(result.receipt_source_status, "fail");
+    assert.equal(result.intake_disposition, "rejected");
+    assert.equal(result.acceptance_authority_created, false);
+    assert.equal(result.external_acceptance_effective, false);
+    assert.equal(result.safe_summary_only, true);
+  }
+});
+
+test("valid source keeps candidate and receipt failure classification", async () => {
+  const bundle = await readCandidateBundleFixture();
+  const descriptorForBundle = buildExternalAcceptanceCandidateDescriptor(bundle);
+  const bundleReceipt = buildBundleReceipt(bundle, descriptorForBundle);
+
+  const invalidCandidate = validateExternalAcceptanceReceiptAgainstCandidate({
+    ...bundle,
+    manifest: { ...bundle.manifest, candidate_bundle_version: "bad-version" },
+    receipt: bundleReceipt,
+    receiptSourceKind: "owner_provided",
+  });
+  const unsafeReceipt = validateExternalAcceptanceReceiptAgainstCandidate({
+    ...bundle,
+    receipt: { ...bundleReceipt, raw_audio: "blocked" },
+    receiptSourceKind: "owner_provided",
+  });
+
+  assert.equal(invalidCandidate.primary_reason_code, "candidate_receipt_binding_invalid");
+  assert.equal(unsafeReceipt.primary_reason_code, "candidate_receipt_safety_invalid");
+});
+
+test("omitted source kind remains unclassified without creating authority", async () => {
+  const bundle = await readCandidateBundleFixture();
+  const descriptorForBundle = buildExternalAcceptanceCandidateDescriptor(bundle);
+  const pendingReceipt = buildBundleReceipt(bundle, descriptorForBundle, {
+    received_status: "pending",
+    parsed_status: "pending",
+    forbidden_material_absent_status: "pending",
+    expected_schema_observed_status: "pending",
+    raw_values_absent_status: "pending",
+    readiness_claim_absent_status: "pending",
+    acceptance_candidate_status: "pending",
+  });
+  const acceptedReceipt = buildBundleReceipt(bundle, descriptorForBundle);
+
+  const pending = validateExternalAcceptanceReceiptAgainstCandidate({
+    ...bundle,
+    receipt: pendingReceipt,
+  });
+  const accepted = validateExternalAcceptanceReceiptAgainstCandidate({
+    ...bundle,
+    receipt: acceptedReceipt,
+  });
+
+  assert.equal(pending.status, "pass");
+  assert.equal(pending.receipt_source_kind, "unclassified");
+  assert.equal(pending.receipt_source_status, "pass");
+  assert.equal(pending.primary_reason_code, "none");
+  assert.equal(accepted.status, "fail");
+  assert.equal(accepted.primary_reason_code, "receipt_acceptance_claim_requires_owner_provenance");
+});
+
 test("synthetic and unclassified accepted claims are rejected", () => {
   const synthetic = bindExternalAcceptanceReceiptToCandidateDescriptor({
     descriptor,
@@ -312,14 +407,7 @@ test("script public receipt exports are module single-source aliases", () => {
 test("script candidate wrapper matches module binding reasons for receipt cases", async () => {
   const bundle = await readCandidateBundleFixture();
   const descriptorForBundle = buildExternalAcceptanceCandidateDescriptor(bundle);
-  const bundleReceipt = {
-    ...safeReceipt,
-    recipient_project: "IRIS",
-    recipient_role: bundle.receipts.find((receipt) => receipt.recipient_project === "IRIS").recipient_role,
-    candidate_bundle_version: descriptorForBundle.candidate_bundle_version,
-    source_main_sha: descriptorForBundle.runtime_source_head_sha,
-    candidate_bundle_fingerprint: descriptorForBundle.candidate_bundle_fingerprint,
-  };
+  const bundleReceipt = buildBundleReceipt(bundle, descriptorForBundle);
   const cases = [
     ["owner-provided accepted candidate", bundleReceipt, "owner_provided"],
     ["owner-provided pending", {
@@ -396,8 +484,10 @@ test("script source has no duplicate receipt implementation declarations", async
       functionName
     );
   }
+  assert.equal(/const\s+ALLOWED_RECEIPT_SOURCE_KINDS\s*=\s*new\s+Set\s*\(\s*\[/u.test(scriptSource), false);
   assert.match(scriptSource, /externalReceiptModule\.bindExternalAcceptanceReceiptToCandidateDescriptor/u);
   assert.match(scriptSource, /externalReceiptModule\.buildExternalAcceptanceReceiptBindingFailure/u);
+  assert.match(scriptSource, /externalReceiptModule\.isExternalAcceptanceReceiptSourceKind/u);
 });
 
 test("quarantine capsule keeps owner-provided accepted candidate under owner review", () => {
@@ -763,5 +853,17 @@ function pickBindingParityFields(result) {
     candidate_bundle_version: result.candidate_bundle_version,
     receipt_candidate_status: result.receipt_candidate_status,
     binding_fingerprint: result.binding_fingerprint,
+  };
+}
+
+function buildBundleReceipt(bundle, descriptorForBundle, overrides = {}) {
+  return {
+    ...safeReceipt,
+    recipient_project: "IRIS",
+    recipient_role: bundle.receipts.find((receipt) => receipt.recipient_project === "IRIS").recipient_role,
+    candidate_bundle_version: descriptorForBundle.candidate_bundle_version,
+    source_main_sha: descriptorForBundle.runtime_source_head_sha,
+    candidate_bundle_fingerprint: descriptorForBundle.candidate_bundle_fingerprint,
+    ...overrides,
   };
 }

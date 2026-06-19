@@ -66,22 +66,19 @@ const BINDING_RESULT_FIELDS = Object.freeze([
   "safe_summary_only",
 ]);
 
-const ALLOWED_SOURCE_KINDS = new Set([
-  "owner_provided",
-  "synthetic_test_only",
-  "unclassified",
-]);
 export const EXTERNAL_ACCEPTANCE_RECEIPT_SOURCE_KINDS = deepFreeze([
   "owner_provided",
   "synthetic_test_only",
   "unclassified",
 ]);
+const ALLOWED_SOURCE_KINDS = new Set(EXTERNAL_ACCEPTANCE_RECEIPT_SOURCE_KINDS);
 
 const PROVENANCE_BY_SOURCE = Object.freeze({
   owner_provided: "owner_supplied_unverified_metadata",
   synthetic_test_only: "synthetic_non_authoritative",
   unclassified: "unclassified_non_authoritative",
 });
+assertSourceKindProvenanceParity();
 
 const RECEIPT_PASS_PENDING_STATUSES = new Set(["pass", "fail", "pending"]);
 const RECEIPT_RECEIVED_STATUSES = new Set(["received", "rejected", "pending"]);
@@ -633,6 +630,14 @@ function deepFreeze(value) {
   if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
   for (const child of Object.values(value)) deepFreeze(child);
   return Object.freeze(value);
+}
+
+function assertSourceKindProvenanceParity() {
+  const sourceKinds = [...EXTERNAL_ACCEPTANCE_RECEIPT_SOURCE_KINDS].sort();
+  const provenanceKeys = Object.keys(PROVENANCE_BY_SOURCE).sort();
+  if (JSON.stringify(sourceKinds) !== JSON.stringify(provenanceKeys)) {
+    throw new Error("invalid_receipt_source_kind_provenance_mapping");
+  }
 }
 
 function skipWhitespace(text, index) {

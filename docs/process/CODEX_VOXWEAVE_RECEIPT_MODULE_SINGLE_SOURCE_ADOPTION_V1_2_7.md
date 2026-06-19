@@ -239,3 +239,43 @@ technicalMergeRecommendation: pending_natural_qg
 ownerMergeAuthorized: false
 
 safeNextAction: wait_for_natural_same_head_quality_gate_then_owner_merge_decision_only
+
+## Narrow Review Repair Addendum
+
+oldCandidateHeadStatus: superseded_by_review_repair
+
+oldCandidateHeadSha: 83a7b4fa3bacb2270c43d17409b8b33e78c6f90d
+
+invalidSourceAndInvalidCandidatePrecedenceStatus: pass
+
+invalidSourceAndUnsafeReceiptPrecedenceStatus: pass
+
+sourceKindAuthoritySingleDefinitionStatus: pass
+
+sourceKindProvenanceMappingParityStatus: pass
+
+wrapperSourceValidationBeforeCandidateStatus: pass
+
+mergeStatus: pending_new_same_head_owner_decision
+
+The repair preserves the Phase Y single-source goal while tightening source
+kind precedence. Invalid receipt source kinds are now rejected before candidate
+descriptor construction in the script wrapper and before descriptor or receipt
+validation in the module binder path.
+
+Expected invalid source result:
+- `status`: `fail`
+- `primary_reason_code`: `invalid_receipt_source_kind`
+- `receipt_source_kind`: `unclassified`
+- `receipt_source_status`: `fail`
+- `intake_disposition`: `rejected`
+- `acceptance_authority_created`: `false`
+- `external_acceptance_effective`: `false`
+- `safe_summary_only`: `true`
+
+Valid source behavior is preserved:
+- invalid candidate input remains `candidate_receipt_binding_invalid`
+- unsafe receipt input remains `candidate_receipt_safety_invalid`
+- omitted source kind remains `unclassified`
+- pending unclassified receipts can bind without creating authority
+- accepted unclassified receipts remain rejected by acceptance provenance policy
