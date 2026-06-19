@@ -218,16 +218,21 @@ export function buildSubtitleTiming({ text, language, scriptDirection, durationM
 
   const totalChars = Math.max(1, chunks.reduce((sum, chunk) => sum + Array.from(chunk).length, 0));
   let cursor = startMs;
+  let consumedChars = 0;
+  const displayEndMs = startMs + durationMs;
   const timedChunks = chunks.map((chunk, index) => {
-    const ratio = Math.max(0.08, Array.from(chunk).length / totalChars);
-    const chunkDuration = index === chunks.length - 1
-      ? startMs + durationMs - cursor
-      : Math.max(320, Math.round(durationMs * ratio));
+    consumedChars += Array.from(chunk).length;
+    const remainingChunks = chunks.length - index - 1;
+    const weightedEnd = startMs + Math.round(durationMs * (consumedChars / totalChars));
+    const maxEnd = displayEndMs - remainingChunks;
+    const endMs = index === chunks.length - 1
+      ? displayEndMs
+      : clamp(weightedEnd, cursor + 1, Math.max(cursor + 1, maxEnd));
     const cue = {
       index,
       text: chunk,
       start_ms: cursor,
-      end_ms: Math.max(cursor + 200, cursor + chunkDuration),
+      end_ms: endMs,
     };
     cursor = cue.end_ms;
     return cue;
@@ -238,7 +243,7 @@ export function buildSubtitleTiming({ text, language, scriptDirection, durationM
     language,
     script_direction: scriptDirection,
     display_start_ms: startMs,
-    display_end_ms: startMs + durationMs,
+    display_end_ms: displayEndMs,
     chunks: timedChunks,
     readability_profile: {
       visible_character_count: Array.from(text).length,
