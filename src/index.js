@@ -14,3 +14,9 @@ export {
   listHttpErrorKinds,
   listLive2dForwardStatuses,
 } from "./failureTaxonomy.js";
+export {
+  SAFE_FAILURE_EVENT_SCHEMA,
+  assertSafeFailureEvent,
+  buildSafeFailureEvent,
+  buildSafeFailureMetricLabels,
+} from "./safeFailureEvent.js";
