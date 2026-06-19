@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createVoxWeaveService } from "../src/orchestrator.js";
+import { buildVoxWeaveHealth } from "../src/serviceHealth.js";
 import { VoxWeaveError } from "../src/errors.js";
 import {
   createReactionPlanCacheEntry,
@@ -367,6 +368,26 @@ test("health returns safe health metadata and no forbidden fields", () => {
   assert.equal(health.runtime_readiness_claimed, false);
   assert.equal(health.production_readiness_claimed, false);
   assertIntegrationBoundarySnapshot(health.integration_boundary);
+  assertNoForbiddenFields(health);
+});
+
+test("service health module builds the same safe health response", () => {
+  const cache = makeSpyCache();
+  cache.set("safe-entry", { ok: true });
+  const live2dForwarder = {
+    configured: true,
+    scope: "loopback",
+  };
+  const health = buildVoxWeaveHealth({ cache, live2dForwarder });
+
+  assert.equal(health.schema, "voxweave_health_v1");
+  assert.equal(health.service, "voxweave");
+  assert.equal(health.status, "ok");
+  assert.equal(health.cache_entries, 1);
+  assert.equal(health.integration_boundary.live2d_boundary.forwarder_configured, true);
+  assert.equal(health.integration_boundary.live2d_boundary.forwarder_scope, "loopback");
+  assert.equal(health.runtime_readiness_claimed, false);
+  assert.equal(health.production_readiness_claimed, false);
   assertNoForbiddenFields(health);
 });
 
