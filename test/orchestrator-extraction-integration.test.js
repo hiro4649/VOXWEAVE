@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   AI_CHARACTER_CONTRACT_FAMILY_COUNT,
@@ -23,6 +24,7 @@ import {
 import { createVoxWeaveService } from "../src/orchestrator.js";
 
 const NOW = 1_777_000_000_000;
+const SOURCE_ROOT = new URL("../src/", import.meta.url);
 
 const FORBIDDEN_RESPONSE_KEYS = new Set([
   "canonical_envelope",
@@ -90,6 +92,76 @@ test("service health returns safe metadata and runtime boundaries", () => {
   assert.equal(health.boundaries.not_tts_engine, true);
   assert.equal(health.boundaries.not_live2d_renderer, true);
   assertNoForbiddenFields(health);
+});
+
+test("orchestrator extracted module import graph stays inside assigned boundaries", () => {
+  const matrix = [
+    {
+      file: "aiCharacterMetadata.js",
+      allowedImports: ["./contracts.js", "./errors.js"],
+      forbiddenImports: [
+        "./orchestrator.js",
+        "./server.js",
+        "./operationContext.js",
+        "./reactionPlanBuilder.js",
+        "./orchestrationResponse.js",
+        "./serviceHealth.js",
+        "node:http",
+      ],
+    },
+    {
+      file: "reactionPlanBuilder.js",
+      allowedImports: ["./contracts.js", "./reactionPlanCache.js"],
+      forbiddenImports: [
+        "./orchestrator.js",
+        "./server.js",
+        "./operationContext.js",
+        "./orchestrationResponse.js",
+        "./serviceHealth.js",
+        "node:http",
+      ],
+    },
+    {
+      file: "orchestrationResponse.js",
+      allowedImports: [
+        "node:crypto",
+        "./aiCharacterMetadata.js",
+        "./contracts.js",
+        "./errors.js",
+        "./operationContext.js",
+      ],
+      forbiddenImports: [
+        "./orchestrator.js",
+        "./server.js",
+        "./reactionPlanBuilder.js",
+        "./serviceHealth.js",
+        "node:http",
+      ],
+    },
+    {
+      file: "serviceHealth.js",
+      allowedImports: ["./contracts.js"],
+      forbiddenImports: [
+        "./orchestrator.js",
+        "./server.js",
+        "./operationContext.js",
+        "./reactionPlanBuilder.js",
+        "./orchestrationResponse.js",
+        "node:http",
+      ],
+    },
+  ];
+
+  for (const entry of matrix) {
+    const source = readSource(entry.file);
+    const imports = extractStaticImports(source);
+    assert.deepEqual(imports.sort(), entry.allowedImports.sort(), entry.file);
+    for (const forbiddenImport of entry.forbiddenImports) {
+      assert.equal(imports.includes(forbiddenImport), false, entry.file);
+    }
+    assert.equal(source.includes("process.env"), false, entry.file);
+    assert.equal(source.includes("fetch("), false, entry.file);
+  }
 });
 
 test("AI character metadata module builds aggregate-only safe boundary objects", () => {
@@ -1636,4 +1708,14 @@ function assertNoForbiddenFields(value) {
       stack.push({ value: child, path: `${current.path}.${key}` });
     }
   }
+}
+
+function readSource(file) {
+  return readFileSync(new URL(file, SOURCE_ROOT), "utf8");
+}
+
+function extractStaticImports(source) {
+  return [...source.matchAll(/^\s*import(?:[\s\S]*?)from\s+"([^"]+)";/gm)].map(
+    (match) => match[1]
+  );
 }
