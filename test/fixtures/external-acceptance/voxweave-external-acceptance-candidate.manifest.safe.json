@@ -1,9 +1,9 @@
 {
   "schema": "voxweave_external_acceptance_candidate_manifest_v1",
-  "candidate_bundle_version": "1.4.0",
+  "candidate_bundle_version": "1.5.0",
   "source_project": "VOXWEAVE",
-  "source_harness": "v1.2.6",
-  "source_main_sha": "acec84f576547f067ef88fc41391ea91a82e8053",
+  "source_harness": "v1.2.7",
+  "source_main_sha": "7d57a48030259f4b1db2f509520663295d0f34e4",
   "source_binding_kind": "runtime_source_snapshot",
   "bundle_binding_kind": "transitive_sha256",
   "fixture_manifest_path": "test/fixtures/interop/voxweave-interop-manifest.safe.json",

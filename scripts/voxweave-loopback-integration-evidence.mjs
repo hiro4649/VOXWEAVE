@@ -1267,7 +1267,7 @@ function validateCandidateBundle({ manifest, receipts, readmeText, checklist, fi
   }
   if (
     manifest.source_project !== "VOXWEAVE" ||
-    manifest.source_harness !== "v1.2.6" ||
+    manifest.source_harness !== "v1.2.7" ||
     manifest.source_binding_kind !== "runtime_source_snapshot" ||
     manifest.bundle_binding_kind !== "transitive_sha256"
   ) {
