@@ -89,6 +89,8 @@ The new direct test covers module import purity, schema constants, source kind n
 - manualRerunStatus: no
 - githubApprovalReviewStatus: no
 - selfApprovalStatus: no
+- prEvidenceCompactWordingStatus: pass
+- prBodyActionsLogReadStatus: no
 
 ## Package / Dependency Boundary
 
