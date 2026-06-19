@@ -16,6 +16,10 @@ import {
   isCacheableReaction as isCacheableReactionFromModule,
   isSupportedLocale as isSupportedLocaleFromModule,
 } from "../src/reactionPlanBuilder.js";
+import {
+  createRequestId,
+  materializeReactionPlanResponse,
+} from "../src/orchestrationResponse.js";
 import { createVoxWeaveService } from "../src/orchestrator.js";
 
 const NOW = 1_777_000_000_000;
@@ -142,6 +146,96 @@ test("reaction plan builder module returns cache-safe semantic plan", () => {
   assert.equal(plan.quality.schema, "voxweave_quality_score_v1");
   assert.equal(isSupportedLocaleFromModule("en-US"), true);
   assert.equal(isCacheableReactionFromModule("yes"), true);
+});
+
+test("orchestration response materializer returns request-bound safe response", async () => {
+  const reactionPlan = buildReactionPlan({
+    payload: packet(),
+    text: "Safe materializer integration text.",
+    correctedText: "Safe materializer integration text.",
+    repairs: [],
+    dictionaryVersion: "dictionary-v1",
+    language: "en",
+    localeStatus: "supported",
+    scriptDirection: "ltr",
+    durationMs: 1800,
+  });
+  const forwarded = [];
+  const response = await materializeReactionPlanResponse({
+    reactionPlan,
+    adapterKind: "live2d",
+    trace: {
+      traceId: "trace-materializer",
+      eventId: "event-materializer",
+      utteranceId: "utterance-materializer",
+    },
+    cacheKey: "reaction-safe-key",
+    cacheStatus: "miss",
+    live2dForwarder: {
+      configured: true,
+      async forward(delivery) {
+        forwarded.push(delivery);
+        return {
+          renderer_forward_configured: true,
+          renderer_forward_scope: "local_loopback_only",
+          renderer_forward_attempted: true,
+          renderer_forward_ok: true,
+          renderer_forward_status: "forwarded",
+        };
+      },
+    },
+    renderGroups: {
+      previewUpdate(input) {
+        return {
+          schema: "voxweave_render_group_v1",
+          group_id: "group-materializer",
+          complete: false,
+          adapters_present: [input.adapterKind],
+          request_ids: [input.requestId],
+          quality_warning_count: input.qualityWarningCount,
+        };
+      },
+      update() {
+        return {
+          schema: "voxweave_render_group_v1",
+          group_id: "group-materializer",
+          complete: true,
+        };
+      },
+    },
+    requestIdFactory: () => "voxweave-materializer-request",
+    aiCharacterContracts: buildAiCharacterContractPresence({}),
+    aiCharacterContractSummary: buildAiCharacterContractSafeSummary(
+      {},
+      buildAiCharacterContractPresence({})
+    ),
+    aiCharacterAdapterMetadata: buildAiCharacterContractAdapterMetadata(
+      buildAiCharacterContractPresence({}),
+      buildAiCharacterContractSafeSummary({}, buildAiCharacterContractPresence({})),
+      "live2d"
+    ),
+    integrationBoundary: {
+      schema: "voxweave_integration_boundary_snapshot_v1",
+      live2d_forwarder_configured: true,
+      live2d_forwarder_scope: "local_loopback_only",
+      contract_registry_family_count: AI_CHARACTER_CONTRACT_FAMILY_COUNT,
+    },
+  });
+
+  assert.equal(createRequestId({
+    trace: { traceId: "trace-materializer" },
+    adapterKind: "tts",
+    requestIdFactory: () => "voxweave-materializer-request",
+  }), "voxweave-materializer-request");
+  assert.equal(response.request_id, "voxweave-materializer-request");
+  assert.equal(response.adapter_kind, "live2d");
+  assert.equal(response.cache.status, "miss");
+  assert.equal(response.live2d_forward.renderer_forward_attempted, true);
+  assert.equal(forwarded.length, 1);
+  assert.equal(forwarded[0].cue.cue_id, "live2d-cue-voxweave-materializer-request");
+  assert.equal(response.response_summary.request_id, response.request_id);
+  assert.equal(response.runtime_readiness_claimed, false);
+  assertNoForbiddenFields(response);
 });
 
 test("orchestrate consumes top-level text fallbacks", async () => {
