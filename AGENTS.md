@@ -45,7 +45,10 @@ Typed Monitor Inbox, Fanout Guard, and Yield fields inside the existing P0
 artifacts. v1.2.6 adds observed workspace state, owner/delegated receipts,
 checker-builder loop, evidence lane state machine, context/skill/validation
 budget routing, and effectiveness fields inside existing P0 artifacts without
-expanding final authority.
+expanding final authority. v1.2.7 adds receipt-carried continuation, decision
+evidence compression, content-addressed validation reuse, owner-interrupt token
+budgeting, and blocker closure/product-value pressure inside existing P0
+artifacts without expanding final authority.
 
 ## Target Footprint
 
@@ -69,8 +72,8 @@ proposal-only and owner-approval-required.
 ## Local Task Discipline
 
 Start from clean default branch or clean worktree. Preserve user changes.
-Run v127 self-test and the local quality gate for harness rollout. v125, v124,
-v123, and v122 self-tests are compatibility checks when relevant. For product
-work, use the repo-specific commands above and keep product evidence separate
-from harness evidence.
+Run v127 self-test and the local quality gate for current work. v126, v125,
+v124, v123, and v122 self-tests are blocking compatibility checks when
+relevant. For product work, use the repo-specific commands above and keep
+product evidence separate from harness evidence.
 <!-- CODEX_QUALITY_HARNESS_END -->
