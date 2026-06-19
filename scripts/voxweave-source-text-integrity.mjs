@@ -1,6 +1,4 @@
 #!/usr/bin/env node
-// CODEX_QUALITY_HARNESS_FILE v1.2.7
-
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -89,13 +87,19 @@ function scanBytes(filePath, rootDir) {
   let decoded = '';
   let leadingBom = false;
   try {
-    decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    decoded = new TextDecoder('utf-8', {
+      fatal: true,
+      ignoreBOM: true,
+    }).decode(bytes);
   } catch {
     return { findings: [{ file: relativePath, reason: 'invalid_utf8' }], leadingBom };
   }
   if (decoded.charAt(0) === '\uFEFF') {
     leadingBom = true;
     decoded = decoded.slice(1);
+    if (decoded.charAt(0) === '\uFEFF') {
+      return { findings: [{ file: relativePath, reason: 'embedded_bom' }], leadingBom };
+    }
   }
   return { findings: scanTextContent(decoded, relativePath), leadingBom };
 }

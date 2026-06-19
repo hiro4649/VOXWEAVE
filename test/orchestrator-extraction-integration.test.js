@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   AI_CHARACTER_CONTRACT_FAMILY_COUNT,
   AI_CHARACTER_CONTRACT_REGISTRY,
@@ -37,6 +46,7 @@ import {
 
 const NOW = 1_777_000_000_000;
 const SOURCE_ROOT = new URL("../src/", import.meta.url);
+const SOURCE_TEXT_INTEGRITY_CLI = fileURLToPath(new URL("../scripts/voxweave-source-text-integrity.mjs", import.meta.url));
 
 function textFromCodePoints(hexValues) {
   return String.fromCodePoint(...hexValues.map((value) => Number.parseInt(value, 16)));
@@ -347,6 +357,64 @@ test("source text integrity guard scans repository and CLI emits safe summary", 
   assert.equal(cliReport.safe_summary_only, true);
   assert.equal(cli.stdout.trim().split(/\r?\n/u).length, 1);
   assert.equal(/[A-Za-z]:[\\/]/u.test(cli.stdout), false);
+});
+
+test("source text integrity guard handles byte-level UTF-8 and BOM boundaries safely", () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), "voxweave-source-text-"));
+  try {
+    const srcDir = join(tempRoot, "src");
+    mkdirSync(srcDir);
+    const writeFixture = (name, bytes) => {
+      writeFileSync(join(srcDir, name), Buffer.from(bytes));
+      return scanSourceTextIntegrity({ roots: ["src"], rootDir: tempRoot });
+    };
+
+    let report = writeFixture("leading-bom.js", [0xef, 0xbb, 0xbf, 0x63, 0x6f, 0x6e, 0x73, 0x74, 0x20, 0x78, 0x20, 0x3d, 0x20, 0x31, 0x3b]);
+    assert.equal(report.status, "pass");
+    assert.equal(report.leading_bom_compatibility_count, 1);
+
+    rmSync(join(srcDir, "leading-bom.js"));
+    report = writeFixture("double-bom.js", [0xef, 0xbb, 0xbf, 0xef, 0xbb, 0xbf, 0x63, 0x6f, 0x6e, 0x73, 0x74, 0x20, 0x78, 0x20, 0x3d, 0x20, 0x31, 0x3b]);
+    assert.equal(report.status, "fail");
+    assert.equal(report.embedded_bom_count, 1);
+
+    rmSync(join(srcDir, "double-bom.js"));
+    report = writeFixture("middle-bom.js", [0x63, 0x6f, 0x6e, 0x73, 0x74, 0x20, 0x78, 0x20, 0x3d, 0x20, 0xef, 0xbb, 0xbf, 0x31, 0x3b]);
+    assert.equal(report.status, "fail");
+    assert.equal(report.embedded_bom_count, 1);
+
+    rmSync(join(srcDir, "middle-bom.js"));
+    report = writeFixture("invalid-utf8.js", [0xc3, 0x28]);
+    assert.equal(report.status, "fail");
+    assert.equal(report.invalid_utf8_count, 1);
+
+    rmSync(join(srcDir, "invalid-utf8.js"));
+    writeFileSync(join(srcDir, "replacement.js"), `const x = "${String.fromCodePoint(0xfffd)}";`);
+    report = scanSourceTextIntegrity({ roots: ["src"], rootDir: tempRoot });
+    assert.equal(report.status, "fail");
+    assert.equal(report.replacement_character_count, 1);
+
+    rmSync(join(srcDir, "replacement.js"));
+    writeFileSync(join(srcDir, "multilingual.js"), `const text = "${textFromCodePoints([
+      "65e5", "672c", "8a9e", "20", "4e2d", "6587", "20", "d55c", "ad6d", "c5b4", "20", "627", "644", "639", "631", "628", "64a", "629",
+    ])}";`);
+    report = scanSourceTextIntegrity({ roots: ["src"], rootDir: tempRoot });
+    assert.equal(report.status, "pass");
+
+    const cli = spawnSync(process.execPath, [SOURCE_TEXT_INTEGRITY_CLI], {
+      cwd: tempRoot,
+      encoding: "utf8",
+    });
+    assert.equal(cli.status, 0);
+    const cliReport = JSON.parse(cli.stdout);
+    assert.equal(cliReport.status, "pass");
+    assert.equal(cliReport.safe_summary_only, true);
+    assert.equal(cli.stdout.includes(tempRoot), false);
+    assert.equal(/[A-Za-z]:[\\/]/u.test(cli.stdout), false);
+    assert.equal(cli.stdout.includes("const text"), false);
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
 });
 
 test("source text integrity scripts are exact test classification paths", () => {

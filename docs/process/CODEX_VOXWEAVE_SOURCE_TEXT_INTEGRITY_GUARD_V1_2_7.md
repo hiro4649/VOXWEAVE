@@ -32,6 +32,7 @@ The change adds a local, safe-summary-only scanner for UTF-8 decoding failures, 
 - sourceTextIntegrityScriptClassificationStatus: test
 - genericScriptGlobAddedStatus: no
 - codexHarnessPrefixRenameStatus: not_used
+- harnessMarkerOnProductEvidenceScriptStatus: removed
 - harnessSemanticMisclassificationAvoidedStatus: pass
 - unknownFileClassificationStatus: none
 
@@ -42,6 +43,11 @@ The change adds a local, safe-summary-only scanner for UTF-8 decoding failures, 
 - nulCharacterStatus: rejected
 - embeddedBomStatus: rejected
 - leadingBomCompatibilityStatus: counted
+- leadingBomByteDetectionStatus: pass
+- doubleLeadingBomRejectedStatus: pass
+- invalidUtf8ByteFixtureStatus: pass
+- replacementCharacterByteFixtureStatus: pass
+- ordinaryMultilingualUtf8Status: pass
 - knownMojibakeStatus: rejected
 - trustedDenylistDefinitionStatus: masked_for_existing_detector_constants_only
 - broadCjkCharacterBanStatus: no
@@ -91,9 +97,15 @@ The change adds a local, safe-summary-only scanner for UTF-8 decoding failures, 
 - sourceTextIntegrityCliStatus: pass
 - orchestratorExtractionIntegrationStatus: pass
 - classificationRegressionStatus: pass
-- expectedFullNpmTestStatus: pending_final_gate
-- expectedLocalQualityGateStatus: pending_final_gate
+- localFullNpmTestStatus: pass
+- localQualityGateStatus: fail_closed_until_remote_npm_evidence
+- localQualityGatePrimaryReason: remote_npm_not_executed_for_product_pr
+- remoteNaturalQGStatus: pending_new_head
+- remoteFinalDecisionStatus: pending_new_head
+- mergeStatus: not_started
 - testDiscoveryBoundaryStatus: npm_test_remains_explicit
+- rawSourceProjectionStatus: forbidden
+- absolutePathProjectionStatus: forbidden
 
 ## Decision Matrix
 
