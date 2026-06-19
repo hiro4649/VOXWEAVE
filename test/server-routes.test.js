@@ -404,8 +404,23 @@ test("external acceptance candidate bundle is safe and not accepted", async () =
   const fixtures = await readCandidateFixtureFiles();
 
   assert.equal(manifest.schema, "voxweave_external_acceptance_candidate_manifest_v1");
-  assert.equal(manifest.candidate_bundle_version, "1.6.0");
-  assert.equal(manifest.source_main_sha, "081f24b6bd1bc03be85908e78f5b370cbb5fb189");
+  assert.equal(manifest.candidate_bundle_version, "1.7.0");
+  assert.equal(manifest.source_main_sha, "baaad589e877568dfa983522fd3ef818f12898b0");
+  assert.equal(
+    manifest.receipt_intake_policy_schema,
+    "voxweave_external_acceptance_receipt_intake_policy_v1"
+  );
+  assert.equal(manifest.receipt_intake_policy_version, 1);
+  assert.equal(
+    manifest.receipt_binding_result_schema,
+    EXTERNAL_ACCEPTANCE_RECEIPT_BINDING_RESULT_SCHEMA
+  );
+  assert.equal(manifest.receipt_intake_matrix_required, true);
+  assert.equal(manifest.receipt_intake_hardening_present, true);
+  assert.equal(manifest.receipt_provenance_fail_closed_present, true);
+  assert.equal(manifest.receipt_duplicate_key_rejection_present, true);
+  assert.equal(manifest.receipt_fatal_utf8_present, true);
+  assert.equal(manifest.receipt_size_bound_present, true);
   assert.equal(
     manifest.pre_send_checklist_path,
     "test/fixtures/external-acceptance/owner-pre-send-checklist.safe.json"
@@ -431,7 +446,7 @@ test("external acceptance candidate bundle is safe and not accepted", async () =
   );
   for (const receipt of receipts) {
     assert.equal(receipt.schema, "voxweave_external_acceptance_receipt_template_v1");
-    assert.equal(receipt.candidate_bundle_version, "1.6.0");
+    assert.equal(receipt.candidate_bundle_version, "1.7.0");
     assert.equal(receipt.received_status, "pending");
     assert.equal(receipt.parsed_status, "pending");
     assert.equal(receipt.acceptance_candidate_status, "pending");
@@ -445,9 +460,16 @@ test("external acceptance candidate bundle is safe and not accepted", async () =
   assert.equal(readmeText.includes("not send authorization"), true);
   assert.equal(readmeText.includes("not runtime readiness"), true);
   assert.equal(checklist.schema, "voxweave_external_acceptance_pre_send_checklist_v1");
-  assert.equal(checklist.candidate_bundle_version, "1.6.0");
+  assert.equal(checklist.candidate_bundle_version, "1.7.0");
   assert.equal(checklist.checklist_status, "pending_owner_action");
   assert.equal(checklist.owner_send_authorized, false);
+  assert.equal(checklist.receipt_intake_policy_required, true);
+  assert.equal(checklist.receipt_intake_matrix_pass_required, true);
+  assert.equal(checklist.receipt_source_provenance_review_required, true);
+  assert.equal(checklist.receipt_duplicate_key_rejection_required, true);
+  assert.equal(checklist.receipt_fatal_utf8_required, true);
+  assert.equal(checklist.receipt_candidate_binding_required, true);
+  assert.equal(checklist.receipt_acceptance_authority_must_remain_external, true);
   assert.deepEqual(checklist.recipient_project_scope, ["IRIS", "LIVE2D"]);
   assert.equal(checklist.actual_send_status, "not_started");
   assert.equal(checklist.actual_receipt_status, "none");
@@ -488,7 +510,7 @@ test("external acceptance candidate bundle is safe and not accepted", async () =
   assertExternalAcceptanceCandidateBundleSummarySafe(summary);
   assert.equal(summary.schema, EXTERNAL_ACCEPTANCE_CANDIDATE_BUNDLE_SUMMARY_SCHEMA);
   assert.equal(summary.status, "pass");
-  assert.equal(summary.candidate_bundle_version, "1.6.0");
+  assert.equal(summary.candidate_bundle_version, "1.7.0");
   assert.equal(summary.safe_failure_taxonomy_registry_present, true);
   assert.equal(summary.http_safe_error_projection_metadata_present, true);
   assert.equal(summary.live2d_forward_taxonomy_metadata_present, true);
@@ -821,7 +843,7 @@ test("external receipt binding validator binds safe receipts to current candidat
   assertExternalAcceptanceCandidateDescriptorSafe(descriptor);
   assert.equal(descriptor.schema, EXTERNAL_ACCEPTANCE_CANDIDATE_DESCRIPTOR_SCHEMA);
   assert.equal(descriptor.status, "pass");
-  assert.equal(descriptor.candidate_bundle_version, "1.6.0");
+  assert.equal(descriptor.candidate_bundle_version, "1.7.0");
   assert.match(descriptor.runtime_source_head_sha, /^[a-f0-9]{40}$/u);
   assert.equal(descriptor.source_binding_kind, "runtime_source_snapshot");
   assert.equal(descriptor.bundle_fingerprint_algorithm, "sha256");
@@ -1444,7 +1466,7 @@ test("external acceptance candidate dry-run matrix composes safe local evidence 
     schema: EXTERNAL_ACCEPTANCE_RECEIPT_SCHEMA,
     recipient_project: "IRIS",
     recipient_role: "synthetic_test_only",
-    candidate_bundle_version: "1.6.0",
+    candidate_bundle_version: "1.7.0",
     source_main_sha: "1".repeat(40),
     candidate_bundle_fingerprint: bundle.candidate_bundle_fingerprint,
     received_status: "received",

@@ -1,6 +1,6 @@
 {
   "schema": "voxweave_external_acceptance_pre_send_checklist_v1",
-  "candidate_bundle_version": "1.6.0",
+  "candidate_bundle_version": "1.7.0",
   "checklist_status": "pending_owner_action",
   "owner_send_authorized": false,
   "candidate_source_binding_required": true,
@@ -8,6 +8,13 @@
   "candidate_cli_pass_required": true,
   "loopback_evidence_pass_required": true,
   "failure_matrix_pass_required": true,
+  "receipt_intake_policy_required": true,
+  "receipt_intake_matrix_pass_required": true,
+  "receipt_source_provenance_review_required": true,
+  "receipt_duplicate_key_rejection_required": true,
+  "receipt_fatal_utf8_required": true,
+  "receipt_candidate_binding_required": true,
+  "receipt_acceptance_authority_must_remain_external": true,
   "receipt_template_required": true,
   "forbidden_material_scan_required": true,
   "recipient_project_scope": [

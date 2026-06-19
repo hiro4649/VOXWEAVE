@@ -1,7 +1,7 @@
 # VOXWEAVE External Acceptance Candidate Bundle
 
 This bundle is a safe candidate package for IRIS and LIVE2D collaborators. It is
-candidate bundle version 1.6.0. It is not acceptance, not external receipt
+candidate bundle version 1.7.0. It is not acceptance, not external receipt
 evidence, not send authorization, not runtime readiness, and not production
 readiness.
 
@@ -29,9 +29,15 @@ An accepted candidate, if one is provided in the future, still will not be
 production readiness, real renderer readiness, real TTS readiness, or ASR
 readiness.
 
-Version 1.6.0 is rebound after the v1.2.7 product safety chain through the
-safe failure taxonomy registry, HTTP safe error projection metadata, Live2D
-forward taxonomy metadata, and safe failure event envelope milestone. The owner
-pre-send checklist remains pending owner action and does not authorize sending.
-This bundle remains not sent, not accepted, and not real integration proof. It
-does not add a public metrics endpoint or runtime event sink.
+Validator pass is not external acceptance. An owner_provided receipt is
+unverified metadata provenance, not external team verification.
+synthetic_test_only cannot produce accepted candidate pass, and unclassified
+cannot produce accepted candidate pass. Actual external acceptance remains not
+started. Actual receipt remains none. External send remains not started.
+Runtime readiness remains false. Production readiness remains false.
+
+Version 1.7.0 is rebound after the v1.2.7 receipt intake hardening and negative
+matrix milestones. The owner pre-send checklist remains pending owner action
+and does not authorize sending. This bundle remains not sent, not accepted, and
+not real integration proof. It does not add a public metrics endpoint or runtime
+event sink.

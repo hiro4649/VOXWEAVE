@@ -172,6 +172,16 @@ const CANDIDATE_MANIFEST_FIELDS = Object.freeze([
   "fixture_files",
   "evidence_runner_script",
   "failure_matrix_command",
+  "receipt_intake_matrix_command",
+  "receipt_intake_matrix_required",
+  "receipt_intake_policy_schema",
+  "receipt_intake_policy_version",
+  "receipt_binding_result_schema",
+  "receipt_intake_hardening_present",
+  "receipt_provenance_fail_closed_present",
+  "receipt_duplicate_key_rejection_present",
+  "receipt_fatal_utf8_present",
+  "receipt_size_bound_present",
   "pre_send_checklist_path",
   "candidate_status",
   "external_team_acceptance_status",
@@ -217,6 +227,13 @@ const PRE_SEND_CHECKLIST_FIELDS = Object.freeze([
   "candidate_cli_pass_required",
   "loopback_evidence_pass_required",
   "failure_matrix_pass_required",
+  "receipt_intake_policy_required",
+  "receipt_intake_matrix_pass_required",
+  "receipt_source_provenance_review_required",
+  "receipt_duplicate_key_rejection_required",
+  "receipt_fatal_utf8_required",
+  "receipt_candidate_binding_required",
+  "receipt_acceptance_authority_must_remain_external",
   "receipt_template_required",
   "forbidden_material_scan_required",
   "recipient_project_scope",
@@ -1691,9 +1708,24 @@ function validateCandidateBundle({ manifest, receipts, readmeText, checklist, fi
     manifest.source_project !== "VOXWEAVE" ||
     manifest.source_harness !== "v1.2.7" ||
     manifest.source_binding_kind !== "runtime_source_snapshot" ||
-    manifest.bundle_binding_kind !== "transitive_sha256"
+    manifest.bundle_binding_kind !== "transitive_sha256" ||
+    manifest.receipt_intake_policy_schema !== EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_POLICY_SCHEMA ||
+    manifest.receipt_intake_policy_version !== EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_POLICY_VERSION ||
+    manifest.receipt_binding_result_schema !== EXTERNAL_ACCEPTANCE_RECEIPT_BINDING_RESULT_SCHEMA ||
+    manifest.receipt_intake_matrix_command !==
+      "node scripts/voxweave-loopback-integration-evidence.mjs --receipt-intake-matrix"
   ) {
     throw new Error("invalid_candidate_binding_kind");
+  }
+  for (const key of [
+    "receipt_intake_matrix_required",
+    "receipt_intake_hardening_present",
+    "receipt_provenance_fail_closed_present",
+    "receipt_duplicate_key_rejection_present",
+    "receipt_fatal_utf8_present",
+    "receipt_size_bound_present",
+  ]) {
+    if (manifest[key] !== true) throw new Error("invalid_candidate_receipt_intake_policy");
   }
   validateSafeRelativePath(manifest.fixture_manifest_path);
   if (manifest.fixture_manifest_path !== EXPECTED_FIXTURE_MANIFEST_PATH) {
@@ -1773,6 +1805,13 @@ function validatePreSendChecklist(checklist, candidateBundleVersion) {
     "candidate_cli_pass_required",
     "loopback_evidence_pass_required",
     "failure_matrix_pass_required",
+    "receipt_intake_policy_required",
+    "receipt_intake_matrix_pass_required",
+    "receipt_source_provenance_review_required",
+    "receipt_duplicate_key_rejection_required",
+    "receipt_fatal_utf8_required",
+    "receipt_candidate_binding_required",
+    "receipt_acceptance_authority_must_remain_external",
     "receipt_template_required",
     "forbidden_material_scan_required",
   ]) {
