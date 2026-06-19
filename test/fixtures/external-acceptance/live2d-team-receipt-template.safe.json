@@ -2,7 +2,7 @@
   "schema": "voxweave_external_acceptance_receipt_template_v1",
   "recipient_project": "LIVE2D",
   "recipient_role": "renderer_boundary_owner",
-  "candidate_bundle_version": "1.3.0",
+  "candidate_bundle_version": "1.4.0",
   "source_main_sha_placeholder": "owner_supplied_source_head_sha",
   "candidate_bundle_fingerprint_placeholder": "owner_supplied_candidate_bundle_fingerprint",
   "received_status": "pending",
