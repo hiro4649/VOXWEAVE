@@ -1,3 +1,5 @@
+import { getHttpErrorDefinition } from "./failureTaxonomy.js";
+
 export class VoxWeaveError extends Error {
   constructor(message, code = "voxweave_error", statusCode = 400) {
     super(message);
@@ -8,16 +10,29 @@ export class VoxWeaveError extends Error {
 }
 
 export function toSafeError(error) {
-  const code =
+  const candidateCode =
     error instanceof VoxWeaveError ? error.code : "internal_error";
-  const statusCode =
+  const candidateStatusCode =
     error instanceof VoxWeaveError ? error.statusCode : 500;
+  const candidateDefinition = getHttpErrorDefinition(candidateCode);
+  const definition =
+    candidateDefinition?.http_status === candidateStatusCode
+      ? candidateDefinition
+      : getHttpErrorDefinition("internal_error");
+  const code = definition.error_kind;
+  const statusCode = definition.http_status;
   return {
     statusCode,
     body: {
       ok: false,
       error: code,
       error_kind: code,
+      taxonomy_schema: definition.schema,
+      failure_category: definition.failure_category,
+      owner_scope: definition.owner_scope,
+      retryability: definition.retryability,
+      safe_message_class: definition.safe_message_class,
+      raw_projection_policy: definition.raw_projection_policy,
       boundary_policy: {
         no_raw_error_messages: true,
         no_request_payloads: true,

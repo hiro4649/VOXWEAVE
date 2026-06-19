@@ -81,7 +81,7 @@ export function createVoxWeaveServer({
       }
 
       if (request.method !== "POST") {
-        sendJson(response, 404, { ok: false, error: "not_found" });
+        sendSafeError(response, new VoxWeaveError("not found", "not_found", 404));
         return;
       }
 
@@ -122,7 +122,7 @@ export function createVoxWeaveServer({
         return;
       }
 
-      sendJson(response, 404, { ok: false, error: "not_found" });
+      sendSafeError(response, new VoxWeaveError("not found", "not_found", 404));
     } catch (error) {
       if (response.destroyed || response.writableEnded) return;
       if (response.headersSent) {
@@ -667,9 +667,13 @@ function sendJson(response, statusCode, body, headers = {}) {
   }
 }
 
+function sendSafeError(response, error, headers = {}) {
+  const safe = toSafeError(error);
+  return sendJson(response, safe.statusCode, safe.body, headers);
+}
+
 function sendServerBusy(response) {
-  const safe = toSafeError(new VoxWeaveError("server busy", "server_busy", 503));
-  sendJson(response, safe.statusCode, safe.body, {
+  sendSafeError(response, new VoxWeaveError("server busy", "server_busy", 503), {
     "connection": "close",
     "retry-after": "1",
   });

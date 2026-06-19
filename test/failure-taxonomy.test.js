@@ -241,7 +241,7 @@ test("registry serialization excludes raw projection and high-cardinality materi
   }
 });
 
-test("current toSafeError response shape is unchanged in Phase I", () => {
+test("toSafeError projects registry-backed low-cardinality metadata", () => {
   const safe = toSafeError(new VoxWeaveError("unsafe detail", "invalid_json", 400));
   assert.equal(safe.statusCode, 400);
   assert.deepEqual(Object.keys(safe.body).sort(), [
@@ -249,13 +249,49 @@ test("current toSafeError response shape is unchanged in Phase I", () => {
     "boundary_policy",
     "error",
     "error_kind",
+    "failure_category",
     "ok",
+    "owner_scope",
+    "raw_projection_policy",
+    "retryability",
+    "safe_message_class",
+    "taxonomy_schema",
   ]);
   assert.equal(safe.body.error, "invalid_json");
   assert.equal(safe.body.error_kind, "invalid_json");
-  assert.equal("taxonomy_schema" in safe.body, false);
-  assert.equal("failure_category" in safe.body, false);
+  assert.equal(safe.body.taxonomy_schema, FAILURE_TAXONOMY_SCHEMA);
+  assert.equal(safe.body.failure_category, "input");
+  assert.equal(safe.body.owner_scope, "voxweave_input");
+  assert.equal(safe.body.retryability, "not_retryable");
+  assert.equal(safe.body.safe_message_class, "client_input_rejected");
+  assert.equal(safe.body.raw_projection_policy, "safe_enum_only");
   assert.equal(JSON.stringify(safe).includes("unsafe detail"), false);
+});
+
+test("toSafeError fail-closes unknown or status-mismatched errors", () => {
+  for (const entry of Object.values(HTTP_ERROR_KIND_REGISTRY)) {
+    const safe = toSafeError(
+      new VoxWeaveError("unsafe detail", entry.error_kind, entry.http_status)
+    );
+    assert.equal(safe.statusCode, entry.http_status);
+    assert.equal(safe.body.error_kind, entry.error_kind);
+    assert.equal(safe.body.taxonomy_schema, FAILURE_TAXONOMY_SCHEMA);
+    assert.equal(safe.body.failure_category, entry.failure_category);
+    assert.equal(safe.body.owner_scope, entry.owner_scope);
+    assert.equal(safe.body.retryability, entry.retryability);
+    assert.equal(safe.body.safe_message_class, entry.safe_message_class);
+    assert.equal(safe.body.raw_projection_policy, "safe_enum_only");
+    assert.equal(JSON.stringify(safe).includes("unsafe detail"), false);
+  }
+
+  const unknown = toSafeError(new VoxWeaveError("unsafe detail", "unknown_kind", 400));
+  assertInternalSafeError(unknown);
+
+  const mismatched = toSafeError(new VoxWeaveError("unsafe detail", "not_found", 400));
+  assertInternalSafeError(mismatched);
+
+  const plain = toSafeError(new Error("unsafe detail"));
+  assertInternalSafeError(plain);
 });
 
 test("package test discovery includes failure taxonomy test exactly once", () => {
@@ -315,4 +351,17 @@ function assertNoUnsafeKeys(value, unsafeKeys) {
     assert.equal(unsafeKeys.has(key), false, `unsafe registry key: ${key}`);
     assertNoUnsafeKeys(child, unsafeKeys);
   }
+}
+
+function assertInternalSafeError(safe) {
+  assert.equal(safe.statusCode, 500);
+  assert.equal(safe.body.error, "internal_error");
+  assert.equal(safe.body.error_kind, "internal_error");
+  assert.equal(safe.body.taxonomy_schema, FAILURE_TAXONOMY_SCHEMA);
+  assert.equal(safe.body.failure_category, "internal");
+  assert.equal(safe.body.owner_scope, "voxweave_internal");
+  assert.equal(safe.body.retryability, "unknown");
+  assert.equal(safe.body.safe_message_class, "internal_failure");
+  assert.equal(safe.body.raw_projection_policy, "safe_enum_only");
+  assert.equal(JSON.stringify(safe).includes("unsafe detail"), false);
 }
