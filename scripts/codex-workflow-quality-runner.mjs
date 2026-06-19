@@ -6156,6 +6156,15 @@ export function buildWorkflowQualityRunnerReport(report, options = {}) {
 
 }
 
+export function computeWorkflowExitCode(result = {}, finalDecision = {}) {
+  if (result.status === 'fail') return 1;
+  if (Array.isArray(result.failures) && result.failures.length > 0) return 1;
+  if (finalDecision.decision === 'blocked') return 1;
+  if (finalDecision.terminalAction === 'merge_current_pr' && finalDecision.mergeAllowed !== true) return 1;
+  if (Number(finalDecision.exitCode || 0) !== 0) return 1;
+  return 0;
+}
+
 
 
 
@@ -6328,7 +6337,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
       productionReadinessClaimed: loaded.report.productionReadinessClaimed === true,
     },
   });
-  if (finalDecision.exitCode === 0) process.exit(0);
+  const workflowExitCode = computeWorkflowExitCode(result, finalDecision);
+  if (workflowExitCode === 0) process.exit(0);
 
   if (result.failures.length) {
 
@@ -6373,6 +6383,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
 
 
   }
+
+  process.exit(1);
 
 
 

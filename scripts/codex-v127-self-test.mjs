@@ -17,6 +17,7 @@ import {
 } from './codex-orchestration-capsule.mjs';
 import { buildWorkerProofCapsule, validateWorkerProofCapsule } from './codex-worker-proof-capsule.mjs';
 import { buildOwnerDecisionBrief, validateOwnerDecisionBrief } from './codex-owner-decision-brief.mjs';
+import { computeWorkflowExitCode } from './codex-workflow-quality-runner.mjs';
 
 function test(name, fn) {
   try {
@@ -228,6 +229,11 @@ const cases = [
     continuationDecision: { state: 'continue', oneSafeNextAction: 'continue_commit_push_create_pr' },
   })))],
   ['owner_brief_contains_current_self_test', () => buildOwnerDecisionBrief().proofCompleted.includes('v127_self_test')],
+  ['workflow_exit_fails_when_internal_report_fails_even_if_final_decision_exit_zero', () => computeWorkflowExitCode({ status: 'fail', failures: ['qualityScoreStatus=fail'] }, { exitCode: 0, mergeAllowed: true }) === 1],
+  ['workflow_exit_fails_when_final_decision_is_blocked', () => computeWorkflowExitCode({ status: 'pass', failures: [] }, { decision: 'blocked', exitCode: 0, mergeAllowed: false }) === 1],
+  ['workflow_exit_fails_when_merge_action_is_not_allowed', () => computeWorkflowExitCode({ status: 'pass', failures: [] }, { terminalAction: 'merge_current_pr', decision: 'blocked', exitCode: 0, mergeAllowed: false }) === 1],
+  ['workflow_exit_passes_only_when_internal_and_final_decision_pass', () => computeWorkflowExitCode({ status: 'pass', failures: [] }, { exitCode: 0, mergeAllowed: true }) === 0],
+  ['workflow_exit_allows_create_pr_only_without_merge_permission', () => computeWorkflowExitCode({ status: 'pass', failures: [] }, { terminalAction: 'create_pr_only', decision: 'allowed', exitCode: 0, mergeAllowed: false }) === 0],
   ['worker_proof_v127_marker_compatibility_pass', () => passed(validateWorkerProofCapsule(buildWorkerProofCapsule()))],
   ['orchestration_capsule_validates_all_v127_internal_blocks', () => Object.values(validateOrchestrationCapsule(buildOrchestrationCapsule())).every((item) => item.status === 'pass')],
 ].map(([name, fn]) => test(name, fn));

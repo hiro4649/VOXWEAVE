@@ -11,6 +11,7 @@ import { buildRemoteNpmDiagnosticReport } from './codex-remote-npm-diagnostic-cl
 import {
   buildRemoteProductEvidenceExecutionReport,
   buildRemoteProductEvidenceRunnerReport,
+  buildRemoteProductSafeArtifacts,
   buildProductEvidenceConsumptionReport,
   buildPlaceholderEvidenceForbiddenReport,
   buildLocalRemotePhaseStatusReport,
@@ -54,11 +55,17 @@ export function buildV098SelfTestReport() {
   const productEvidencePath = path.join(tempDir, 'product-evidence.json');
   const npmDiagnosticPath = path.join(tempDir, 'npm-diagnostic.json');
   fs.writeFileSync(productEvidencePath, JSON.stringify({ status: 'not_applicable', evidenceType: 'not_applicable', commands: [], rawLogsIncluded: false, safeSummaryOnly: true }));
-  fs.writeFileSync(npmDiagnosticPath, JSON.stringify({ npmExitCode: 0, safeFailureCategory: 'test_assertion_failure', rawLogUploaded: false, rawValuesStored: false, safeSummaryOnly: true }));
+  fs.writeFileSync(npmDiagnosticPath, JSON.stringify({ status: 'pass', productRelevant: true, npmExecuted: true, npmExitCode: 0, diagnosticState: 'passed', safeFailureCategory: 'none', rawLogUploaded: false, rawValuesStored: false, safeSummaryOnly: true }));
   report = buildProductVerificationEvidenceReport({ CODEX_PRODUCT_VERIFICATION_EVIDENCE_PATH: productEvidencePath, CODEX_CHANGED_FILES: 'docs/process/CODEX_V098_EVAL_CASES.json', CODEX_HARNESS_SOURCE_REPO: '1' });
   assertCase('remote_product_evidence_runner_false_raw_log_sentinel_consumed_pass', statusOf(report, 'productVerificationEvidenceStatus') === 'pass', failures, cases, statusOf(report, 'productVerificationEvidenceStatus'), reasonsOf(report, 'productVerificationEvidenceStatus'));
   report = buildRemoteNpmDiagnosticReport({ CODEX_NPM_TEST_SAFE_SUMMARY_PATH: npmDiagnosticPath });
   assertCase('remote_npm_diagnostic_false_raw_log_sentinel_consumed_pass', statusOf(report, 'remoteNpmDiagnosticStatus') === 'pass', failures, cases, statusOf(report, 'remoteNpmDiagnosticStatus'), reasonsOf(report, 'remoteNpmDiagnosticStatus'));
+  const remoteArtifacts = buildRemoteProductSafeArtifacts({ productRelevant: true, npmExecuted: false, npmExitCode: 0, headSha: 'safehead' }, {});
+  assertCase('remote_product_safe_artifacts_do_not_infer_npm_execution_from_product_relevance', remoteArtifacts.evidence.status === 'fail' && remoteArtifacts.evidence.npmExecuted === false && remoteArtifacts.diagnostic.diagnosticState === 'not_executed', failures, cases, remoteArtifacts.evidence.status, remoteArtifacts.evidence.safeReasonCodes);
+  const remoteSuccessArtifacts = buildRemoteProductSafeArtifacts({ productRelevant: true, npmExecuted: true, npmExitCode: 0, headSha: 'safehead' }, {});
+  assertCase('remote_product_safe_artifacts_success_category_none', remoteSuccessArtifacts.evidence.status === 'pass' && remoteSuccessArtifacts.diagnostic.safeFailureCategory === 'none' && remoteSuccessArtifacts.diagnostic.diagnosticState === 'passed', failures, cases, remoteSuccessArtifacts.evidence.status, remoteSuccessArtifacts.diagnostic.safeFailureCategory === 'none' ? [] : ['remote_npm_diagnostic_invalid']);
+  report = buildRemoteNpmDiagnosticReport({ CODEX_NPM_TEST_SAFE_SUMMARY_JSON: JSON.stringify({ status: 'pass', productRelevant: true, npmExecuted: true, npmExitCode: 0, diagnosticState: 'passed', safeFailureCategory: 'test_assertion_failure', safeSummaryOnly: true }) });
+  assertCase('remote_npm_diagnostic_success_with_failure_category_fails', statusOf(report, 'remoteNpmDiagnosticStatus') === 'fail', failures, cases, statusOf(report, 'remoteNpmDiagnosticStatus'), reasonsOf(report, 'remoteNpmDiagnosticStatus'));
   report = buildProductEvidenceConsumptionReport({ evidenceGenerated: true, productRelevant: true });
   assertCase('product_evidence_consumption_generated_but_not_consumed_fails', statusOf(report, 'productEvidenceConsumptionStatus') === 'fail', failures, cases, statusOf(report, 'productEvidenceConsumptionStatus'), reasonsOf(report, 'productEvidenceConsumptionStatus'));
   report = buildPlaceholderEvidenceForbiddenReport({ productRelevant: true, evidence: { evidenceType: 'placeholder', status: 'pending' } });
