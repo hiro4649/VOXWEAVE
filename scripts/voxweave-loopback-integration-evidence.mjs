@@ -13,6 +13,15 @@ import {
 } from "../src/contracts.js";
 import * as externalReceiptModule from "../src/externalAcceptanceReceipt.js";
 
+export {
+  VOXWEAVE_RECEIPT_QUARANTINE_CAPSULE_SCHEMA,
+  VOXWEAVE_RECEIPT_REPLAY_CLASSIFICATION_SCHEMA,
+  buildExternalAcceptanceReceiptQuarantineCapsule,
+  assertExternalAcceptanceReceiptQuarantineCapsuleSafe,
+  classifyExternalAcceptanceReceiptReplay,
+  buildExternalAcceptanceReceiptReplayKey,
+} from "../src/externalAcceptanceReceiptQuarantine.js";
+
 export const LOOPBACK_INTEGRATION_EVIDENCE_SCHEMA =
   "voxweave_loopback_integration_evidence_v1";
 export const LOOPBACK_INTEGRATION_FAILURE_MATRIX_SCHEMA =

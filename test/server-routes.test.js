@@ -19,14 +19,17 @@ import {
   EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_MATRIX_SCHEMA,
   EXTERNAL_ACCEPTANCE_RECEIPT_BINDING_RESULT_SCHEMA,
   EXTERNAL_ACCEPTANCE_RECEIPT_SCHEMA,
+  VOXWEAVE_RECEIPT_QUARANTINE_CAPSULE_SCHEMA,
   assertExternalAcceptanceCandidateDescriptorSafe,
   assertExternalAcceptanceReceiptBindingResultSafe,
   assertExternalAcceptanceReceiptIntakeMatrixSafe,
+  assertExternalAcceptanceReceiptQuarantineCapsuleSafe,
   assertLoopbackFailureMatrixSafe,
   assertLoopbackEvidenceSafe,
   assertExternalAcceptanceCandidateBundleSummarySafe,
   buildExternalAcceptanceCandidateDescriptor,
   buildExternalAcceptanceCandidateBundleFingerprint,
+  buildExternalAcceptanceReceiptQuarantineCapsule,
   buildExternalAcceptanceReceiptIntakeMatrixFingerprint,
   buildExternalAcceptanceReceiptFingerprint,
   buildLoopbackEvidenceFingerprint,
@@ -1576,6 +1579,33 @@ test("external acceptance receipt intake matrix covers safe local negative cases
   assert.equal(cli.stdout.includes("candidate_bundle_fingerprint"), false);
   assert.equal(cli.stdout.includes("source_main_sha"), false);
   assertNoDangerousCandidateMaterial(cli.output);
+});
+
+test("external receipt quarantine script re-export composes safe capsule only", async () => {
+  const candidate = await loadCandidateBundleForTest();
+  const descriptor = buildExternalAcceptanceCandidateDescriptor(candidate);
+  const receipt = buildSyntheticBoundReceipt(candidate, descriptor);
+  const validationResult = validateExternalAcceptanceReceipt(receipt);
+  const bindingResult = validateExternalAcceptanceReceiptAgainstCandidate({
+    ...candidate,
+    receipt,
+    receiptSourceKind: "owner_provided",
+  });
+  const capsule = buildExternalAcceptanceReceiptQuarantineCapsule({
+    validationResult,
+    bindingResult,
+    receiptFingerprint: validationResult.receipt_fingerprint,
+    bindingFingerprint: bindingResult.binding_fingerprint,
+  });
+
+  assertExternalAcceptanceReceiptQuarantineCapsuleSafe(capsule);
+  assert.equal(capsule.schema, VOXWEAVE_RECEIPT_QUARANTINE_CAPSULE_SCHEMA);
+  assert.equal(capsule.quarantine_disposition, "quarantined_for_owner_review");
+  assert.equal(capsule.raw_receipt_stored, false);
+  assert.equal(capsule.actual_receipt_persisted, false);
+  assert.equal(capsule.acceptance_authority_created, false);
+  assert.equal(capsule.external_acceptance_effective, false);
+  assertNoDangerousCandidateMaterial(capsule);
 });
 
 async function withRouteServer(callback) {
