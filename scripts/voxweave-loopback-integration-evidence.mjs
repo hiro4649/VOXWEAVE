@@ -11,6 +11,7 @@ import {
   AI_CHARACTER_CONTRACT_FAMILY_COUNT,
   AI_CHARACTER_CONTRACT_REGISTRY,
 } from "../src/contracts.js";
+import * as externalReceiptModule from "../src/externalAcceptanceReceipt.js";
 
 export const LOOPBACK_INTEGRATION_EVIDENCE_SCHEMA =
   "voxweave_loopback_integration_evidence_v1";
@@ -1160,9 +1161,17 @@ export async function runExternalAcceptanceReceiptIntakeMatrix({
     receipt: acceptedReceipt,
     receiptSourceKind: "owner_provided",
   });
+  const extractedModuleBinding = externalReceiptModule.bindExternalAcceptanceReceiptToCandidateDescriptor({
+    descriptor,
+    receipt: acceptedReceipt,
+    receiptTemplates: bundle.receipts,
+    receiptSourceKind: "owner_provided",
+  });
 
   const cases = [
     ["provenance", acceptedBinding.status === "pass"],
+    ["provenance", extractedModuleBinding.primary_reason_code === acceptedBinding.primary_reason_code],
+    ["provenance", externalReceiptModule.EXTERNAL_ACCEPTANCE_RECEIPT_BINDING_RESULT_SCHEMA === EXTERNAL_ACCEPTANCE_RECEIPT_BINDING_RESULT_SCHEMA],
     ["provenance", bindingReason(bundle, acceptedReceipt, "synthetic_test_only") ===
       "synthetic_receipt_acceptance_claim_forbidden"],
     ["provenance", bindingReason(bundle, acceptedReceipt, "unclassified") ===
