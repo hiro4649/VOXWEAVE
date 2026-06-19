@@ -37,6 +37,10 @@ import {
   runWithOperationContext,
   throwIfOperationAborted,
 } from "../src/operationContext.js";
+import {
+  FAILURE_TAXONOMY_SCHEMA,
+  getHttpErrorDefinition,
+} from "../src/failureTaxonomy.js";
 
 const FAKE_API_KEY = "unit-test-key";
 const OVERSIZED_BODY = "x".repeat(513_000);
@@ -1607,8 +1611,20 @@ function assertSafeError(response, status, code) {
   assert.equal(response.body.ok, false);
   assert.equal(response.body.error, code);
   if ("error_kind" in response.body) assert.equal(response.body.error_kind, code);
+  assertSafeErrorTaxonomy(response.body, status, code);
   assertSafeHeaders(response);
   assertNoForbiddenFields(response.body);
+}
+
+function assertSafeErrorTaxonomy(body, status, code) {
+  const definition = getHttpErrorDefinition(code);
+  assert.equal(definition?.http_status, status);
+  assert.equal(body.taxonomy_schema, FAILURE_TAXONOMY_SCHEMA);
+  assert.equal(body.failure_category, definition.failure_category);
+  assert.equal(body.owner_scope, definition.owner_scope);
+  assert.equal(body.retryability, definition.retryability);
+  assert.equal(body.safe_message_class, definition.safe_message_class);
+  assert.equal(body.raw_projection_policy, "safe_enum_only");
 }
 
 function assertSafeHeaders(response) {
