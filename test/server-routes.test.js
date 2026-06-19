@@ -16,19 +16,23 @@ import {
   LOOPBACK_INTEGRATION_EVIDENCE_SCHEMA,
   EXTERNAL_ACCEPTANCE_CANDIDATE_BUNDLE_SUMMARY_SCHEMA,
   EXTERNAL_ACCEPTANCE_CANDIDATE_DESCRIPTOR_SCHEMA,
+  EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_MATRIX_SCHEMA,
   EXTERNAL_ACCEPTANCE_RECEIPT_BINDING_RESULT_SCHEMA,
   EXTERNAL_ACCEPTANCE_RECEIPT_SCHEMA,
   assertExternalAcceptanceCandidateDescriptorSafe,
   assertExternalAcceptanceReceiptBindingResultSafe,
+  assertExternalAcceptanceReceiptIntakeMatrixSafe,
   assertLoopbackFailureMatrixSafe,
   assertLoopbackEvidenceSafe,
   assertExternalAcceptanceCandidateBundleSummarySafe,
   buildExternalAcceptanceCandidateDescriptor,
   buildExternalAcceptanceCandidateBundleFingerprint,
+  buildExternalAcceptanceReceiptIntakeMatrixFingerprint,
   buildExternalAcceptanceReceiptFingerprint,
   buildLoopbackEvidenceFingerprint,
   canonicalizeLoopbackEvidence,
   runExternalAcceptanceCandidateBundleSummary,
+  runExternalAcceptanceReceiptIntakeMatrix,
   runLoopbackIntegrationFailureMatrix,
   runLoopbackIntegrationEvidence,
   validateExternalAcceptanceReceiptAgainstCandidate,
@@ -1498,6 +1502,58 @@ test("external acceptance candidate dry-run matrix composes safe local evidence 
     assert.equal(parsed.safe_summary_only, true);
     assertNoDangerousCandidateMaterial(parsed);
   }
+});
+
+test("external acceptance receipt intake matrix covers safe local negative cases", async () => {
+  const candidate = await loadCandidateBundleForTest();
+  const matrix = await runExternalAcceptanceReceiptIntakeMatrix({
+    headSha: "1".repeat(40),
+    candidateBundle: candidate,
+  });
+  assertExternalAcceptanceReceiptIntakeMatrixSafe(matrix);
+  assert.equal(matrix.schema, EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_MATRIX_SCHEMA);
+  assert.equal(matrix.status, "pass");
+  assert.equal(matrix.evidence_mode, "local_synthetic_receipt_intake_only");
+  assert.equal(matrix.provenance_case_status, "pass");
+  assert.equal(matrix.state_coherence_case_status, "pass");
+  assert.equal(matrix.binding_case_status, "pass");
+  assert.equal(matrix.encoding_case_status, "pass");
+  assert.equal(matrix.duplicate_key_case_status, "pass");
+  assert.equal(matrix.size_bound_case_status, "pass");
+  assert.equal(matrix.cli_argument_case_status, "pass");
+  assert.equal(matrix.output_minimality_case_status, "pass");
+  assert.equal(matrix.authority_non_creation_status, "pass");
+  assert.equal(matrix.actual_receipt_generated, false);
+  assert.equal(matrix.external_send_executed, false);
+  assert.equal(matrix.external_acceptance_claimed, false);
+  assert.equal(matrix.real_integration_proof_claimed, false);
+  assert.equal(matrix.runtime_readiness_claimed, false);
+  assert.equal(matrix.production_readiness_claimed, false);
+  assert.equal(
+    matrix.evidence_fingerprint,
+    buildExternalAcceptanceReceiptIntakeMatrixFingerprint(matrix)
+  );
+
+  const changed = {
+    ...matrix,
+    provenance_case_status: "fail",
+    evidence_fingerprint: "",
+  };
+  changed.evidence_fingerprint = buildExternalAcceptanceReceiptIntakeMatrixFingerprint(changed);
+  assert.notEqual(matrix.evidence_fingerprint, changed.evidence_fingerprint);
+
+  const cli = await runReceiptScriptCli(["--receipt-intake-matrix"]);
+  assert.equal(cli.exitCode, 0);
+  assertExternalAcceptanceReceiptIntakeMatrixSafe(cli.output);
+  assert.equal(cli.output.schema, EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_MATRIX_SCHEMA);
+  assert.equal(cli.output.status, "pass");
+  assert.equal(cli.output.actual_receipt_generated, false);
+  assert.equal(cli.output.external_send_executed, false);
+  assert.equal(cli.output.external_acceptance_claimed, false);
+  assert.equal(cli.stdout.includes("recipient_role"), false);
+  assert.equal(cli.stdout.includes("candidate_bundle_fingerprint"), false);
+  assert.equal(cli.stdout.includes("source_main_sha"), false);
+  assertNoDangerousCandidateMaterial(cli.output);
 });
 
 async function withRouteServer(callback) {
