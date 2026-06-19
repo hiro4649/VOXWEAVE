@@ -1199,6 +1199,89 @@ test("cache semantic key matrix hits only non-semantic correlation changes", asy
   }
 });
 
+test("neutral reaction cache contract matrix covers text adapter and cue boundaries", async () => {
+  const service = makeService();
+  const base = makeTtsPacket({
+    text: "thanks.",
+    final_text: "thanks.",
+    trace_id: "trace-neutral-matrix-base",
+    event_id: "event-neutral-matrix-base",
+    utterance_id: "utterance-neutral-matrix-base",
+  });
+
+  const first = await service.orchestrate(base, { routeKind: "tts" });
+  const correlationOnly = await service.orchestrate(
+    makeTtsPacket({
+      text: "thanks.",
+      final_text: "thanks.",
+      trace_id: "trace-neutral-matrix-correlation",
+      event_id: "event-neutral-matrix-correlation",
+      utterance_id: "utterance-neutral-matrix-correlation",
+    }),
+    { routeKind: "tts" }
+  );
+  const punctuationChanged = await service.orchestrate(
+    makeTtsPacket({
+      text: "thanks",
+      final_text: "thanks",
+      trace_id: "trace-neutral-matrix-punctuation",
+      event_id: "event-neutral-matrix-punctuation",
+      utterance_id: "utterance-neutral-matrix-punctuation",
+    }),
+    { routeKind: "tts" }
+  );
+  const arbitraryShort = await service.orchestrate(
+    makeTtsPacket({
+      text: "okay",
+      final_text: "okay",
+      trace_id: "trace-neutral-matrix-short",
+      event_id: "event-neutral-matrix-short",
+      utterance_id: "utterance-neutral-matrix-short",
+    }),
+    { routeKind: "tts" }
+  );
+  const adapterChanged = await service.orchestrate(
+    makeSubtitlePacket({
+      text: "thanks.",
+      final_text: "thanks.",
+      trace_id: "trace-neutral-matrix-subtitle",
+      event_id: "event-neutral-matrix-subtitle",
+      utterance_id: "utterance-neutral-matrix-subtitle",
+    }),
+    { routeKind: "subtitle" }
+  );
+  const live2dCue = await service.orchestrate(
+    makeLive2dPacket({
+      text: "thanks.",
+      final_text: "thanks.",
+      trace_id: "trace-neutral-matrix-live2d",
+      event_id: "event-neutral-matrix-live2d",
+      utterance_id: "utterance-neutral-matrix-live2d",
+      live2d_cue: {
+        expression: "neutral",
+        motion: "idle",
+        intensity: 0.2,
+        duration_ms: 700,
+        adapter_validation_required: true,
+      },
+    }),
+    { routeKind: "live2d" }
+  );
+
+  assert.equal(first.cache.status, "miss");
+  assert.equal(correlationOnly.cache.status, "hit");
+  assert.equal(correlationOnly.cache.key, first.cache.key);
+  assert.equal(punctuationChanged.cache.status, "miss");
+  assert.notEqual(punctuationChanged.cache.key, first.cache.key);
+  assert.equal(arbitraryShort.cache.status, "miss");
+  assert.equal(adapterChanged.cache.status, "miss");
+  assert.equal(live2dCue.cache.status, "miss");
+  assert.equal(live2dCue.live2d_forward.renderer_forward_attempted, false);
+  for (const result of [first, correlationOnly, punctuationChanged, arbitraryShort, adapterChanged, live2dCue]) {
+    assertNoForbiddenFields(result);
+  }
+});
+
 test("invalid reaction cache entry is deleted and rebuilt as current miss", async () => {
   const calls = [];
   const cache = {
