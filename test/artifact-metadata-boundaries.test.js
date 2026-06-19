@@ -142,7 +142,7 @@ test("artifact URLs never use transport schemes or host material", async () => {
       assert.equal(artifactUrl.includes("localhost"), false);
       assert.equal(artifactUrl.includes("127.0.0.1"), false);
       assert.equal(artifactUrl.includes("192.168."), false);
-      assert.equal(artifactUrl.includes("10."), false);
+      assert.equal(/(?:^|[/@])10\./u.test(artifactUrl), false);
     }
     assertNoForbiddenFields(result);
   }

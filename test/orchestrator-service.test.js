@@ -8,6 +8,7 @@ import {
   stripTopLevelRequestCorrelation,
 } from "../src/reactionPlanCache.js";
 import { createOperationContext } from "../src/operationContext.js";
+import { FAILURE_TAXONOMY_SCHEMA } from "../src/failureTaxonomy.js";
 
 const FORBIDDEN_RESPONSE_KEYS = new Set([
   "canonical_envelope",
@@ -266,6 +267,20 @@ function assertNoForbiddenFields(value) {
   }
 }
 
+function assertLive2dForwardTaxonomy(value, status, outcome, retryability) {
+  assert.equal(value.renderer_forward_taxonomy.schema, FAILURE_TAXONOMY_SCHEMA);
+  assert.equal(value.renderer_forward_taxonomy.renderer_forward_status, status);
+  assert.equal(value.renderer_forward_taxonomy.outcome, outcome);
+  assert.equal(value.renderer_forward_taxonomy.failure_category, "live2d_forward");
+  assert.equal(value.renderer_forward_taxonomy.owner_scope, "live2d_local_forwarder");
+  assert.equal(value.renderer_forward_taxonomy.retryability, retryability);
+  assert.equal(value.renderer_forward_taxonomy.raw_projection_policy, "safe_enum_only");
+  assert.equal(value.renderer_forward_taxonomy.renderer_readiness_claimed, false);
+  assert.equal(value.renderer_forward_taxonomy.runtime_readiness_claimed, false);
+  assert.equal(value.renderer_forward_taxonomy.production_readiness_claimed, false);
+  assert.equal(value.renderer_forward_taxonomy.safe_summary_only, true);
+}
+
 function assertArtifactUrl(value) {
   assert.equal(typeof value, "string");
   assert.equal(value.startsWith("artifact://voxweave/"), true);
@@ -423,6 +438,7 @@ test("integration boundary snapshot exposes loopback fake forwarder scope only",
   assert.equal(result.response_summary.integration_boundary.live2d_boundary.forwarder_configured, true);
   assert.equal(result.response_summary.integration_boundary.live2d_boundary.forwarder_scope, "loopback");
   assert.equal(result.live2d_forward.renderer_forward_attempted, false);
+  assertLive2dForwardTaxonomy(result.live2d_forward, "not_live2d_adapter", "not_applicable", "not_applicable");
   assertNoForbiddenFields(result);
 });
 
@@ -442,6 +458,7 @@ test("integration boundary snapshot exposes blocked fake forwarder scope only", 
   assert.equal(result.response_summary.integration_boundary.live2d_boundary.forwarder_configured, true);
   assert.equal(result.response_summary.integration_boundary.live2d_boundary.forwarder_scope, "blocked");
   assert.equal(result.live2d_forward.renderer_forward_attempted, false);
+  assertLive2dForwardTaxonomy(result.live2d_forward, "not_live2d_adapter", "not_applicable", "not_applicable");
   assertNoForbiddenFields(result);
 });
 

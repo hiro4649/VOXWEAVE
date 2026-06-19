@@ -107,6 +107,31 @@ export function getLive2dForwardStatusDefinition(status) {
   return entry ? cloneFrozen(entry) : null;
 }
 
+export function buildLive2dForwardTaxonomy(status) {
+  const entry = getLive2dForwardStatusDefinition(status);
+  if (!entry) return null;
+  return Object.freeze({
+    schema: entry.schema,
+    renderer_forward_status: entry.renderer_forward_status,
+    outcome: entry.outcome,
+    failure_category: entry.failure_category,
+    owner_scope: entry.owner_scope,
+    retryability: entry.retryability,
+    raw_projection_policy: entry.raw_projection_policy,
+    renderer_readiness_claimed: entry.renderer_readiness_claimed,
+    runtime_readiness_claimed: entry.runtime_readiness_claimed,
+    production_readiness_claimed: entry.production_readiness_claimed,
+    safe_summary_only: entry.safe_summary_only,
+  });
+}
+
+export function withLive2dForwardTaxonomy(summary) {
+  const safeSummary = { ...(summary ?? {}) };
+  const taxonomy = buildLive2dForwardTaxonomy(safeSummary.renderer_forward_status);
+  if (taxonomy) safeSummary.renderer_forward_taxonomy = taxonomy;
+  return Object.freeze(safeSummary);
+}
+
 export function listHttpErrorKinds() {
   return Object.freeze(Object.keys(HTTP_ERROR_KIND_REGISTRY).sort());
 }

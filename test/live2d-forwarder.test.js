@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createLive2dForwarder } from "../src/live2dForwarder.js";
 import { VoxWeaveError } from "../src/errors.js";
+import { FAILURE_TAXONOMY_SCHEMA } from "../src/failureTaxonomy.js";
 import { createOperationContext } from "../src/operationContext.js";
 
 const FORBIDDEN_SUMMARY_KEYS = new Set([
@@ -48,6 +49,21 @@ function assertNoForbiddenSummaryFields(value) {
       stack.push(child);
     }
   }
+}
+
+function assertLive2dForwardTaxonomy(summary, { status, outcome, retryability }) {
+  assert.equal(summary.renderer_forward_status, status);
+  assert.equal(summary.renderer_forward_taxonomy.schema, FAILURE_TAXONOMY_SCHEMA);
+  assert.equal(summary.renderer_forward_taxonomy.renderer_forward_status, status);
+  assert.equal(summary.renderer_forward_taxonomy.outcome, outcome);
+  assert.equal(summary.renderer_forward_taxonomy.failure_category, "live2d_forward");
+  assert.equal(summary.renderer_forward_taxonomy.owner_scope, "live2d_local_forwarder");
+  assert.equal(summary.renderer_forward_taxonomy.retryability, retryability);
+  assert.equal(summary.renderer_forward_taxonomy.raw_projection_policy, "safe_enum_only");
+  assert.equal(summary.renderer_forward_taxonomy.renderer_readiness_claimed, false);
+  assert.equal(summary.renderer_forward_taxonomy.runtime_readiness_claimed, false);
+  assert.equal(summary.renderer_forward_taxonomy.production_readiness_claimed, false);
+  assert.equal(summary.renderer_forward_taxonomy.safe_summary_only, true);
 }
 
 function makeFetch({ ok = true, rejectWith, responseBody } = {}) {
@@ -534,6 +550,60 @@ test("summary never exposes endpoint, key, cue body, or forbidden fields", async
     "renderer_forward_ok",
     "renderer_forward_scope",
     "renderer_forward_status",
+    "renderer_forward_taxonomy",
   ]);
+  assertLive2dForwardTaxonomy(summary, {
+    status: "accepted",
+    outcome: "success",
+    retryability: "not_applicable",
+  });
   assertNoForbiddenSummaryFields(summary);
+});
+
+test("Live2D forward summaries include safe taxonomy for every failure status", async () => {
+  const dryRun = await forwardWith({});
+  assertLive2dForwardTaxonomy(dryRun, {
+    status: "dry_run",
+    outcome: "not_attempted",
+    retryability: "not_applicable",
+  });
+
+  const configuredUnusable = await forwardWith({
+    endpoint: "https://example.invalid/live2d-engine",
+  });
+  assertLive2dForwardTaxonomy(configuredUnusable, {
+    status: "configured_unusable",
+    outcome: "failure",
+    retryability: "owner_action_required",
+  });
+
+  const rejected = await forwardWith({
+    endpoint: "http://localhost/live2d-engine",
+    fetchImpl: makeFetch({ ok: false }).fetchImpl,
+  });
+  assertLive2dForwardTaxonomy(rejected, {
+    status: "renderer_rejected",
+    outcome: "failure",
+    retryability: "not_retryable",
+  });
+
+  const unreachable = await forwardWith({
+    endpoint: "http://localhost/live2d-engine",
+    fetchImpl: makeFetch({ rejectWith: new Error("fake fetch failure") }).fetchImpl,
+  });
+  assertLive2dForwardTaxonomy(unreachable, {
+    status: "renderer_unreachable",
+    outcome: "failure",
+    retryability: "unknown",
+  });
+
+  const timeout = await forwardWith({
+    endpoint: "http://localhost/live2d-engine",
+    fetchImpl: makeFetch({ rejectWith: new DOMException("fake", "AbortError") }).fetchImpl,
+  });
+  assertLive2dForwardTaxonomy(timeout, {
+    status: "renderer_timeout",
+    outcome: "failure",
+    retryability: "unknown",
+  });
 });

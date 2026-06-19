@@ -1,5 +1,6 @@
 import { isIP } from "node:net";
 import { assertSafeResponse } from "./contracts.js";
+import { withLive2dForwardTaxonomy } from "./failureTaxonomy.js";
 import { throwIfOperationAborted } from "./operationContext.js";
 
 const DEFAULT_TIMEOUT_MS = 3000;
@@ -26,13 +27,13 @@ export function createLive2dForwarder({
       assertSafeResponse(cueDelivery);
       if (!configured) return dryRunSummary();
       if (!target || typeof fetchImpl !== "function") {
-        return {
+        return withLive2dForwardTaxonomy({
           renderer_forward_configured: true,
           renderer_forward_scope: "blocked",
           renderer_forward_attempted: false,
           renderer_forward_ok: false,
           renderer_forward_status: "configured_unusable",
-        };
+        });
       }
 
       const controller = new AbortController();
@@ -66,23 +67,23 @@ export function createLive2dForwarder({
         });
         await cancelResponseBody(response);
         throwIfOperationAborted(signal);
-        return {
+        return withLive2dForwardTaxonomy({
           renderer_forward_configured: true,
           renderer_forward_scope: scope,
           renderer_forward_attempted: true,
           renderer_forward_ok: response.ok === true,
           renderer_forward_status: response.ok ? "accepted" : "renderer_rejected",
-        };
+        });
       } catch (error) {
         if (parentAborted || signal?.aborted === true) throwIfOperationAborted(signal);
-        return {
+        return withLive2dForwardTaxonomy({
           renderer_forward_configured: true,
           renderer_forward_scope: scope,
           renderer_forward_attempted: true,
           renderer_forward_ok: false,
           renderer_forward_status:
             localTimedOut || error?.name === "AbortError" ? "renderer_timeout" : "renderer_unreachable",
-        };
+        });
       } finally {
         clearTimeout(timer);
         if (typeof signal?.removeEventListener === "function") {
@@ -112,13 +113,13 @@ function normalizeTimeoutMs(value) {
 }
 
 function dryRunSummary() {
-  return {
+  return withLive2dForwardTaxonomy({
     renderer_forward_configured: false,
     renderer_forward_scope: "not_configured",
     renderer_forward_attempted: false,
     renderer_forward_ok: false,
     renderer_forward_status: "dry_run",
-  };
+  });
 }
 
 function normalizeRendererEndpoint(value) {
