@@ -14,6 +14,7 @@ import {
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 9011;
 const MAX_BODY_BYTES = 512_000;
+const UTF8_DECODER = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 export const SERVER_STARTUP_SUMMARY_SCHEMA = "voxweave_server_startup_summary_v1";
 export const SERVER_SHUTDOWN_SUMMARY_SCHEMA = "voxweave_server_shutdown_summary_v1";
 export const DEFAULT_SERVER_LIFECYCLE_POLICY = Object.freeze({
@@ -512,7 +513,12 @@ async function readJson(request) {
     throw error;
   }
   assertRequestNotAborted(request);
-  const body = Buffer.concat(chunks).toString("utf8");
+  let body = "";
+  try {
+    body = UTF8_DECODER.decode(Buffer.concat(chunks));
+  } catch {
+    throw new VoxWeaveError("invalid json", "invalid_json", 400);
+  }
   if (!body.trim()) return {};
   try {
     return JSON.parse(body);

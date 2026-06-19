@@ -390,6 +390,55 @@ test("validateInputPayload rejects unsafe model path string", () => {
   );
 });
 
+test("validateInputPayload rejects unsafe runtime text sentinels", () => {
+  for (const text of ["safe\u0000text", "safe\uFEFFtext", "safe\uFFFDtext", "safe\uD800text"]) {
+    assertVoxWeaveError(
+      () => validateInputPayload({ text }),
+      "unsafe_payload"
+    );
+  }
+});
+
+test("validateInputPayload accepts ordinary multilingual text", () => {
+  assert.doesNotThrow(() =>
+    validateInputPayload({ text: "日本語 中文 한국어 العربية safe text" })
+  );
+});
+
+test("validateInputPayload rejects unsupported scalar values", () => {
+  for (const value of [1n, () => "blocked", Symbol("blocked"), Number.NaN, Number.POSITIVE_INFINITY]) {
+    assertVoxWeaveError(
+      () => validateInputPayload({ text: "safe", value }),
+      "unsafe_payload"
+    );
+  }
+});
+
+test("validateInputPayload rejects unsafe payload structure bounds", () => {
+  const deep = { text: "safe" };
+  let cursor = deep;
+  for (let index = 0; index < 70; index += 1) {
+    cursor.child = {};
+    cursor = cursor.child;
+  }
+  const wide = { text: "safe" };
+  for (let index = 0; index < 520; index += 1) {
+    wide[`safe_${index}`] = index;
+  }
+  const longArray = { text: "safe", list: Array.from({ length: 2_049 }, (_, index) => index) };
+
+  assertVoxWeaveError(() => validateInputPayload(deep), "payload_too_large");
+  assertVoxWeaveError(() => validateInputPayload(wide), "payload_too_large");
+  assertVoxWeaveError(() => validateInputPayload(longArray), "payload_too_large");
+});
+
+test("validateInputPayload rejects cyclic payload without stack overflow", () => {
+  const payload = { text: "safe" };
+  payload.self = payload;
+
+  assertVoxWeaveError(() => validateInputPayload(payload), "unsafe_payload");
+});
+
 test("validateInputPayload permits canonical_envelope with allowed safe fields", () => {
   assert.equal(
     validateInputPayload({
@@ -2137,6 +2186,10 @@ test("safeId rejects unsafe max length", () => {
 test("safeText normalizes whitespace and bounds length", () => {
   assert.equal(safeText("  hello \n\t world  ", 20), "hello world");
   assert.equal(safeText("abcdef", 3), "abc");
+});
+
+test("safeText bounds by code point without splitting surrogate pairs", () => {
+  assert.equal(safeText("🙂🙂🙂", 2), "🙂🙂");
 });
 
 test("clamp clamps below and above ranges", () => {

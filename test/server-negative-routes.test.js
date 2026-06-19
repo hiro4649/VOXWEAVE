@@ -1348,6 +1348,46 @@ test("POST /v1/orchestrate invalid JSON returns safe invalid_json error", async 
   });
 });
 
+test("POST /v1/orchestrate invalid UTF-8 bytes return safe invalid_json error", async () => {
+  await withRouteServer(async (baseUrl) => {
+    const response = await fetchJson(`${baseUrl}/v1/orchestrate`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: Uint8Array.from([0x7b, 0x22, 0x78, 0x22, 0x3a, 0xc3, 0x28, 0x7d]),
+    });
+
+    assertSafeError(response, 400, "invalid_json");
+  });
+});
+
+test("POST /v1/orchestrate split multibyte UTF-8 body decodes safely", async () => {
+  await withRouteServer(async (baseUrl) => {
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(JSON.stringify({
+      ...adapterPacket(),
+      text: "日本語と العربية safe sample",
+      final_text: "日本語と العربية safe sample",
+    }));
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(bytes.slice(0, 17));
+        controller.enqueue(bytes.slice(17));
+        controller.close();
+      },
+    });
+    const response = await fetchJson(`${baseUrl}/v1/orchestrate`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: stream,
+      duplex: "half",
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.ok, true);
+    assertNoForbiddenFields(response.body);
+  });
+});
+
 test("POST /v1/orchestrate empty body follows safe default orchestration behavior", async () => {
   await withRouteServer(async (baseUrl) => {
     const response = await fetchJson(`${baseUrl}/v1/orchestrate`, {
