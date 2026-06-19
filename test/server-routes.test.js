@@ -17,11 +17,13 @@ import {
   EXTERNAL_ACCEPTANCE_CANDIDATE_BUNDLE_SUMMARY_SCHEMA,
   EXTERNAL_ACCEPTANCE_CANDIDATE_DESCRIPTOR_SCHEMA,
   EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_MATRIX_SCHEMA,
+  EXTERNAL_ACCEPTANCE_RECEIPT_DRY_RUN_PACK_SUMMARY_SCHEMA,
   EXTERNAL_ACCEPTANCE_RECEIPT_BINDING_RESULT_SCHEMA,
   EXTERNAL_ACCEPTANCE_RECEIPT_SCHEMA,
   VOXWEAVE_RECEIPT_QUARANTINE_CAPSULE_SCHEMA,
   assertExternalAcceptanceCandidateDescriptorSafe,
   assertExternalAcceptanceReceiptBindingResultSafe,
+  assertExternalAcceptanceReceiptDryRunFixturePackSafe,
   assertExternalAcceptanceReceiptIntakeMatrixSafe,
   assertExternalAcceptanceReceiptQuarantineCapsuleSafe,
   assertLoopbackFailureMatrixSafe,
@@ -30,11 +32,13 @@ import {
   buildExternalAcceptanceCandidateDescriptor,
   buildExternalAcceptanceCandidateBundleFingerprint,
   buildExternalAcceptanceReceiptQuarantineCapsule,
+  buildExternalAcceptanceReceiptDryRunFixturePackFingerprint,
   buildExternalAcceptanceReceiptIntakeMatrixFingerprint,
   buildExternalAcceptanceReceiptFingerprint,
   buildLoopbackEvidenceFingerprint,
   canonicalizeLoopbackEvidence,
   runExternalAcceptanceCandidateBundleSummary,
+  runExternalAcceptanceReceiptDryRunFixturePack,
   runExternalAcceptanceReceiptIntakeMatrix,
   runLoopbackIntegrationFailureMatrix,
   runLoopbackIntegrationEvidence,
@@ -1606,6 +1610,36 @@ test("external receipt quarantine script re-export composes safe capsule only", 
   assert.equal(capsule.acceptance_authority_created, false);
   assert.equal(capsule.external_acceptance_effective, false);
   assertNoDangerousCandidateMaterial(capsule);
+});
+
+test("external receipt dry-run fixture pack CLI emits safe bounded summary", async () => {
+  const summary = await runExternalAcceptanceReceiptDryRunFixturePack({
+    headSha: "a".repeat(40),
+  });
+  assertExternalAcceptanceReceiptDryRunFixturePackSafe(summary);
+  assert.equal(summary.schema, EXTERNAL_ACCEPTANCE_RECEIPT_DRY_RUN_PACK_SUMMARY_SCHEMA);
+  assert.equal(summary.status, "pass");
+  assert.equal(summary.fixture_count, 6);
+  assert.equal(summary.pass_count, 6);
+  assert.equal(summary.failure_count, 0);
+  assert.equal(summary.evidence_fingerprint, buildExternalAcceptanceReceiptDryRunFixturePackFingerprint(summary));
+  assert.equal(summary.actual_receipt_generated, false);
+  assert.equal(summary.raw_receipt_stored, false);
+  assert.equal(summary.external_send_executed, false);
+  assert.equal(summary.external_acceptance_claimed, false);
+  assert.equal(summary.real_integration_proof_claimed, false);
+  assertNoDangerousCandidateMaterial(summary);
+
+  const cli = await runReceiptScriptCli(["--receipt-intake-fixture-pack"]);
+  assert.equal(cli.exitCode, 0);
+  assertExternalAcceptanceReceiptDryRunFixturePackSafe(cli.output);
+  assert.equal(cli.output.schema, EXTERNAL_ACCEPTANCE_RECEIPT_DRY_RUN_PACK_SUMMARY_SCHEMA);
+  assert.equal(cli.output.status, "pass");
+  assert.equal(cli.stdout.includes("fixture.safe.json"), false);
+  assert.equal(cli.stdout.includes("candidate_bundle_fingerprint"), false);
+  assert.equal(cli.stdout.includes("source_main_sha"), false);
+  assert.equal(cli.stdout.includes("recipient_role"), false);
+  assertNoDangerousCandidateMaterial(cli.output);
 });
 
 async function withRouteServer(callback) {

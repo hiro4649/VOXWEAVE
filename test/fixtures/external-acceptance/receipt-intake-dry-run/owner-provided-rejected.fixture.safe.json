@@ -1,0 +1,21 @@
+{
+  "schema": "voxweave_external_acceptance_receipt_dry_run_fixture_v1",
+  "fixture_id": "owner_provided_rejected",
+  "fixture_kind": "redacted_synthetic_receipt_specification",
+  "receipt_source_kind": "owner_provided",
+  "recipient_project": "LIVE2D",
+  "recipient_role_source": "candidate_template",
+  "state_profile": "rejected_candidate",
+  "binding_profile": "current_candidate",
+  "replay_profile": "new",
+  "expected_binding_status": "pass",
+  "expected_intake_disposition": "bound_rejected",
+  "expected_quarantine_disposition": "quarantined_for_owner_review",
+  "expected_replay_status": "new",
+  "actual_receipt": false,
+  "external_team_supplied": false,
+  "external_acceptance_effective": false,
+  "runtime_readiness_claimed": false,
+  "production_readiness_claimed": false,
+  "safe_summary_only": true
+}
