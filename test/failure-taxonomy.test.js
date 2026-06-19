@@ -23,9 +23,17 @@ import {
 } from "../src/failureTaxonomy.js";
 import {
   FAILURE_TAXONOMY_SCHEMA as INDEX_FAILURE_TAXONOMY_SCHEMA,
+  SAFE_FAILURE_EVENT_SCHEMA as INDEX_SAFE_FAILURE_EVENT_SCHEMA,
+  buildSafeFailureEvent as indexBuildSafeFailureEvent,
   getHttpErrorDefinition as indexGetHttpErrorDefinition,
   listLive2dForwardStatuses as indexListLive2dForwardStatuses,
 } from "../src/index.js";
+import {
+  SAFE_FAILURE_EVENT_SCHEMA,
+  assertSafeFailureEvent,
+  buildSafeFailureEvent,
+  buildSafeFailureMetricLabels,
+} from "../src/safeFailureEvent.js";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const SRC_DIR = join(ROOT, "src");
@@ -346,6 +354,174 @@ test("public index exports safe failure taxonomy helpers", () => {
   assert.equal(INDEX_FAILURE_TAXONOMY_SCHEMA, FAILURE_TAXONOMY_SCHEMA);
   assert.equal(indexGetHttpErrorDefinition("server_busy").retryability, "retryable");
   assert.deepEqual(indexListLive2dForwardStatuses(), EXPECTED_LIVE2D_STATUSES);
+});
+
+test("safe failure event builder projects HTTP registry metadata only", () => {
+  const event = buildSafeFailureEvent({
+    surface_kind: "http_error",
+    error_kind: "invalid_json",
+    message: "unsafe detail",
+    endpoint: "https://example.invalid/private",
+    request_id: "unsafe-request-id",
+  });
+
+  assert.deepEqual(Object.keys(event).sort(), [
+    "event_kind",
+    "failure_category",
+    "failure_kind",
+    "http_status",
+    "owner_scope",
+    "raw_projection_policy",
+    "retryability",
+    "safe_message_class",
+    "safe_summary_only",
+    "schema",
+    "surface_kind",
+  ]);
+  assert.equal(event.schema, SAFE_FAILURE_EVENT_SCHEMA);
+  assert.equal(event.event_kind, "failure");
+  assert.equal(event.surface_kind, "http_error");
+  assert.equal(event.failure_kind, "invalid_json");
+  assert.equal(event.failure_category, "input");
+  assert.equal(event.owner_scope, "voxweave_input");
+  assert.equal(event.retryability, "not_retryable");
+  assert.equal(event.http_status, 400);
+  assert.equal(event.safe_message_class, "client_input_rejected");
+  assert.equal(event.raw_projection_policy, "safe_enum_only");
+  assert.equal(event.safe_summary_only, true);
+  assert.equal(Object.isFrozen(event), true);
+  assert.equal(JSON.stringify(event).includes("unsafe detail"), false);
+  assert.equal(JSON.stringify(event).includes("example.invalid"), false);
+  assert.equal(JSON.stringify(event).includes("unsafe-request-id"), false);
+});
+
+test("safe failure event builder fail-closes unknown HTTP kind", () => {
+  const event = buildSafeFailureEvent({
+    surface_kind: "http_error",
+    error_kind: "unknown_kind",
+  });
+  assert.equal(event.failure_kind, "internal_error");
+  assert.equal(event.failure_category, "internal");
+  assert.equal(event.owner_scope, "voxweave_internal");
+  assert.equal(event.retryability, "unknown");
+  assert.equal(event.http_status, 500);
+  assert.equal(event.safe_message_class, "internal_failure");
+});
+
+test("safe failure event builder projects Live2D failure statuses only", () => {
+  const timeout = buildSafeFailureEvent({
+    surface_kind: "live2d_forward",
+    renderer_forward_status: "renderer_timeout",
+  });
+  assert.equal(timeout.schema, SAFE_FAILURE_EVENT_SCHEMA);
+  assert.equal(timeout.event_kind, "failure");
+  assert.equal(timeout.surface_kind, "live2d_forward");
+  assert.equal(timeout.failure_kind, "renderer_timeout");
+  assert.equal(timeout.failure_category, "live2d_forward");
+  assert.equal(timeout.owner_scope, "live2d_local_forwarder");
+  assert.equal(timeout.retryability, "unknown");
+  assert.equal(timeout.http_status, null);
+  assert.equal(timeout.safe_message_class, "forward_timed_out");
+  assert.equal(timeout.raw_projection_policy, "safe_enum_only");
+  assert.equal(timeout.safe_summary_only, true);
+
+  const unusable = buildSafeFailureEvent({ renderer_forward_status: "configured_unusable" });
+  assert.equal(unusable.failure_kind, "configured_unusable");
+  assert.equal(unusable.retryability, "owner_action_required");
+
+  const rejected = buildSafeFailureEvent({ renderer_forward_status: "renderer_rejected" });
+  assert.equal(rejected.failure_kind, "renderer_rejected");
+  assert.equal(rejected.retryability, "not_retryable");
+
+  const unreachable = buildSafeFailureEvent({ renderer_forward_status: "renderer_unreachable" });
+  assert.equal(unreachable.retryability, "unknown");
+});
+
+test("safe failure event builder does not create events for non-failure Live2D statuses", () => {
+  assert.equal(buildSafeFailureEvent({ renderer_forward_status: "accepted" }), null);
+  assert.equal(buildSafeFailureEvent({ renderer_forward_status: "dry_run" }), null);
+  assert.equal(buildSafeFailureEvent({ renderer_forward_status: "not_live2d_adapter" }), null);
+});
+
+test("safe failure metric labels are low-cardinality allowlisted fields only", () => {
+  const event = buildSafeFailureEvent({ error_kind: "server_busy" });
+  const labels = buildSafeFailureMetricLabels(event);
+  assert.deepEqual(Object.keys(labels).sort(), [
+    "event_kind",
+    "failure_category",
+    "failure_kind",
+    "http_status",
+    "owner_scope",
+    "retryability",
+    "surface_kind",
+  ]);
+  assert.deepEqual(labels, {
+    event_kind: "failure",
+    surface_kind: "http_error",
+    failure_kind: "server_busy",
+    failure_category: "capacity",
+    owner_scope: "voxweave_capacity",
+    retryability: "retryable",
+    http_status: "503",
+  });
+  assert.equal(Object.isFrozen(labels), true);
+
+  const live2dLabels = buildSafeFailureMetricLabels(
+    buildSafeFailureEvent({ renderer_forward_status: "renderer_unreachable" })
+  );
+  assert.equal(live2dLabels.http_status, "none");
+  assert.equal(live2dLabels.failure_kind, "renderer_unreachable");
+});
+
+test("safe failure event validator rejects unsafe shape and values", () => {
+  assert.throws(() => assertSafeFailureEvent(null), TypeError);
+  assert.throws(() => assertSafeFailureEvent({
+    schema: SAFE_FAILURE_EVENT_SCHEMA,
+    event_kind: "failure",
+    surface_kind: "http_error",
+    failure_kind: "invalid_json",
+    failure_category: "input",
+    owner_scope: "voxweave_input",
+    retryability: "not_retryable",
+    http_status: 400,
+    safe_message_class: "client_input_rejected",
+    raw_projection_policy: "safe_enum_only",
+    safe_summary_only: true,
+    request_id: "raw-id",
+  }), TypeError);
+  assert.throws(() => assertSafeFailureEvent({
+    schema: SAFE_FAILURE_EVENT_SCHEMA,
+    event_kind: "failure",
+    surface_kind: "http_error",
+    failure_kind: "invalid_json",
+    failure_category: "input",
+    owner_scope: "voxweave_input",
+    retryability: "not_retryable",
+    http_status: 400,
+    safe_message_class: "client_input_rejected",
+    raw_projection_policy: "safe_enum_only",
+    safe_summary_only: true,
+    arbitrary_custom_label: "unsafe",
+  }), TypeError);
+  assert.throws(() => assertSafeFailureEvent({
+    schema: SAFE_FAILURE_EVENT_SCHEMA,
+    event_kind: "failure",
+    surface_kind: "http_error",
+    failure_kind: "invalid_json",
+    failure_category: "input",
+    owner_scope: "voxweave_input",
+    retryability: "not_retryable",
+    http_status: 400,
+    safe_message_class: "client_input_rejected",
+    raw_projection_policy: "safe_enum_only",
+    safe_summary_only: true,
+    text: "unsafe",
+  }), TypeError);
+});
+
+test("safe failure event public index exports pure helpers", () => {
+  assert.equal(INDEX_SAFE_FAILURE_EVENT_SCHEMA, "voxweave_safe_failure_event_v1");
+  assert.equal(indexBuildSafeFailureEvent({ error_kind: "auth_required" }).owner_scope, "voxweave_auth");
 });
 
 function extractCurrentHttpErrorKinds() {
