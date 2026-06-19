@@ -26,6 +26,8 @@ export const EXTERNAL_ACCEPTANCE_RECEIPT_BINDING_RESULT_SCHEMA =
   "voxweave_external_acceptance_receipt_binding_result_v2";
 export const EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_POLICY_SCHEMA =
   "voxweave_external_acceptance_receipt_intake_policy_v1";
+export const EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_MATRIX_SCHEMA =
+  "voxweave_external_acceptance_receipt_intake_matrix_v1";
 export const EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_POLICY_VERSION = 1;
 export const MAX_RECEIPT_FILE_BYTES = 32768;
 export const MAX_RECEIPT_JSON_TEXT_LENGTH = 32768;
@@ -95,6 +97,33 @@ const ALLOWED_MATRIX_KEYS = Object.freeze([
   "external_network_execution",
   "real_renderer_execution",
   "raw_failure_material_excluded",
+  "evidence_fingerprint_algorithm",
+  "evidence_fingerprint",
+  "runtime_readiness_claimed",
+  "production_readiness_claimed",
+  "safe_summary_only",
+]);
+const ALLOWED_RECEIPT_INTAKE_MATRIX_KEYS = Object.freeze([
+  "schema",
+  "status",
+  "source_head_sha",
+  "evidence_mode",
+  "case_count",
+  "pass_count",
+  "failure_count",
+  "provenance_case_status",
+  "state_coherence_case_status",
+  "binding_case_status",
+  "encoding_case_status",
+  "duplicate_key_case_status",
+  "size_bound_case_status",
+  "cli_argument_case_status",
+  "output_minimality_case_status",
+  "authority_non_creation_status",
+  "actual_receipt_generated",
+  "external_send_executed",
+  "external_acceptance_claimed",
+  "real_integration_proof_claimed",
   "evidence_fingerprint_algorithm",
   "evidence_fingerprint",
   "runtime_readiness_claimed",
@@ -1087,6 +1116,225 @@ export function assertLoopbackFailureMatrixSafe(matrix) {
   return matrix;
 }
 
+export async function runExternalAcceptanceReceiptIntakeMatrix({
+  headSha = "unknown",
+  candidateBundle = null,
+} = {}) {
+  const bundle = candidateBundle ?? await readCandidateBundleFiles();
+  const descriptor = buildExternalAcceptanceCandidateDescriptor(bundle);
+  const acceptedReceipt = buildSyntheticReceiptForMatrix(bundle, descriptor, {
+    acceptance_candidate_status: "accepted_candidate",
+  });
+  const pendingReceipt = buildSyntheticReceiptForMatrix(bundle, descriptor, {
+    received_status: "pending",
+    parsed_status: "pending",
+    forbidden_material_absent_status: "pending",
+    expected_schema_observed_status: "pending",
+    raw_values_absent_status: "pending",
+    readiness_claim_absent_status: "pending",
+    acceptance_candidate_status: "pending",
+  });
+  const rejectedReceipt = buildSyntheticReceiptForMatrix(bundle, descriptor, {
+    received_status: "rejected",
+    acceptance_candidate_status: "rejected_candidate",
+  });
+  const acceptedBinding = validateExternalAcceptanceReceiptAgainstCandidate({
+    ...bundle,
+    receipt: acceptedReceipt,
+    receiptSourceKind: "owner_provided",
+  });
+
+  const cases = [
+    ["provenance", acceptedBinding.status === "pass"],
+    ["provenance", bindingReason(bundle, acceptedReceipt, "synthetic_test_only") ===
+      "synthetic_receipt_acceptance_claim_forbidden"],
+    ["provenance", bindingReason(bundle, acceptedReceipt, "unclassified") ===
+      "receipt_acceptance_claim_requires_owner_provenance"],
+    ["provenance", bindingReason(bundle, acceptedReceipt, "not_allowed") ===
+      "invalid_receipt_source_kind"],
+    ["state", validateExternalAcceptanceReceipt(pendingReceipt).status === "pass"],
+    ["state", validateExternalAcceptanceReceipt(rejectedReceipt).status === "pass"],
+    ["state", bindingReason(bundle, { ...acceptedReceipt, received_status: "rejected" }, "owner_provided") ===
+      "candidate_receipt_safety_invalid"],
+    ["state", bindingReason(bundle, { ...pendingReceipt, received_status: "rejected" }, "owner_provided") ===
+      "candidate_receipt_safety_invalid"],
+    ["binding", bindingReason(bundle, { ...acceptedReceipt, candidate_bundle_version: "1.0.0" }, "owner_provided") ===
+      "candidate_bundle_version_mismatch"],
+    ["binding", bindingReason(bundle, { ...acceptedReceipt, source_main_sha: "a".repeat(40) }, "owner_provided") ===
+      "candidate_source_head_mismatch"],
+    ["binding", bindingReason(bundle, { ...acceptedReceipt, candidate_bundle_fingerprint: "b".repeat(64) }, "owner_provided") ===
+      "candidate_bundle_fingerprint_mismatch"],
+    ["binding", bindingReason(bundle, { ...acceptedReceipt, recipient_role: "renderer_boundary_owner" }, "owner_provided") ===
+      "candidate_recipient_role_mismatch"],
+    ["encoding", throwsReason(() => decodeReceiptUtf8(Buffer.from([0xc3, 0x28])), "invalid_receipt_utf8")],
+    ["encoding", throwsReason(() => decodeReceiptUtf8(Buffer.from([0xef, 0xbb, 0xbf, 0x7b, 0x7d])), "invalid_receipt_bom")],
+    ["encoding", throwsReason(
+      () => assertReceiptJsonTextSafe(`{"schema":"bad${String.fromCharCode(0xfeff)}"}`),
+      "invalid_receipt_bom"
+    )],
+    ["duplicate", throwsReason(() => assertNoDuplicateTopLevelReceiptKeys("{\"schema\":\"a\",\"schema\":\"b\"}"), "invalid_receipt_duplicate_key")],
+    ["duplicate", throwsReason(() => assertNoDuplicateTopLevelReceiptKeys("{\"recipient_project\":\"IRIS\",\"recipient\\u005fproject\":\"LIVE2D\"}"), "invalid_receipt_duplicate_key")],
+    ["duplicate", throwsReason(() => assertNoDuplicateTopLevelReceiptKeys("{\"schema\":{\"nested\":true}}"), "invalid_receipt_nested_value")],
+    ["size", throwsReason(() => assertReceiptJsonTextSafe(" ".repeat(MAX_RECEIPT_JSON_TEXT_LENGTH + 1)), "invalid_receipt_file_size")],
+    ["cli", parseReceiptCliArguments(["--candidate-bundle", "--matrix"]).reasonCode === "invalid_receipt_cli_arguments"],
+    ["cli", parseReceiptCliArguments(["--validate-receipt-against-bundle", "receipt.safe.json", "--receipt-source-kind", "owner_provided", "--receipt-source-kind", "synthetic_test_only"]).reasonCode === "invalid_receipt_cli_arguments"],
+    ["cli", parseReceiptCliArguments(["--unknown-receipt-mode"]).reasonCode === "invalid_receipt_cli_arguments"],
+    ["output", !JSON.stringify(acceptedBinding).includes(acceptedReceipt.recipient_role)],
+    ["output", !JSON.stringify(acceptedBinding).includes(acceptedReceipt.source_main_sha)],
+    ["output", !JSON.stringify(acceptedBinding).includes(acceptedReceipt.candidate_bundle_fingerprint)],
+    ["authority", acceptedBinding.acceptance_authority_created === false],
+    ["authority", acceptedBinding.external_acceptance_effective === false],
+    ["authority", acceptedBinding.external_team_acceptance_status === "not_claimed_by_validator"],
+  ];
+
+  const categoryStatus = (category) =>
+    cases.filter(([caseCategory]) => caseCategory === category).every(([, pass]) => pass)
+      ? "pass"
+      : "fail";
+  const passCount = cases.filter(([, pass]) => pass).length;
+  const matrix = {
+    schema: EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_MATRIX_SCHEMA,
+    status: passCount === cases.length ? "pass" : "fail",
+    source_head_sha: safeHeadSha(headSha),
+    evidence_mode: "local_synthetic_receipt_intake_only",
+    case_count: cases.length,
+    pass_count: passCount,
+    failure_count: cases.length - passCount,
+    provenance_case_status: categoryStatus("provenance"),
+    state_coherence_case_status: categoryStatus("state"),
+    binding_case_status: categoryStatus("binding"),
+    encoding_case_status: categoryStatus("encoding"),
+    duplicate_key_case_status: categoryStatus("duplicate"),
+    size_bound_case_status: categoryStatus("size"),
+    cli_argument_case_status: categoryStatus("cli"),
+    output_minimality_case_status: categoryStatus("output"),
+    authority_non_creation_status: categoryStatus("authority"),
+    actual_receipt_generated: false,
+    external_send_executed: false,
+    external_acceptance_claimed: false,
+    real_integration_proof_claimed: false,
+    evidence_fingerprint_algorithm: "sha256",
+    evidence_fingerprint: "",
+    runtime_readiness_claimed: false,
+    production_readiness_claimed: false,
+    safe_summary_only: true,
+  };
+  matrix.evidence_fingerprint = buildExternalAcceptanceReceiptIntakeMatrixFingerprint(matrix);
+  assertExternalAcceptanceReceiptIntakeMatrixSafe(matrix);
+  return matrix;
+}
+
+export function assertExternalAcceptanceReceiptIntakeMatrixSafe(matrix) {
+  assertExactFields(
+    matrix,
+    ALLOWED_RECEIPT_INTAKE_MATRIX_KEYS,
+    "unsafe_receipt_intake_matrix_fields"
+  );
+  scanEvidenceSafe(matrix);
+  if (matrix.schema !== EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_MATRIX_SCHEMA) {
+    throw new Error("unsafe_receipt_intake_matrix_schema");
+  }
+  if (
+    !["pass", "fail"].includes(matrix.status) ||
+    !/^[a-f0-9]{40}$|^unknown$/u.test(matrix.source_head_sha) ||
+    matrix.evidence_mode !== "local_synthetic_receipt_intake_only" ||
+    matrix.evidence_fingerprint_algorithm !== "sha256" ||
+    !/^[a-f0-9]{64}$/u.test(matrix.evidence_fingerprint)
+  ) {
+    throw new Error("unsafe_receipt_intake_matrix_value");
+  }
+  for (const key of [
+    "provenance_case_status",
+    "state_coherence_case_status",
+    "binding_case_status",
+    "encoding_case_status",
+    "duplicate_key_case_status",
+    "size_bound_case_status",
+    "cli_argument_case_status",
+    "output_minimality_case_status",
+    "authority_non_creation_status",
+  ]) {
+    if (!["pass", "fail"].includes(matrix[key])) {
+      throw new Error("unsafe_receipt_intake_matrix_category");
+    }
+  }
+  if (
+    matrix.actual_receipt_generated !== false ||
+    matrix.external_send_executed !== false ||
+    matrix.external_acceptance_claimed !== false ||
+    matrix.real_integration_proof_claimed !== false ||
+    matrix.runtime_readiness_claimed !== false ||
+    matrix.production_readiness_claimed !== false ||
+    matrix.safe_summary_only !== true
+  ) {
+    throw new Error("unsafe_receipt_intake_matrix_claim");
+  }
+  if (
+    !Number.isInteger(matrix.case_count) ||
+    !Number.isInteger(matrix.pass_count) ||
+    !Number.isInteger(matrix.failure_count) ||
+    matrix.case_count < 1 ||
+    matrix.pass_count + matrix.failure_count !== matrix.case_count
+  ) {
+    throw new Error("unsafe_receipt_intake_matrix_counts");
+  }
+  return matrix;
+}
+
+export function buildExternalAcceptanceReceiptIntakeMatrixFingerprint(matrix) {
+  const canonical = {};
+  for (const key of [...ALLOWED_RECEIPT_INTAKE_MATRIX_KEYS].sort()) {
+    if (key === "evidence_fingerprint") continue;
+    if (!Object.hasOwn(matrix, key)) throw new Error("unsafe_receipt_intake_matrix_fields");
+    canonical[key] = matrix[key];
+  }
+  scanEvidenceSafe(canonical);
+  return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
+}
+
+function buildSyntheticReceiptForMatrix(candidate, descriptor, overrides = {}) {
+  const template = candidate.receipts.find(
+    (receipt) => receipt.recipient_project === (overrides.recipient_project ?? "IRIS")
+  );
+  return {
+    schema: EXTERNAL_ACCEPTANCE_RECEIPT_SCHEMA,
+    recipient_project: template?.recipient_project ?? "IRIS",
+    recipient_role: template?.recipient_role ?? "adapter_packet_owner",
+    candidate_bundle_version: descriptor.candidate_bundle_version,
+    source_main_sha: descriptor.runtime_source_head_sha,
+    candidate_bundle_fingerprint: descriptor.candidate_bundle_fingerprint,
+    received_status: "received",
+    parsed_status: "pass",
+    forbidden_material_absent_status: "pass",
+    expected_schema_observed_status: "pass",
+    raw_values_absent_status: "pass",
+    readiness_claim_absent_status: "pass",
+    acceptance_candidate_status: "accepted_candidate",
+    real_integration_proof_status: "no",
+    runtime_readiness_claimed: false,
+    production_readiness_claimed: false,
+    safe_summary_only: true,
+    ...overrides,
+  };
+}
+
+function bindingReason(bundle, receipt, receiptSourceKind) {
+  return validateExternalAcceptanceReceiptAgainstCandidate({
+    ...bundle,
+    receipt,
+    receiptSourceKind,
+  }).primary_reason_code;
+}
+
+function throwsReason(callback, reasonCode) {
+  try {
+    callback();
+    return false;
+  } catch (error) {
+    return safeReasonCode(error) === reasonCode;
+  }
+}
+
 async function runFailureMatrixCase({ behavior, expected, requestTimeoutMs }) {
   const servers = [];
   let redirectSinkRequestCount = 0;
@@ -1879,6 +2127,8 @@ async function main() {
     ? await runReceiptValidationCli(cli.receiptPath)
     : cli.mode === "candidate-bundle"
     ? await runExternalAcceptanceCandidateBundleSummary()
+    : cli.mode === "receipt-intake-matrix"
+    ? await runExternalAcceptanceReceiptIntakeMatrix({ headSha })
     : cli.mode === "matrix"
       ? await runLoopbackIntegrationFailureMatrix({ headSha })
       : await runLoopbackIntegrationEvidence({ headSha });
@@ -1895,6 +2145,7 @@ function parseReceiptCliArguments(argv) {
     optionIndexes.set(arg, [...(optionIndexes.get(arg) ?? []), index]);
     if (arg === "--matrix") modes.push({ mode: "matrix", index });
     else if (arg === "--candidate-bundle") modes.push({ mode: "candidate-bundle", index });
+    else if (arg === "--receipt-intake-matrix") modes.push({ mode: "receipt-intake-matrix", index });
     else if (arg === "--validate-receipt") modes.push({ mode: "validate-receipt", index });
     else if (arg === "--validate-receipt-against-bundle") {
       modes.push({ mode: "validate-receipt-against-bundle", index });
