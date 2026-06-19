@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
+
 export class RenderGroupStore {
   constructor({ now = () => Date.now(), maxGroups = 256 } = {}) {
     this.now = now;
-    this.maxGroups = maxGroups;
+    this.maxGroups = normalizeCapacity(maxGroups, "invalid render group capacity");
     this.groups = new Map();
   }
 
@@ -124,9 +126,34 @@ function publicGroup(group) {
   };
 }
 
-function safeId(value) {
-  return String(value ?? "")
-    .trim()
-    .replace(/[^A-Za-z0-9_.:-]/gu, "-")
-    .slice(0, 96);
+function safeId(value, maxLength = 96) {
+  const limit = normalizeSafeIdMaxLength(maxLength);
+  const raw = String(value ?? "").trim();
+  const normalized = raw.replace(/[^A-Za-z0-9_.:-]/gu, "-");
+  if (!hasDigestWorthyMutation(raw, normalized, limit)) return normalized.slice(0, limit);
+
+  const digest = createHash("sha256").update(raw).digest("hex").slice(0, 12);
+  const suffix = `-${digest}`;
+  const prefixLimit = Math.max(0, limit - suffix.length);
+  const prefix = normalized.slice(0, prefixLimit);
+  if (/^-*$/u.test(prefix)) return digest.slice(0, limit);
+  return `${prefix}${suffix}`.slice(0, limit);
+}
+
+function normalizeSafeIdMaxLength(value) {
+  if (!Number.isSafeInteger(value) || value < 16 || value > 256) {
+    throw new RangeError("invalid safe id length");
+  }
+  return value;
+}
+
+function normalizeCapacity(value, message) {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new RangeError(message);
+  }
+  return value;
+}
+
+function hasDigestWorthyMutation(raw, normalized, limit) {
+  return normalized.length > limit || /[^\x00-\x7F]/u.test(raw);
 }

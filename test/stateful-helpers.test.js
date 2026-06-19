@@ -136,6 +136,23 @@ test("ReactionCache size never exceeds maxEntries after repeated inserts", () =>
   assert.equal(cache.size(), 3);
 });
 
+test("ReactionCache zero capacity stores no entries", () => {
+  const cache = new ReactionCache({ maxEntries: 0 });
+
+  cache.set("first", { order: 1 });
+  cache.set("second", { order: 2 });
+
+  assert.equal(cache.size(), 0);
+  assert.equal(cache.get("first"), null);
+  assert.equal(cache.get("second"), null);
+});
+
+test("ReactionCache rejects unsafe capacity before insert", () => {
+  for (const maxEntries of [-1, Number.NaN, Number.POSITIVE_INFINITY, 1.5]) {
+    assert.throws(() => new ReactionCache({ maxEntries }), RangeError);
+  }
+});
+
 test("ReactionCache nested values remain isolated across get calls", () => {
   const cache = new ReactionCache();
   cache.set("nested", { level: { child: { value: "safe" } } });
@@ -309,6 +326,31 @@ test("RenderGroupStore safe group id sanitizes unsafe characters and bounds leng
   assertNoForbiddenFields(group);
 });
 
+test("RenderGroupStore avoids sanitized unicode id collisions", () => {
+  const store = new RenderGroupStore({ now: () => 1 });
+  const first = store.update({ adapterKind: "tts", utteranceId: "話者一" });
+  const second = store.update({ adapterKind: "tts", utteranceId: "話者二" });
+
+  assert.notEqual(first.group_id, second.group_id);
+  assert.equal(store.get({ utteranceId: "話者一" })?.group_id, first.group_id);
+  assert.equal(store.get({ utteranceId: "話者二" })?.group_id, second.group_id);
+  assertNoForbiddenFields(first);
+  assertNoForbiddenFields(second);
+});
+
+test("RenderGroupStore avoids long truncated id collisions", () => {
+  const store = new RenderGroupStore({ now: () => 1 });
+  const sharedPrefix = "safe-prefix-".repeat(12);
+  const first = store.update({ adapterKind: "tts", traceId: `${sharedPrefix}first` });
+  const second = store.update({ adapterKind: "tts", traceId: `${sharedPrefix}second` });
+
+  assert.notEqual(first.group_id, second.group_id);
+  assert.equal(first.group_id.length, 96);
+  assert.equal(second.group_id.length, 96);
+  assert.equal(store.get({ traceId: `${sharedPrefix}first` })?.group_id, first.group_id);
+  assert.equal(store.get({ traceId: `${sharedPrefix}second` })?.group_id, second.group_id);
+});
+
 test("RenderGroupStore anonymous fallback group id is safe", () => {
   const store = new RenderGroupStore({ now: () => 1 });
   const group = store.update({ adapterKind: "tts" });
@@ -340,6 +382,22 @@ test("RenderGroupStore update refreshes recency before eviction", () => {
   assert.equal(store.get({ utteranceId: "first" })?.subtitle_received, true);
   assert.equal(store.get({ utteranceId: "second" }), null);
   assert.equal(store.get({ utteranceId: "third" })?.group_id, "third");
+});
+
+test("RenderGroupStore zero capacity stores no groups", () => {
+  const store = new RenderGroupStore({ now: () => 1, maxGroups: 0 });
+
+  const group = store.update({ adapterKind: "tts", utteranceId: "zero-capacity" });
+
+  assert.equal(group.group_id, "zero-capacity");
+  assert.equal(store.get({ utteranceId: "zero-capacity" }), null);
+  assertNoForbiddenFields(group);
+});
+
+test("RenderGroupStore rejects unsafe capacity before insert", () => {
+  for (const maxGroups of [-1, Number.NaN, Number.POSITIVE_INFINITY, 1.5]) {
+    assert.throws(() => new RenderGroupStore({ maxGroups }), RangeError);
+  }
 });
 
 test("RenderGroupStore public output omits forbidden fields", () => {

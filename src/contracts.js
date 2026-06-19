@@ -1155,11 +1155,18 @@ export function hashPayload(value) {
     .slice(0, 32);
 }
 
-export function safeId(value) {
-  return String(value ?? "")
-    .trim()
-    .replace(/[^A-Za-z0-9_.:-]/gu, "-")
-    .slice(0, 96);
+export function safeId(value, maxLength = 96) {
+  const limit = normalizeSafeIdMaxLength(maxLength);
+  const raw = String(value ?? "").trim();
+  const normalized = raw.replace(/[^A-Za-z0-9_.:-]/gu, "-");
+  if (!hasDigestWorthyMutation(raw, normalized, limit)) return normalized.slice(0, limit);
+
+  const digest = createHash("sha256").update(raw).digest("hex").slice(0, 12);
+  const suffix = `-${digest}`;
+  const prefixLimit = Math.max(0, limit - suffix.length);
+  const prefix = normalized.slice(0, prefixLimit);
+  if (/^-*$/u.test(prefix)) return digest.slice(0, limit);
+  return `${prefix}${suffix}`.slice(0, limit);
 }
 
 export function safeText(value, maxLength = 240) {
@@ -1171,6 +1178,17 @@ export function safeText(value, maxLength = 240) {
 
 export function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
+}
+
+function normalizeSafeIdMaxLength(value) {
+  if (!Number.isSafeInteger(value) || value < 16 || value > 256) {
+    throw new RangeError("invalid safe id length");
+  }
+  return value;
+}
+
+function hasDigestWorthyMutation(raw, normalized, limit) {
+  return normalized.length > limit || /[^\x00-\x7F]/u.test(raw);
 }
 
 function scanUnsafeInput(value, path) {

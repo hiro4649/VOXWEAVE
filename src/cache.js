@@ -1,6 +1,6 @@
 export class ReactionCache {
   constructor({ maxEntries = 128 } = {}) {
-    this.maxEntries = maxEntries;
+    this.maxEntries = normalizeCapacity(maxEntries, "invalid cache capacity");
     this.map = new Map();
   }
 
@@ -28,4 +28,11 @@ export class ReactionCache {
   size() {
     return this.map.size;
   }
+}
+
+function normalizeCapacity(value, message) {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new RangeError(message);
+  }
+  return value;
 }

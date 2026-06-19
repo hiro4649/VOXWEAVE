@@ -2111,6 +2111,29 @@ test("safeId strips unsafe characters and bounds length", () => {
   assert.equal(value.startsWith("event-id---unsafe"), true);
 });
 
+test("safeId preserves short canonical ASCII ids", () => {
+  assert.equal(safeId(" trace-id_01.safe:ok "), "trace-id_01.safe:ok");
+});
+
+test("safeId appends digest suffix when sanitizing or truncating", () => {
+  const sanitized = safeId("話者一");
+  const longA = safeId(`${"safe-prefix-".repeat(12)}first`);
+  const longB = safeId(`${"safe-prefix-".repeat(12)}second`);
+
+  assert.match(sanitized, /^[A-Fa-f0-9]{12}$/u);
+  assert.equal(longA.length, 96);
+  assert.equal(longB.length, 96);
+  assert.notEqual(longA, longB);
+  assert.match(longA, /-[A-Fa-f0-9]{12}$/u);
+  assert.match(longB, /-[A-Fa-f0-9]{12}$/u);
+});
+
+test("safeId rejects unsafe max length", () => {
+  for (const maxLength of [0, 15, 257, Number.NaN, Number.POSITIVE_INFINITY, 1.5]) {
+    assert.throws(() => safeId("safe", maxLength), RangeError);
+  }
+});
+
 test("safeText normalizes whitespace and bounds length", () => {
   assert.equal(safeText("  hello \n\t world  ", 20), "hello world");
   assert.equal(safeText("abcdef", 3), "abc");
