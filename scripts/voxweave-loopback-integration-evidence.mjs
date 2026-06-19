@@ -228,6 +228,14 @@ const CANDIDATE_MANIFEST_FIELDS = Object.freeze([
   "receipt_duplicate_key_rejection_present",
   "receipt_fatal_utf8_present",
   "receipt_size_bound_present",
+  "external_receipt_module_present",
+  "receipt_quarantine_capsule_schema",
+  "receipt_replay_guard_present",
+  "receipt_dry_run_fixture_pack_command",
+  "receipt_dry_run_fixture_pack_required",
+  "owner_send_decision_brief_template_path",
+  "proposed_attachment_manifest_path",
+  "owner_send_authority_embedded",
   "pre_send_checklist_path",
   "candidate_status",
   "external_team_acceptance_status",
@@ -282,6 +290,13 @@ const PRE_SEND_CHECKLIST_FIELDS = Object.freeze([
   "receipt_acceptance_authority_must_remain_external",
   "receipt_template_required",
   "forbidden_material_scan_required",
+  "external_receipt_module_required",
+  "receipt_quarantine_capsule_required",
+  "receipt_replay_guard_required",
+  "receipt_dry_run_fixture_pack_pass_required",
+  "owner_external_send_decision_required",
+  "proposed_attachment_manifest_review_required",
+  "owner_send_authority_embedded",
   "recipient_project_scope",
   "external_team_contact_confirmation_status",
   "actual_send_status",
@@ -290,6 +305,45 @@ const PRE_SEND_CHECKLIST_FIELDS = Object.freeze([
   "real_integration_proof_status",
   "runtime_readiness_claimed",
   "production_readiness_claimed",
+  "safe_summary_only",
+]);
+const OWNER_SEND_DECISION_BRIEF_TEMPLATE_FIELDS = Object.freeze([
+  "schema",
+  "candidate_bundle_version",
+  "decision_status",
+  "owner_send_authorized",
+  "authority_created_by_template",
+  "decision_scope",
+  "candidate_source_binding_status",
+  "candidate_fingerprint_status",
+  "receipt_intake_matrix_status",
+  "receipt_fixture_pack_status",
+  "receipt_quarantine_status",
+  "receipt_replay_guard_status",
+  "proposed_attachment_manifest_status",
+  "recipient_contact_confirmation_status",
+  "single_use_send_receipt_required",
+  "actual_send_status",
+  "actual_receipt_status",
+  "external_team_acceptance_status",
+  "real_integration_proof_status",
+  "runtime_readiness_claimed",
+  "production_readiness_claimed",
+  "safe_summary_only",
+]);
+const PROPOSED_ATTACHMENT_MANIFEST_FIELDS = Object.freeze([
+  "schema",
+  "candidate_bundle_version",
+  "selection_status",
+  "proposed_attachment_paths",
+  "forbidden_attachment_classes",
+  "contact_material_included",
+  "endpoint_material_included",
+  "credential_material_included",
+  "raw_log_material_included",
+  "raw_receipt_material_included",
+  "owner_send_authorized",
+  "actual_send_status",
   "safe_summary_only",
 ]);
 const EXPECTED_FIXTURE_MANIFEST_PATH =
@@ -306,6 +360,10 @@ const EXPECTED_RECEIPT_TEMPLATE_PATHS = Object.freeze([
 ]);
 const EXPECTED_PRE_SEND_CHECKLIST_PATH =
   "test/fixtures/external-acceptance/owner-pre-send-checklist.safe.json";
+const EXPECTED_OWNER_SEND_DECISION_BRIEF_TEMPLATE_PATH =
+  "test/fixtures/external-acceptance/owner-external-send-decision-brief-template.safe.json";
+const EXPECTED_PROPOSED_ATTACHMENT_MANIFEST_PATH =
+  "test/fixtures/external-acceptance/proposed-external-send-attachment-manifest.safe.json";
 const RECEIPT_DRY_RUN_FIXTURE_BASE =
   "test/fixtures/external-acceptance/receipt-intake-dry-run/";
 const EXPECTED_RECEIPT_DRY_RUN_FIXTURE_FILES = Object.freeze([
@@ -627,11 +685,14 @@ export async function runExternalAcceptanceCandidateBundleSummary({
   receipts = null,
   readmeText = null,
   checklist = null,
+  decisionBrief = null,
+  attachmentManifest = null,
   fixtureManifest = null,
   fixtures = null,
 } = {}) {
-  const bundle = manifest && receipts && readmeText !== null && checklist && fixtureManifest && fixtures
-    ? { manifest, receipts, readmeText, checklist, fixtureManifest, fixtures }
+  const bundle = manifest && receipts && readmeText !== null && checklist && decisionBrief &&
+    attachmentManifest && fixtureManifest && fixtures
+    ? { manifest, receipts, readmeText, checklist, decisionBrief, attachmentManifest, fixtureManifest, fixtures }
     : await readCandidateBundleFiles();
   validateCandidateBundle(bundle);
   const summary = {
@@ -673,10 +734,21 @@ export function buildExternalAcceptanceCandidateBundleFingerprint({
   receipts,
   readmeText,
   checklist,
+  decisionBrief,
+  attachmentManifest,
   fixtureManifest,
   fixtures,
 }) {
-  return buildCandidateBundleFingerprint({ manifest, receipts, readmeText, checklist, fixtureManifest, fixtures });
+  return buildCandidateBundleFingerprint({
+    manifest,
+    receipts,
+    readmeText,
+    checklist,
+    decisionBrief,
+    attachmentManifest,
+    fixtureManifest,
+    fixtures,
+  });
 }
 
 export function buildExternalAcceptanceCandidateDescriptor({
@@ -684,10 +756,21 @@ export function buildExternalAcceptanceCandidateDescriptor({
   receipts,
   readmeText,
   checklist,
+  decisionBrief,
+  attachmentManifest,
   fixtureManifest,
   fixtures,
 }) {
-  validateCandidateBundle({ manifest, receipts, readmeText, checklist, fixtureManifest, fixtures });
+  validateCandidateBundle({
+    manifest,
+    receipts,
+    readmeText,
+    checklist,
+    decisionBrief,
+    attachmentManifest,
+    fixtureManifest,
+    fixtures,
+  });
   const descriptor = {
     schema: EXTERNAL_ACCEPTANCE_CANDIDATE_DESCRIPTOR_SCHEMA,
     status: "pass",
@@ -700,6 +783,8 @@ export function buildExternalAcceptanceCandidateDescriptor({
       receipts,
       readmeText,
       checklist,
+      decisionBrief,
+      attachmentManifest,
       fixtureManifest,
       fixtures,
     }),
@@ -723,6 +808,8 @@ export function validateExternalAcceptanceReceiptAgainstCandidate({
   receipts,
   readmeText,
   checklist,
+  decisionBrief,
+  attachmentManifest,
   fixtureManifest,
   fixtures,
   receiptSourceKind = "unclassified",
@@ -741,6 +828,8 @@ export function validateExternalAcceptanceReceiptAgainstCandidate({
       receipts,
       readmeText,
       checklist,
+      decisionBrief,
+      attachmentManifest,
       fixtureManifest,
       fixtures,
     });
@@ -2092,12 +2181,22 @@ function fingerprintEvidence(evidence) {
 async function readCandidateBundleFiles() {
   const base = new URL("../test/fixtures/external-acceptance/", import.meta.url);
   const interopBase = new URL("../test/fixtures/interop/", import.meta.url);
-  const [manifestText, irisText, live2dText, readmeText, checklistText] = await Promise.all([
+  const [
+    manifestText,
+    irisText,
+    live2dText,
+    readmeText,
+    checklistText,
+    decisionBriefText,
+    attachmentManifestText,
+  ] = await Promise.all([
     readFile(new URL("voxweave-external-acceptance-candidate.manifest.safe.json", base), "utf8"),
     readFile(new URL("iris-team-receipt-template.safe.json", base), "utf8"),
     readFile(new URL("live2d-team-receipt-template.safe.json", base), "utf8"),
     readFile(new URL("README.safe.md", base), "utf8"),
     readFile(new URL("owner-pre-send-checklist.safe.json", base), "utf8"),
+    readFile(new URL("owner-external-send-decision-brief-template.safe.json", base), "utf8"),
+    readFile(new URL("proposed-external-send-attachment-manifest.safe.json", base), "utf8"),
   ]);
   const fixtureTexts = await Promise.all([
     readFile(new URL("voxweave-interop-manifest.safe.json", interopBase), "utf8"),
@@ -2110,6 +2209,8 @@ async function readCandidateBundleFiles() {
     receipts: [JSON.parse(irisText), JSON.parse(live2dText)],
     readmeText,
     checklist: JSON.parse(checklistText),
+    decisionBrief: JSON.parse(decisionBriefText),
+    attachmentManifest: JSON.parse(attachmentManifestText),
     fixtureManifest: JSON.parse(fixtureTexts[0]),
     fixtures: EXPECTED_FIXTURE_FILES.map((path, index) => ({
       path,
@@ -2118,7 +2219,16 @@ async function readCandidateBundleFiles() {
   };
 }
 
-function validateCandidateBundle({ manifest, receipts, readmeText, checklist, fixtureManifest, fixtures }) {
+function validateCandidateBundle({
+  manifest,
+  receipts,
+  readmeText,
+  checklist,
+  decisionBrief,
+  attachmentManifest,
+  fixtureManifest,
+  fixtures,
+}) {
   assertExactFields(manifest, CANDIDATE_MANIFEST_FIELDS, "invalid_candidate_manifest_fields");
   if (manifest?.schema !== "voxweave_external_acceptance_candidate_manifest_v1") {
     throw new Error("invalid_candidate_manifest_schema");
@@ -2138,7 +2248,10 @@ function validateCandidateBundle({ manifest, receipts, readmeText, checklist, fi
     manifest.receipt_intake_policy_version !== EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_POLICY_VERSION ||
     manifest.receipt_binding_result_schema !== EXTERNAL_ACCEPTANCE_RECEIPT_BINDING_RESULT_SCHEMA ||
     manifest.receipt_intake_matrix_command !==
-      "node scripts/voxweave-loopback-integration-evidence.mjs --receipt-intake-matrix"
+      "node scripts/voxweave-loopback-integration-evidence.mjs --receipt-intake-matrix" ||
+    manifest.receipt_quarantine_capsule_schema !== "voxweave_external_acceptance_receipt_quarantine_capsule_v1" ||
+    manifest.receipt_dry_run_fixture_pack_command !==
+      "node scripts/voxweave-loopback-integration-evidence.mjs --receipt-intake-fixture-pack"
   ) {
     throw new Error("invalid_candidate_binding_kind");
   }
@@ -2149,6 +2262,9 @@ function validateCandidateBundle({ manifest, receipts, readmeText, checklist, fi
     "receipt_duplicate_key_rejection_present",
     "receipt_fatal_utf8_present",
     "receipt_size_bound_present",
+    "external_receipt_module_present",
+    "receipt_replay_guard_present",
+    "receipt_dry_run_fixture_pack_required",
   ]) {
     if (manifest[key] !== true) throw new Error("invalid_candidate_receipt_intake_policy");
   }
@@ -2166,6 +2282,14 @@ function validateCandidateBundle({ manifest, receipts, readmeText, checklist, fi
   if (manifest.pre_send_checklist_path !== EXPECTED_PRE_SEND_CHECKLIST_PATH) {
     throw new Error("invalid_pre_send_checklist_path");
   }
+  validateSafeRelativePath(manifest.owner_send_decision_brief_template_path);
+  if (manifest.owner_send_decision_brief_template_path !== EXPECTED_OWNER_SEND_DECISION_BRIEF_TEMPLATE_PATH) {
+    throw new Error("invalid_decision_brief_template_path");
+  }
+  validateSafeRelativePath(manifest.proposed_attachment_manifest_path);
+  if (manifest.proposed_attachment_manifest_path !== EXPECTED_PROPOSED_ATTACHMENT_MANIFEST_PATH) {
+    throw new Error("invalid_proposed_attachment_manifest_path");
+  }
   if (manifest.candidate_status !== "candidate_prepared_not_sent") {
     throw new Error("invalid_candidate_status");
   }
@@ -2178,6 +2302,7 @@ function validateCandidateBundle({ manifest, receipts, readmeText, checklist, fi
     manifest.safe_failure_event_envelope_available !== true ||
     manifest.public_metrics_endpoint_present !== false ||
     manifest.runtime_event_sink_present !== false ||
+    manifest.owner_send_authority_embedded !== false ||
     manifest.runtime_readiness_claimed !== false ||
     manifest.production_readiness_claimed !== false ||
     manifest.safe_summary_only !== true
@@ -2198,8 +2323,19 @@ function validateCandidateBundle({ manifest, receipts, readmeText, checklist, fi
     throw new Error("invalid_candidate_readme");
   }
   validatePreSendChecklist(checklist, manifest.candidate_bundle_version);
+  validateOwnerSendDecisionBriefTemplate(decisionBrief, manifest.candidate_bundle_version);
+  validateProposedAttachmentManifest(attachmentManifest, manifest.candidate_bundle_version);
   validateFixtureBinding(fixtureManifest, fixtures);
-  scanCandidateBundleSafe({ manifest, receipts, readmeText, checklist, fixtureManifest, fixtures });
+  scanCandidateBundleSafe({
+    manifest,
+    receipts,
+    readmeText,
+    checklist,
+    decisionBrief,
+    attachmentManifest,
+    fixtureManifest,
+    fixtures,
+  });
 }
 
 function validatePreSendChecklist(checklist, candidateBundleVersion) {
@@ -2239,14 +2375,119 @@ function validatePreSendChecklist(checklist, candidateBundleVersion) {
     "receipt_acceptance_authority_must_remain_external",
     "receipt_template_required",
     "forbidden_material_scan_required",
+    "external_receipt_module_required",
+    "receipt_quarantine_capsule_required",
+    "receipt_replay_guard_required",
+    "receipt_dry_run_fixture_pack_pass_required",
+    "owner_external_send_decision_required",
+    "proposed_attachment_manifest_review_required",
   ]) {
     if (checklist[key] !== true) throw new Error("invalid_pre_send_checklist_requirement");
+  }
+  if (checklist.owner_send_authority_embedded !== false) {
+    throw new Error("unsafe_pre_send_checklist_status");
   }
   if (
     !Array.isArray(checklist.recipient_project_scope) ||
     JSON.stringify([...checklist.recipient_project_scope].sort()) !== JSON.stringify(["IRIS", "LIVE2D"])
   ) {
     throw new Error("invalid_pre_send_checklist_scope");
+  }
+}
+
+function validateOwnerSendDecisionBriefTemplate(template, candidateBundleVersion) {
+  assertExactFields(
+    template,
+    OWNER_SEND_DECISION_BRIEF_TEMPLATE_FIELDS,
+    "invalid_decision_brief_template_fields"
+  );
+  if (
+    template.schema !== "voxweave_owner_external_send_decision_brief_template_v1" ||
+    template.candidate_bundle_version !== candidateBundleVersion ||
+    template.decision_status !== "pending_owner_decision" ||
+    template.owner_send_authorized !== false ||
+    template.authority_created_by_template !== false ||
+    template.decision_scope !== "candidate_bundle_1_8_0_external_send_decision_only" ||
+    template.recipient_contact_confirmation_status !== "not_collected" ||
+    template.single_use_send_receipt_required !== true ||
+    template.actual_send_status !== "not_started" ||
+    template.actual_receipt_status !== "none" ||
+    template.external_team_acceptance_status !== "not_started" ||
+    template.real_integration_proof_status !== "no" ||
+    template.runtime_readiness_claimed !== false ||
+    template.production_readiness_claimed !== false ||
+    template.safe_summary_only !== true
+  ) {
+    throw new Error("unsafe_decision_brief_template_status");
+  }
+  for (const key of [
+    "candidate_source_binding_status",
+    "candidate_fingerprint_status",
+    "receipt_intake_matrix_status",
+    "receipt_fixture_pack_status",
+    "receipt_quarantine_status",
+    "receipt_replay_guard_status",
+    "proposed_attachment_manifest_status",
+  ]) {
+    if (template[key] !== "pending_owner_review") {
+      throw new Error("invalid_decision_brief_template_review_status");
+    }
+  }
+}
+
+function validateProposedAttachmentManifest(attachmentManifest, candidateBundleVersion) {
+  assertExactFields(
+    attachmentManifest,
+    PROPOSED_ATTACHMENT_MANIFEST_FIELDS,
+    "invalid_proposed_attachment_manifest_fields"
+  );
+  if (
+    attachmentManifest.schema !== "voxweave_proposed_external_send_attachment_manifest_v1" ||
+    attachmentManifest.candidate_bundle_version !== candidateBundleVersion ||
+    attachmentManifest.selection_status !== "pending_owner_review" ||
+    attachmentManifest.contact_material_included !== false ||
+    attachmentManifest.endpoint_material_included !== false ||
+    attachmentManifest.credential_material_included !== false ||
+    attachmentManifest.raw_log_material_included !== false ||
+    attachmentManifest.raw_receipt_material_included !== false ||
+    attachmentManifest.owner_send_authorized !== false ||
+    attachmentManifest.actual_send_status !== "not_started" ||
+    attachmentManifest.safe_summary_only !== true
+  ) {
+    throw new Error("unsafe_proposed_attachment_manifest_status");
+  }
+  assertExactPathList(
+    attachmentManifest.proposed_attachment_paths,
+    [
+      "test/fixtures/external-acceptance/voxweave-external-acceptance-candidate.manifest.safe.json",
+      "test/fixtures/external-acceptance/README.safe.md",
+      EXPECTED_FIXTURE_MANIFEST_PATH,
+      "test/fixtures/interop/iris-tts-packet.safe.json",
+      "test/fixtures/interop/iris-subtitle-packet.safe.json",
+      "test/fixtures/interop/iris-live2d-packet.safe.json",
+      ...EXPECTED_RECEIPT_TEMPLATE_PATHS,
+      EXPECTED_PRE_SEND_CHECKLIST_PATH,
+      EXPECTED_OWNER_SEND_DECISION_BRIEF_TEMPLATE_PATH,
+      EXPECTED_PROPOSED_ATTACHMENT_MANIFEST_PATH,
+    ],
+    "invalid_proposed_attachment_paths"
+  );
+  if (
+    !Array.isArray(attachmentManifest.forbidden_attachment_classes) ||
+    ![
+      "contact_material",
+      "endpoint_material",
+      "credential_material",
+      "raw_log_material",
+      "raw_receipt_material",
+      "workflow_artifact",
+      "git_metadata",
+      "scripts",
+      "tests",
+      "process_docs",
+    ].every((entry) => attachmentManifest.forbidden_attachment_classes.includes(entry))
+  ) {
+    throw new Error("invalid_forbidden_attachment_classes");
   }
 }
 
@@ -2372,7 +2613,16 @@ function scanExternalAcceptanceReceiptSafe(receipt) {
   }
 }
 
-function buildCandidateBundleFingerprint({ manifest, receipts, readmeText, checklist, fixtureManifest, fixtures }) {
+function buildCandidateBundleFingerprint({
+  manifest,
+  receipts,
+  readmeText,
+  checklist,
+  decisionBrief,
+  attachmentManifest,
+  fixtureManifest,
+  fixtures,
+}) {
   const canonical = {
     manifest: sortObject(manifest),
     receipts: receipts.map(sortObject).sort((a, b) =>
@@ -2380,6 +2630,12 @@ function buildCandidateBundleFingerprint({ manifest, receipts, readmeText, check
     ),
     readmeText: String(readmeText).replace(/\s+/gu, " ").trim(),
     checklist: sortObject(checklist),
+    decisionBrief: sortObject(decisionBrief),
+    attachmentManifest: sortObject({
+      ...attachmentManifest,
+      proposed_attachment_paths: [...attachmentManifest.proposed_attachment_paths].sort(),
+      forbidden_attachment_classes: [...attachmentManifest.forbidden_attachment_classes].sort(),
+    }),
     fixtureManifest: sortObject(fixtureManifest),
     fixtures: fixtures
       .map((fixture) => ({

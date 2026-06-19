@@ -1,6 +1,6 @@
 {
   "schema": "voxweave_external_acceptance_pre_send_checklist_v1",
-  "candidate_bundle_version": "1.7.0",
+  "candidate_bundle_version": "1.8.0",
   "checklist_status": "pending_owner_action",
   "owner_send_authorized": false,
   "candidate_source_binding_required": true,
@@ -17,6 +17,13 @@
   "receipt_acceptance_authority_must_remain_external": true,
   "receipt_template_required": true,
   "forbidden_material_scan_required": true,
+  "external_receipt_module_required": true,
+  "receipt_quarantine_capsule_required": true,
+  "receipt_replay_guard_required": true,
+  "receipt_dry_run_fixture_pack_pass_required": true,
+  "owner_external_send_decision_required": true,
+  "proposed_attachment_manifest_review_required": true,
+  "owner_send_authority_embedded": false,
   "recipient_project_scope": [
     "IRIS",
     "LIVE2D"

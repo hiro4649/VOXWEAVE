@@ -1,0 +1,38 @@
+{
+  "schema": "voxweave_proposed_external_send_attachment_manifest_v1",
+  "candidate_bundle_version": "1.8.0",
+  "selection_status": "pending_owner_review",
+  "proposed_attachment_paths": [
+    "test/fixtures/external-acceptance/voxweave-external-acceptance-candidate.manifest.safe.json",
+    "test/fixtures/external-acceptance/README.safe.md",
+    "test/fixtures/interop/voxweave-interop-manifest.safe.json",
+    "test/fixtures/interop/iris-tts-packet.safe.json",
+    "test/fixtures/interop/iris-subtitle-packet.safe.json",
+    "test/fixtures/interop/iris-live2d-packet.safe.json",
+    "test/fixtures/external-acceptance/iris-team-receipt-template.safe.json",
+    "test/fixtures/external-acceptance/live2d-team-receipt-template.safe.json",
+    "test/fixtures/external-acceptance/owner-pre-send-checklist.safe.json",
+    "test/fixtures/external-acceptance/owner-external-send-decision-brief-template.safe.json",
+    "test/fixtures/external-acceptance/proposed-external-send-attachment-manifest.safe.json"
+  ],
+  "forbidden_attachment_classes": [
+    "contact_material",
+    "endpoint_material",
+    "credential_material",
+    "raw_log_material",
+    "raw_receipt_material",
+    "workflow_artifact",
+    "git_metadata",
+    "scripts",
+    "tests",
+    "process_docs"
+  ],
+  "contact_material_included": false,
+  "endpoint_material_included": false,
+  "credential_material_included": false,
+  "raw_log_material_included": false,
+  "raw_receipt_material_included": false,
+  "owner_send_authorized": false,
+  "actual_send_status": "not_started",
+  "safe_summary_only": true
+}
