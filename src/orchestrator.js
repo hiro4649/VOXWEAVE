@@ -1,7 +1,5 @@
 ﻿import {
   AI_CHARACTER_CONTRACT_FAMILY_COUNT,
-  HEALTH_SCHEMA,
-  assertSafeResponse,
   buildIntegrationBoundarySnapshot,
   extractAiCharacterContracts,
   extractDurationMs,
@@ -34,6 +32,7 @@ import {
   isSupportedLocale as isSupportedReactionLocale,
 } from "./reactionPlanBuilder.js";
 import { materializeReactionPlanResponse } from "./orchestrationResponse.js";
+import { buildVoxWeaveHealth } from "./serviceHealth.js";
 import { throwIfOperationAborted } from "./operationContext.js";
 
 export { assertAiCharacterResponseSafeSummary } from "./aiCharacterMetadata.js";
@@ -47,41 +46,7 @@ export function createVoxWeaveService({
 } = {}) {
   return {
     health() {
-      const integrationBoundary = buildIntegrationBoundarySnapshot({
-        live2dForwarder,
-        contractRegistryFamilyCount: AI_CHARACTER_CONTRACT_FAMILY_COUNT,
-      });
-      return assertSafeResponse({
-        schema: HEALTH_SCHEMA,
-        service: "voxweave",
-        status: "ok",
-        mode: "external_voice_orchestrator",
-        node: ">=20",
-        capabilities: {
-          mock_tts: true,
-          pronunciation_dictionary: true,
-          multilingual_reading: true,
-          emotional_prosody: true,
-          reaction_cache: true,
-          subtitle_timing: true,
-          mouth_cues: true,
-          live2d_safe_sync_cue: true,
-          quality_score: true,
-        },
-        boundaries: {
-          not_tts_engine: true,
-          not_live2d_renderer: true,
-          not_voice_actor_contract_management: true,
-          not_iris_core_phase: true,
-          iris_keeps_adapter_packet_creation: true,
-          live2d_keeps_renderer_validation: true,
-        },
-        supported_adapter_kinds: ["tts", "subtitle", "live2d"],
-        cache_entries: cache.size(),
-        runtime_readiness_claimed: false,
-        production_readiness_claimed: false,
-        integration_boundary: integrationBoundary,
-      });
+      return buildVoxWeaveHealth({ cache, live2dForwarder });
     },
 
     async orchestrate(payload, { routeKind = "", signal } = {}) {
