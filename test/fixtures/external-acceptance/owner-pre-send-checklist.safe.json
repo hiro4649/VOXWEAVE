@@ -1,6 +1,6 @@
 {
   "schema": "voxweave_external_acceptance_pre_send_checklist_v1",
-  "candidate_bundle_version": "1.4.0",
+  "candidate_bundle_version": "1.5.0",
   "checklist_status": "pending_owner_action",
   "owner_send_authorized": false,
   "candidate_source_binding_required": true,
