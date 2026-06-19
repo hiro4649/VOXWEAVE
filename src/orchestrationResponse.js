@@ -75,14 +75,14 @@ export async function materializeReactionPlanResponse({
   });
   assertSafeResponse(live2dCueDelivery);
   throwIfOperationAborted(signal);
-  const live2dForward = adapterKind === "live2d"
+  const live2dForward = withLive2dForwardTaxonomy(adapterKind === "live2d"
     ? await live2dForwarder.forward(live2dCueDelivery, { signal })
     : {
         renderer_forward_configured: live2dForwarder.configured === true,
         renderer_forward_attempted: false,
         renderer_forward_ok: false,
         renderer_forward_status: "not_live2d_adapter",
-      };
+      });
   throwIfOperationAborted(signal);
   const renderGroupInput = {
     adapterKind,
@@ -163,6 +163,40 @@ export async function materializeReactionPlanResponse({
   }
   throwIfOperationAborted(signal);
   return safeResponse;
+}
+
+function withLive2dForwardTaxonomy(summary) {
+  const safeSummary = { ...(summary ?? {}) };
+  const taxonomy = buildLive2dForwardTaxonomy(safeSummary.renderer_forward_status);
+  if (taxonomy) safeSummary.renderer_forward_taxonomy = taxonomy;
+  return Object.freeze(safeSummary);
+}
+
+function buildLive2dForwardTaxonomy(status) {
+  const entry = {
+    dry_run: ["not_attempted", "not_applicable"],
+    configured_unusable: ["failure", "owner_action_required"],
+    accepted: ["success", "not_applicable"],
+    renderer_rejected: ["failure", "not_retryable"],
+    renderer_timeout: ["failure", "unknown"],
+    renderer_unreachable: ["failure", "unknown"],
+    not_live2d_adapter: ["not_applicable", "not_applicable"],
+  }[String(status ?? "")];
+  if (!entry) return null;
+  const [outcome, retryability] = entry;
+  return Object.freeze({
+    schema: "voxweave_safe_failure_taxonomy_v1",
+    renderer_forward_status: status,
+    outcome,
+    failure_category: "live2d_forward",
+    owner_scope: "live2d_local_forwarder",
+    retryability,
+    raw_projection_policy: "safe_enum_only",
+    renderer_readiness_claimed: false,
+    runtime_readiness_claimed: false,
+    production_readiness_claimed: false,
+    safe_summary_only: true,
+  });
 }
 
 function buildMockTts({ requestId, durationMs, mouthCues, language, localeStatus }) {

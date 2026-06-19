@@ -16,8 +16,10 @@ import {
   RETRYABILITY_VALUES,
   getHttpErrorDefinition,
   getLive2dForwardStatusDefinition,
+  buildLive2dForwardTaxonomy,
   listHttpErrorKinds,
   listLive2dForwardStatuses,
+  withLive2dForwardTaxonomy,
 } from "../src/failureTaxonomy.js";
 import {
   FAILURE_TAXONOMY_SCHEMA as INDEX_FAILURE_TAXONOMY_SCHEMA,
@@ -202,6 +204,45 @@ test("HTTP and Live2D taxonomy surfaces stay separated", () => {
   assert.equal(HTTP_ERROR_KIND_REGISTRY.server_busy.retryability, "retryable");
 });
 
+test("Live2D forward taxonomy builder returns nested safe summary only", () => {
+  const timeout = buildLive2dForwardTaxonomy("renderer_timeout");
+  assert.deepEqual(Object.keys(timeout).sort(), [
+    "failure_category",
+    "outcome",
+    "owner_scope",
+    "production_readiness_claimed",
+    "raw_projection_policy",
+    "renderer_forward_status",
+    "renderer_readiness_claimed",
+    "retryability",
+    "runtime_readiness_claimed",
+    "safe_summary_only",
+    "schema",
+  ]);
+  assert.equal(timeout.schema, FAILURE_TAXONOMY_SCHEMA);
+  assert.equal(timeout.renderer_forward_status, "renderer_timeout");
+  assert.equal(timeout.outcome, "failure");
+  assert.equal(timeout.failure_category, "live2d_forward");
+  assert.equal(timeout.owner_scope, "live2d_local_forwarder");
+  assert.equal(timeout.retryability, "unknown");
+  assert.equal(timeout.raw_projection_policy, "safe_enum_only");
+  assert.equal(timeout.renderer_readiness_claimed, false);
+  assert.equal(timeout.runtime_readiness_claimed, false);
+  assert.equal(timeout.production_readiness_claimed, false);
+  assert.equal(timeout.safe_summary_only, true);
+  assert.equal("http_status" in timeout, false);
+  assert.equal(Object.isFrozen(timeout), true);
+
+  const accepted = withLive2dForwardTaxonomy({
+    renderer_forward_status: "accepted",
+    renderer_forward_ok: true,
+  });
+  assert.equal(accepted.renderer_forward_taxonomy.outcome, "success");
+  assert.equal(accepted.renderer_forward_taxonomy.retryability, "not_applicable");
+  assert.equal(Object.isFrozen(accepted), true);
+  assert.equal(buildLive2dForwardTaxonomy("missing"), null);
+});
+
 test("registry serialization excludes raw projection and high-cardinality material", () => {
   const unsafeKeys = new Set([
     "message",
@@ -325,8 +366,22 @@ function extractCurrentLive2dForwardStatuses() {
   const statuses = new Set();
   for (const file of ["src/live2dForwarder.js", "src/orchestrationResponse.js"]) {
     const source = readFileSync(join(ROOT, file), "utf8");
-    for (const match of source.matchAll(/renderer_forward_status:\s*(?:"([a-z0-9_]+)"|[\s\S]*?\?\s*"([a-z0-9_]+)"\s*:\s*"([a-z0-9_]+)")/gu)) {
-      for (const value of match.slice(1).filter(Boolean)) statuses.add(value);
+    for (const match of source.matchAll(/renderer_forward_status:\s*"([a-z0-9_]+)"/gu)) {
+      statuses.add(match[1]);
+    }
+    for (const match of source.matchAll(
+      /renderer_forward_status:\s*[^\n?]+?\?\s*"([a-z0-9_]+)"\s*:\s*"([a-z0-9_]+)"/gu
+    )) {
+      for (const value of match.slice(1).filter(Boolean)) {
+        statuses.add(value);
+      }
+    }
+    for (const match of source.matchAll(
+      /renderer_forward_status:\s*[\s\S]{0,160}?\?\s*"([a-z0-9_]+)"\s*:\s*"([a-z0-9_]+)"/gu
+    )) {
+      for (const value of match.slice(1).filter(Boolean)) {
+        if (value.startsWith("renderer_")) statuses.add(value);
+      }
     }
   }
   return [...statuses].sort();
