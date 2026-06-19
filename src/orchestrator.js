@@ -28,7 +28,6 @@ import {
 import {
   buildReactionPlan,
   isCacheableReaction as isCacheableReactionPlan,
-  isPersonalReactionCacheRisk,
   isSupportedLocale as isSupportedReactionLocale,
 } from "./reactionPlanBuilder.js";
 import { materializeReactionPlanResponse } from "./orchestrationResponse.js";
@@ -91,10 +90,7 @@ export function createVoxWeaveService({
       });
       const cacheable =
         isCacheableReactionPlan(correctedText) &&
-        isCacheableReactionPlan(text) &&
-        !isPersonalReactionCacheRisk(
-          `${text} ${payload.final_text ?? ""} ${payload.finalText ?? ""} ${payload.subtitle_text ?? ""} ${payload.trace_id ?? ""} ${payload.event_id ?? ""} ${payload.utterance_id ?? ""}`
-        );
+        isCacheableReactionPlan(text);
       throwIfOperationAborted(signal);
       const cached = cacheable ? cache.get(cacheKey) : null;
       if (cached) {

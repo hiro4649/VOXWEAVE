@@ -15,6 +15,7 @@ import {
 import {
   buildReactionPlan,
   isCacheableReaction as isCacheableReactionFromModule,
+  isPersonalReactionCacheRisk as isPersonalReactionCacheRiskFromModule,
   isSupportedLocale as isSupportedLocaleFromModule,
 } from "../src/reactionPlanBuilder.js";
 import {
@@ -218,6 +219,63 @@ test("reaction plan builder module returns cache-safe semantic plan", () => {
   assert.equal(plan.quality.schema, "voxweave_quality_score_v1");
   assert.equal(isSupportedLocaleFromModule("en-US"), true);
   assert.equal(isCacheableReactionFromModule("yes"), true);
+});
+
+test("reaction plan builder keeps Japanese neutral cache policy exact", () => {
+  const cacheable = [
+    "うん",
+    "うん。",
+    "えっ",
+    "えっ！",
+    "ふふっ",
+    "ふふっ。",
+    "ありがとう",
+    "ありがとう！",
+    "ちょっと待って",
+    "ちょっと待って。",
+    "yes",
+    "yes!",
+    "thanks",
+    "thanks.",
+    "one moment",
+    "one moment!",
+  ];
+  const notCacheable = [
+    "会いたい",
+    "好き",
+    "おかえり",
+    "大丈夫",
+    "元気",
+    "okay",
+    "hello",
+    "短い任意文",
+    "田中さん",
+    "山田様",
+    "太郎くん",
+    "お兄ちゃん",
+    "remember",
+    "memory",
+    "sorry",
+    "apologize",
+    "123",
+    "user@example",
+    "#personal",
+    "邵ｺ繝ｻ・・",
+    "邵ｺ繧・ｽ顔ｸｺ蠕娯・邵ｺ繝ｻ",
+  ];
+
+  for (const text of cacheable) {
+    assert.equal(isCacheableReactionFromModule(text), true);
+  }
+  for (const text of notCacheable) {
+    assert.equal(isCacheableReactionFromModule(text), false);
+  }
+  assert.equal(isPersonalReactionCacheRiskFromModule("田中さん"), true);
+  assert.equal(isPersonalReactionCacheRiskFromModule("山田様"), true);
+  assert.equal(isPersonalReactionCacheRiskFromModule("太郎くん"), true);
+  assert.equal(isPersonalReactionCacheRiskFromModule("お兄ちゃん"), true);
+  assert.equal(isPersonalReactionCacheRiskFromModule("trace-safe"), false);
+  assert.equal(isPersonalReactionCacheRiskFromModule("event-safe"), false);
 });
 
 test("orchestration response materializer returns request-bound safe response", async () => {
