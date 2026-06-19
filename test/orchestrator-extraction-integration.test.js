@@ -11,6 +11,11 @@ import {
   buildAiCharacterContractResponseGuard,
   buildAiCharacterContractSafeSummary,
 } from "../src/aiCharacterMetadata.js";
+import {
+  buildReactionPlan,
+  isCacheableReaction as isCacheableReactionFromModule,
+  isSupportedLocale as isSupportedLocaleFromModule,
+} from "../src/reactionPlanBuilder.js";
 import { createVoxWeaveService } from "../src/orchestrator.js";
 
 const NOW = 1_777_000_000_000;
@@ -113,6 +118,30 @@ test("AI character metadata module builds aggregate-only safe boundary objects",
       ai_character_contract_response_guard: guard,
     },
   });
+});
+
+test("reaction plan builder module returns cache-safe semantic plan", () => {
+  const plan = buildReactionPlan({
+    payload: packet(),
+    text: "Safe orchestration integration text.",
+    correctedText: "Safe orchestration integration text.",
+    repairs: [],
+    dictionaryVersion: "dictionary-v1",
+    language: "en",
+    localeStatus: "supported",
+    scriptDirection: "ltr",
+    durationMs: 1800,
+  });
+
+  assert.equal(plan.schema, "voxweave_reaction_plan_cache_entry_v1");
+  assert.equal(plan.corrected_text, "Safe orchestration integration text.");
+  assert.equal(plan.prosody.runtime_execution_required, undefined);
+  assert.equal(plan.prosody.tts_routing.real_tts_connected, false);
+  assert.equal(plan.live2d_cue_template.cue_id, undefined);
+  assert.equal(plan.live2d_cue_template.schema, "iris_live2d_renderer_cue_v1");
+  assert.equal(plan.quality.schema, "voxweave_quality_score_v1");
+  assert.equal(isSupportedLocaleFromModule("en-US"), true);
+  assert.equal(isCacheableReactionFromModule("yes"), true);
 });
 
 test("orchestrate consumes top-level text fallbacks", async () => {
