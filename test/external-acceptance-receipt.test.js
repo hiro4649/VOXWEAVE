@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { test } from "node:test";
+import { promisify } from "node:util";
 import {
   EXTERNAL_ACCEPTANCE_RECEIPT_BINDING_RESULT_SCHEMA,
   EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_POLICY_SCHEMA,
@@ -27,6 +30,15 @@ import {
   buildExternalAcceptanceReceiptReplayKey,
   classifyExternalAcceptanceReceiptReplay,
 } from "../src/externalAcceptanceReceiptQuarantine.js";
+import {
+  EXTERNAL_ACCEPTANCE_RECEIPT_DRY_RUN_FIXTURE_SCHEMA,
+  EXTERNAL_ACCEPTANCE_RECEIPT_DRY_RUN_PACK_SUMMARY_SCHEMA,
+  assertExternalAcceptanceReceiptDryRunFixturePackSafe,
+  buildExternalAcceptanceReceiptDryRunFixturePackFingerprint,
+  runExternalAcceptanceReceiptDryRunFixturePack,
+} from "../scripts/voxweave-loopback-integration-evidence.mjs";
+
+const execFileAsync = promisify(execFile);
 
 const descriptor = Object.freeze({
   candidate_bundle_version: "1.7.0",
@@ -438,4 +450,105 @@ test("quarantine rejects malformed prior capsules and unsafe material", () => {
       safe_summary_only: true,
     })
   );
+});
+
+test("redacted receipt dry-run fixtures store profiles only", async () => {
+  const manifestText = await readFile(
+    "test/fixtures/external-acceptance/receipt-intake-dry-run/manifest.safe.json",
+    "utf8"
+  );
+  const manifest = JSON.parse(manifestText);
+  assert.equal(manifest.schema, "voxweave_external_acceptance_receipt_dry_run_fixture_manifest_v1");
+  assert.equal(manifest.fixture_schema, EXTERNAL_ACCEPTANCE_RECEIPT_DRY_RUN_FIXTURE_SCHEMA);
+  assert.equal(manifest.actual_receipt, false);
+  assert.equal(manifest.external_team_supplied, false);
+  assert.equal(manifest.external_acceptance_effective, false);
+  assert.equal(manifest.safe_summary_only, true);
+
+  const seen = new Set();
+  for (const fixturePath of manifest.fixture_files) {
+    assert.match(fixturePath, /^test\/fixtures\/external-acceptance\/receipt-intake-dry-run\/[a-z0-9-]+\.fixture\.safe\.json$/u);
+    const fixture = JSON.parse(await readFile(fixturePath, "utf8"));
+    assert.equal(fixture.schema, EXTERNAL_ACCEPTANCE_RECEIPT_DRY_RUN_FIXTURE_SCHEMA);
+    assert.equal(fixture.fixture_kind, "redacted_synthetic_receipt_specification");
+    assert.equal(fixture.recipient_role_source, "candidate_template");
+    assert.equal(fixture.actual_receipt, false);
+    assert.equal(fixture.external_team_supplied, false);
+    assert.equal(fixture.external_acceptance_effective, false);
+    assert.equal(fixture.runtime_readiness_claimed, false);
+    assert.equal(fixture.production_readiness_claimed, false);
+    assert.equal(fixture.safe_summary_only, true);
+    assert.equal(Object.hasOwn(fixture, "source_main_sha"), false);
+    assert.equal(Object.hasOwn(fixture, "candidate_bundle_fingerprint"), false);
+    assert.equal(Object.hasOwn(fixture, "receipt_fingerprint"), false);
+    assert.equal(Object.hasOwn(fixture, "binding_fingerprint"), false);
+    assert.equal(Object.hasOwn(fixture, "endpoint"), false);
+    assert.equal(Object.hasOwn(fixture, "token"), false);
+    assert.equal(seen.has(fixture.fixture_id), false);
+    seen.add(fixture.fixture_id);
+  }
+});
+
+test("redacted receipt dry-run fixture pack composes safe local summary", async () => {
+  const summary = await runExternalAcceptanceReceiptDryRunFixturePack({
+    headSha: "a".repeat(40),
+  });
+  assertExternalAcceptanceReceiptDryRunFixturePackSafe(summary);
+  assert.equal(summary.schema, EXTERNAL_ACCEPTANCE_RECEIPT_DRY_RUN_PACK_SUMMARY_SCHEMA);
+  assert.equal(summary.status, "pass");
+  assert.equal(summary.evidence_mode, "local_redacted_receipt_fixture_only");
+  assert.equal(summary.fixture_count, 6);
+  assert.equal(summary.pass_count, 6);
+  assert.equal(summary.failure_count, 0);
+  assert.equal(summary.pending_case_status, "pass");
+  assert.equal(summary.accepted_candidate_unverified_case_status, "pass");
+  assert.equal(summary.rejected_case_status, "pass");
+  assert.equal(summary.duplicate_replay_case_status, "pass");
+  assert.equal(summary.rebound_conflict_case_status, "pass");
+  assert.equal(summary.quarantine_case_status, "pass");
+  assert.equal(summary.authority_non_creation_status, "pass");
+  assert.equal(summary.actual_receipt_generated, false);
+  assert.equal(summary.raw_receipt_stored, false);
+  assert.equal(summary.external_send_executed, false);
+  assert.equal(summary.external_acceptance_claimed, false);
+  assert.equal(summary.real_integration_proof_claimed, false);
+  assert.equal(summary.runtime_readiness_claimed, false);
+  assert.equal(summary.production_readiness_claimed, false);
+  assert.equal(summary.safe_summary_only, true);
+});
+
+test("redacted receipt dry-run fixture pack fingerprint is deterministic and mutation-sensitive", async () => {
+  const first = await runExternalAcceptanceReceiptDryRunFixturePack({
+    headSha: "b".repeat(40),
+  });
+  const second = await runExternalAcceptanceReceiptDryRunFixturePack({
+    headSha: "b".repeat(40),
+  });
+  assert.equal(first.evidence_fingerprint, second.evidence_fingerprint);
+  assert.equal(first.evidence_fingerprint, buildExternalAcceptanceReceiptDryRunFixturePackFingerprint(first));
+  assert.notEqual(
+    first.evidence_fingerprint,
+    buildExternalAcceptanceReceiptDryRunFixturePackFingerprint({
+      ...first,
+      pending_case_status: "fail",
+    })
+  );
+});
+
+test("redacted receipt dry-run fixture pack CLI emits one safe JSON summary", async () => {
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    ["scripts/voxweave-loopback-integration-evidence.mjs", "--receipt-intake-fixture-pack"],
+    { windowsHide: true }
+  );
+  const lines = stdout.trim().split(/\r?\n/u);
+  assert.equal(lines.length, 1);
+  const summary = JSON.parse(lines[0]);
+  assertExternalAcceptanceReceiptDryRunFixturePackSafe(summary);
+  const text = JSON.stringify(summary);
+  assert.equal(text.includes("fixture.safe.json"), false);
+  assert.equal(text.includes("candidate_bundle_fingerprint"), false);
+  assert.equal(text.includes("source_main_sha"), false);
+  assert.equal(summary.actual_receipt_generated, false);
+  assert.equal(summary.external_acceptance_claimed, false);
 });

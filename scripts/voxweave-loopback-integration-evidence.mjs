@@ -12,15 +12,21 @@ import {
   AI_CHARACTER_CONTRACT_REGISTRY,
 } from "../src/contracts.js";
 import * as externalReceiptModule from "../src/externalAcceptanceReceipt.js";
+import {
+  assertExternalAcceptanceReceiptQuarantineCapsuleSafe,
+  buildExternalAcceptanceReceiptQuarantineCapsule,
+} from "../src/externalAcceptanceReceiptQuarantine.js";
 
 export {
   VOXWEAVE_RECEIPT_QUARANTINE_CAPSULE_SCHEMA,
   VOXWEAVE_RECEIPT_REPLAY_CLASSIFICATION_SCHEMA,
-  buildExternalAcceptanceReceiptQuarantineCapsule,
-  assertExternalAcceptanceReceiptQuarantineCapsuleSafe,
   classifyExternalAcceptanceReceiptReplay,
   buildExternalAcceptanceReceiptReplayKey,
 } from "../src/externalAcceptanceReceiptQuarantine.js";
+export {
+  assertExternalAcceptanceReceiptQuarantineCapsuleSafe,
+  buildExternalAcceptanceReceiptQuarantineCapsule,
+};
 
 export const LOOPBACK_INTEGRATION_EVIDENCE_SCHEMA =
   "voxweave_loopback_integration_evidence_v1";
@@ -38,6 +44,10 @@ export const EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_POLICY_SCHEMA =
   "voxweave_external_acceptance_receipt_intake_policy_v1";
 export const EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_MATRIX_SCHEMA =
   "voxweave_external_acceptance_receipt_intake_matrix_v1";
+export const EXTERNAL_ACCEPTANCE_RECEIPT_DRY_RUN_FIXTURE_SCHEMA =
+  "voxweave_external_acceptance_receipt_dry_run_fixture_v1";
+export const EXTERNAL_ACCEPTANCE_RECEIPT_DRY_RUN_PACK_SUMMARY_SCHEMA =
+  "voxweave_external_acceptance_receipt_dry_run_pack_summary_v1";
 export const EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_POLICY_VERSION = 1;
 export const MAX_RECEIPT_FILE_BYTES = 32768;
 export const MAX_RECEIPT_JSON_TEXT_LENGTH = 32768;
@@ -131,6 +141,32 @@ const ALLOWED_RECEIPT_INTAKE_MATRIX_KEYS = Object.freeze([
   "output_minimality_case_status",
   "authority_non_creation_status",
   "actual_receipt_generated",
+  "external_send_executed",
+  "external_acceptance_claimed",
+  "real_integration_proof_claimed",
+  "evidence_fingerprint_algorithm",
+  "evidence_fingerprint",
+  "runtime_readiness_claimed",
+  "production_readiness_claimed",
+  "safe_summary_only",
+]);
+const ALLOWED_RECEIPT_DRY_RUN_PACK_KEYS = Object.freeze([
+  "schema",
+  "status",
+  "source_head_sha",
+  "evidence_mode",
+  "fixture_count",
+  "pass_count",
+  "failure_count",
+  "pending_case_status",
+  "accepted_candidate_unverified_case_status",
+  "rejected_case_status",
+  "duplicate_replay_case_status",
+  "rebound_conflict_case_status",
+  "quarantine_case_status",
+  "authority_non_creation_status",
+  "actual_receipt_generated",
+  "raw_receipt_stored",
   "external_send_executed",
   "external_acceptance_claimed",
   "real_integration_proof_claimed",
@@ -270,6 +306,17 @@ const EXPECTED_RECEIPT_TEMPLATE_PATHS = Object.freeze([
 ]);
 const EXPECTED_PRE_SEND_CHECKLIST_PATH =
   "test/fixtures/external-acceptance/owner-pre-send-checklist.safe.json";
+const RECEIPT_DRY_RUN_FIXTURE_BASE =
+  "test/fixtures/external-acceptance/receipt-intake-dry-run/";
+const EXPECTED_RECEIPT_DRY_RUN_FIXTURE_FILES = Object.freeze([
+  `${RECEIPT_DRY_RUN_FIXTURE_BASE}manifest.safe.json`,
+  `${RECEIPT_DRY_RUN_FIXTURE_BASE}owner-provided-pending.fixture.safe.json`,
+  `${RECEIPT_DRY_RUN_FIXTURE_BASE}owner-provided-accepted-candidate-unverified.fixture.safe.json`,
+  `${RECEIPT_DRY_RUN_FIXTURE_BASE}owner-provided-rejected.fixture.safe.json`,
+  `${RECEIPT_DRY_RUN_FIXTURE_BASE}synthetic-pending.fixture.safe.json`,
+  `${RECEIPT_DRY_RUN_FIXTURE_BASE}duplicate-replay.fixture.safe.json`,
+  `${RECEIPT_DRY_RUN_FIXTURE_BASE}rebound-conflict.fixture.safe.json`,
+]);
 const ALLOWED_RECEIPT_SOURCE_KINDS = new Set([
   "owner_provided",
   "synthetic_test_only",
@@ -1327,6 +1374,366 @@ export function buildExternalAcceptanceReceiptIntakeMatrixFingerprint(matrix) {
   return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
 }
 
+export async function runExternalAcceptanceReceiptDryRunFixturePack({
+  headSha = "unknown",
+  candidateBundle = null,
+  fixturePack = null,
+} = {}) {
+  const bundle = candidateBundle ?? await readCandidateBundleFiles();
+  const pack = fixturePack ?? await readExternalAcceptanceReceiptDryRunFixturePack();
+  const descriptor = buildExternalAcceptanceCandidateDescriptor(bundle);
+  validateExternalAcceptanceReceiptDryRunFixturePack(pack);
+
+  const results = [];
+  for (const fixture of pack.fixtures) {
+    const result = runReceiptDryRunFixture({ bundle, descriptor, fixture, priorCapsules: [] });
+    results.push(result);
+  }
+
+  const statusById = new Map(results.map((result) => [result.fixture_id, result.status]));
+  const passCount = results.filter((result) => result.status === "pass").length;
+  const summary = {
+    schema: EXTERNAL_ACCEPTANCE_RECEIPT_DRY_RUN_PACK_SUMMARY_SCHEMA,
+    status: passCount === pack.fixtures.length ? "pass" : "fail",
+    source_head_sha: safeHeadSha(headSha),
+    evidence_mode: "local_redacted_receipt_fixture_only",
+    fixture_count: pack.fixtures.length,
+    pass_count: passCount,
+    failure_count: pack.fixtures.length - passCount,
+    pending_case_status: statusById.get("owner_provided_pending") === "pass" &&
+      statusById.get("synthetic_pending") === "pass" ? "pass" : "fail",
+    accepted_candidate_unverified_case_status:
+      statusById.get("owner_provided_accepted_candidate_unverified") ?? "fail",
+    rejected_case_status: statusById.get("owner_provided_rejected") ?? "fail",
+    duplicate_replay_case_status: statusById.get("duplicate_replay") ?? "fail",
+    rebound_conflict_case_status: statusById.get("rebound_conflict") ?? "fail",
+    quarantine_case_status: results.every((result) => result.quarantine_safe) ? "pass" : "fail",
+    authority_non_creation_status: results.every((result) => result.authority_not_created) ? "pass" : "fail",
+    actual_receipt_generated: false,
+    raw_receipt_stored: false,
+    external_send_executed: false,
+    external_acceptance_claimed: false,
+    real_integration_proof_claimed: false,
+    evidence_fingerprint_algorithm: "sha256",
+    evidence_fingerprint: "",
+    runtime_readiness_claimed: false,
+    production_readiness_claimed: false,
+    safe_summary_only: true,
+  };
+  summary.evidence_fingerprint = buildExternalAcceptanceReceiptDryRunFixturePackFingerprint(summary);
+  assertExternalAcceptanceReceiptDryRunFixturePackSafe(summary);
+  return summary;
+}
+
+export function assertExternalAcceptanceReceiptDryRunFixturePackSafe(summary) {
+  assertExactFields(summary, ALLOWED_RECEIPT_DRY_RUN_PACK_KEYS, "unsafe_receipt_dry_run_pack_fields");
+  scanEvidenceSafe(summary);
+  if (summary.schema !== EXTERNAL_ACCEPTANCE_RECEIPT_DRY_RUN_PACK_SUMMARY_SCHEMA) {
+    throw new Error("unsafe_receipt_dry_run_pack_schema");
+  }
+  if (
+    !["pass", "fail"].includes(summary.status) ||
+    !/^[a-f0-9]{40}$|^unknown$/u.test(summary.source_head_sha) ||
+    summary.evidence_mode !== "local_redacted_receipt_fixture_only" ||
+    summary.evidence_fingerprint_algorithm !== "sha256" ||
+    !/^[a-f0-9]{64}$/u.test(summary.evidence_fingerprint)
+  ) {
+    throw new Error("unsafe_receipt_dry_run_pack_value");
+  }
+  for (const key of [
+    "pending_case_status",
+    "accepted_candidate_unverified_case_status",
+    "rejected_case_status",
+    "duplicate_replay_case_status",
+    "rebound_conflict_case_status",
+    "quarantine_case_status",
+    "authority_non_creation_status",
+  ]) {
+    if (!["pass", "fail"].includes(summary[key])) {
+      throw new Error("unsafe_receipt_dry_run_pack_case_status");
+    }
+  }
+  if (
+    summary.actual_receipt_generated !== false ||
+    summary.raw_receipt_stored !== false ||
+    summary.external_send_executed !== false ||
+    summary.external_acceptance_claimed !== false ||
+    summary.real_integration_proof_claimed !== false ||
+    summary.runtime_readiness_claimed !== false ||
+    summary.production_readiness_claimed !== false ||
+    summary.safe_summary_only !== true
+  ) {
+    throw new Error("unsafe_receipt_dry_run_pack_claim");
+  }
+  if (
+    !Number.isInteger(summary.fixture_count) ||
+    !Number.isInteger(summary.pass_count) ||
+    !Number.isInteger(summary.failure_count) ||
+    summary.fixture_count < 1 ||
+    summary.pass_count + summary.failure_count !== summary.fixture_count
+  ) {
+    throw new Error("unsafe_receipt_dry_run_pack_counts");
+  }
+  return summary;
+}
+
+export function buildExternalAcceptanceReceiptDryRunFixturePackFingerprint(summary) {
+  const canonical = {};
+  for (const key of [...ALLOWED_RECEIPT_DRY_RUN_PACK_KEYS].sort()) {
+    if (key === "evidence_fingerprint") continue;
+    if (!Object.hasOwn(summary, key)) throw new Error("unsafe_receipt_dry_run_pack_fields");
+    canonical[key] = summary[key];
+  }
+  scanEvidenceSafe(canonical);
+  return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
+}
+
+async function readExternalAcceptanceReceiptDryRunFixturePack() {
+  const base = new URL("../", import.meta.url);
+  const entries = await Promise.all(EXPECTED_RECEIPT_DRY_RUN_FIXTURE_FILES.map(async (path) => {
+    const content = JSON.parse(await readFile(new URL(path, base), "utf8"));
+    return { path, content };
+  }));
+  const manifest = entries[0].content;
+  return {
+    manifest,
+    fixtures: entries.slice(1).map((entry) => ({ path: entry.path, ...entry.content })),
+  };
+}
+
+function validateExternalAcceptanceReceiptDryRunFixturePack({ manifest, fixtures }) {
+  assertExactFields(manifest, [
+    "schema",
+    "fixture_pack_kind",
+    "fixture_schema",
+    "fixture_files",
+    "actual_receipt",
+    "external_team_supplied",
+    "external_acceptance_effective",
+    "runtime_readiness_claimed",
+    "production_readiness_claimed",
+    "safe_summary_only",
+  ], "invalid_receipt_dry_run_manifest_fields");
+  if (
+    manifest.schema !== "voxweave_external_acceptance_receipt_dry_run_fixture_manifest_v1" ||
+    manifest.fixture_pack_kind !== "redacted_synthetic_receipt_specification_pack" ||
+    manifest.fixture_schema !== EXTERNAL_ACCEPTANCE_RECEIPT_DRY_RUN_FIXTURE_SCHEMA ||
+    manifest.actual_receipt !== false ||
+    manifest.external_team_supplied !== false ||
+    manifest.external_acceptance_effective !== false ||
+    manifest.runtime_readiness_claimed !== false ||
+    manifest.production_readiness_claimed !== false ||
+    manifest.safe_summary_only !== true
+  ) {
+    throw new Error("invalid_receipt_dry_run_manifest_value");
+  }
+  assertExactPathList(manifest.fixture_files, EXPECTED_RECEIPT_DRY_RUN_FIXTURE_FILES.slice(1), "invalid_receipt_dry_run_fixture_paths");
+  if (!Array.isArray(fixtures) || fixtures.length !== EXPECTED_RECEIPT_DRY_RUN_FIXTURE_FILES.length - 1) {
+    throw new Error("invalid_receipt_dry_run_fixture_count");
+  }
+  assertExactPathList(fixtures.map((fixture) => fixture.path), EXPECTED_RECEIPT_DRY_RUN_FIXTURE_FILES.slice(1), "invalid_receipt_dry_run_fixture_paths");
+  const ids = new Set();
+  for (const fixture of fixtures) {
+    validateExternalAcceptanceReceiptDryRunFixture(fixture);
+    if (ids.has(fixture.fixture_id)) throw new Error("duplicate_receipt_dry_run_fixture_id");
+    ids.add(fixture.fixture_id);
+  }
+  scanCandidateBundleSafe({ manifest, fixtures });
+}
+
+function validateExternalAcceptanceReceiptDryRunFixture(fixture) {
+  assertExactFields(fixture, [
+    "path",
+    "schema",
+    "fixture_id",
+    "fixture_kind",
+    "receipt_source_kind",
+    "recipient_project",
+    "recipient_role_source",
+    "state_profile",
+    "binding_profile",
+    "replay_profile",
+    "expected_binding_status",
+    "expected_intake_disposition",
+    "expected_quarantine_disposition",
+    "expected_replay_status",
+    "actual_receipt",
+    "external_team_supplied",
+    "external_acceptance_effective",
+    "runtime_readiness_claimed",
+    "production_readiness_claimed",
+    "safe_summary_only",
+  ], "invalid_receipt_dry_run_fixture_fields");
+  validateSafeRelativePath(fixture.path);
+  if (!EXPECTED_RECEIPT_DRY_RUN_FIXTURE_FILES.includes(fixture.path)) {
+    throw new Error("invalid_receipt_dry_run_fixture_path");
+  }
+  if (
+    fixture.schema !== EXTERNAL_ACCEPTANCE_RECEIPT_DRY_RUN_FIXTURE_SCHEMA ||
+    fixture.fixture_kind !== "redacted_synthetic_receipt_specification" ||
+    fixture.recipient_role_source !== "candidate_template" ||
+    fixture.actual_receipt !== false ||
+    fixture.external_team_supplied !== false ||
+    fixture.external_acceptance_effective !== false ||
+    fixture.runtime_readiness_claimed !== false ||
+    fixture.production_readiness_claimed !== false ||
+    fixture.safe_summary_only !== true
+  ) {
+    throw new Error("invalid_receipt_dry_run_fixture_value");
+  }
+  if (!/^[a-z0-9_]{3,80}$/u.test(fixture.fixture_id)) throw new Error("invalid_receipt_dry_run_fixture_id");
+  if (!ALLOWED_RECEIPT_SOURCE_KINDS.has(fixture.receipt_source_kind)) {
+    throw new Error("invalid_receipt_dry_run_source_kind");
+  }
+  if (!["IRIS", "LIVE2D"].includes(fixture.recipient_project)) {
+    throw new Error("invalid_receipt_dry_run_recipient");
+  }
+  if (!["pending", "accepted_candidate_unverified", "rejected_candidate"].includes(fixture.state_profile)) {
+    throw new Error("invalid_receipt_dry_run_state_profile");
+  }
+  if (!["current_candidate", "stale_version", "stale_source", "stale_fingerprint", "wrong_role"].includes(fixture.binding_profile)) {
+    throw new Error("invalid_receipt_dry_run_binding_profile");
+  }
+  if (!["new", "duplicate_same_binding", "receipt_rebound_conflict"].includes(fixture.replay_profile)) {
+    throw new Error("invalid_receipt_dry_run_replay_profile");
+  }
+  if (!["pass", "fail"].includes(fixture.expected_binding_status)) {
+    throw new Error("invalid_receipt_dry_run_expected_status");
+  }
+  if (!RECEIPT_INTAKE_DISPOSITIONS.has(fixture.expected_intake_disposition)) {
+    throw new Error("invalid_receipt_dry_run_expected_intake");
+  }
+  if (!["quarantined_for_owner_review", "rejected_no_persistence", "duplicate_suppressed", "replay_conflict_rejected"].includes(fixture.expected_quarantine_disposition)) {
+    throw new Error("invalid_receipt_dry_run_expected_quarantine");
+  }
+  if (!["new", "duplicate_same_binding", "receipt_fingerprint_rebound_conflict"].includes(fixture.expected_replay_status)) {
+    throw new Error("invalid_receipt_dry_run_expected_replay");
+  }
+}
+
+function runReceiptDryRunFixture({ bundle, descriptor, fixture, priorCapsules }) {
+  const baseReceipt = buildReceiptFromDryRunFixture(bundle, descriptor, fixture);
+  const receipt = applyDryRunBindingProfile(baseReceipt, fixture.binding_profile);
+  const validationResult = validateExternalAcceptanceReceipt(baseReceipt);
+  const bindingResult = validateExternalAcceptanceReceiptAgainstCandidate({
+    ...bundle,
+    receipt,
+    receiptSourceKind: fixture.receipt_source_kind,
+  });
+  const receiptFingerprint = buildExternalAcceptanceReceiptFingerprint(baseReceipt);
+  const bindingFingerprint = bindingResult.binding_fingerprint;
+  const replayPriorCapsules = buildDryRunReplayPriorCapsules({
+    validationResult,
+    bindingResult,
+    fixture,
+    priorCapsules,
+    receiptFingerprint,
+    bindingFingerprint,
+  });
+  const capsule = buildExternalAcceptanceReceiptQuarantineCapsule({
+    validationResult,
+    bindingResult,
+    receiptFingerprint,
+    bindingFingerprint,
+    priorCapsules: replayPriorCapsules,
+  });
+  assertExternalAcceptanceReceiptQuarantineCapsuleSafe(capsule);
+  const pass =
+    bindingResult.status === fixture.expected_binding_status &&
+    bindingResult.intake_disposition === fixture.expected_intake_disposition &&
+    capsule.quarantine_disposition === fixture.expected_quarantine_disposition &&
+    capsule.replay_status === fixture.expected_replay_status &&
+    capsule.raw_receipt_stored === false &&
+    capsule.actual_receipt_persisted === false &&
+    capsule.acceptance_authority_created === false &&
+    capsule.external_acceptance_effective === false &&
+    capsule.runtime_readiness_claimed === false &&
+    capsule.production_readiness_claimed === false &&
+    capsule.safe_summary_only === true;
+  return {
+    fixture_id: fixture.fixture_id,
+    status: pass ? "pass" : "fail",
+    quarantine_safe: true,
+    authority_not_created:
+      bindingResult.acceptance_authority_created === false &&
+      bindingResult.external_acceptance_effective === false &&
+      capsule.acceptance_authority_created === false &&
+      capsule.external_acceptance_effective === false,
+    capsule,
+  };
+}
+
+function buildReceiptFromDryRunFixture(bundle, descriptor, fixture) {
+  const overrides = {
+    recipient_project: fixture.recipient_project,
+  };
+  if (fixture.state_profile === "pending") {
+    Object.assign(overrides, {
+      received_status: "pending",
+      parsed_status: "pending",
+      forbidden_material_absent_status: "pending",
+      expected_schema_observed_status: "pending",
+      raw_values_absent_status: "pending",
+      readiness_claim_absent_status: "pending",
+      acceptance_candidate_status: "pending",
+    });
+  } else if (fixture.state_profile === "rejected_candidate") {
+    Object.assign(overrides, {
+      received_status: "rejected",
+      parsed_status: "fail",
+      acceptance_candidate_status: "rejected_candidate",
+    });
+  }
+  return buildSyntheticReceiptForMatrix(bundle, descriptor, overrides);
+}
+
+function applyDryRunBindingProfile(receipt, bindingProfile) {
+  if (bindingProfile === "stale_version") return { ...receipt, candidate_bundle_version: "1.0.0" };
+  if (bindingProfile === "stale_source") return { ...receipt, source_main_sha: "a".repeat(40) };
+  if (bindingProfile === "stale_fingerprint") return { ...receipt, candidate_bundle_fingerprint: "b".repeat(64) };
+  if (bindingProfile === "wrong_role") {
+    return {
+      ...receipt,
+      recipient_role: receipt.recipient_project === "IRIS" ? "renderer_boundary_owner" : "adapter_packet_owner",
+    };
+  }
+  return receipt;
+}
+
+function buildDryRunReplayPriorCapsules({
+  validationResult,
+  bindingResult,
+  fixture,
+  priorCapsules,
+  receiptFingerprint,
+  bindingFingerprint,
+}) {
+  if (fixture.replay_profile === "duplicate_same_binding") {
+    return [
+      buildExternalAcceptanceReceiptQuarantineCapsule({
+        validationResult,
+        bindingResult,
+        receiptFingerprint,
+        bindingFingerprint,
+      }),
+    ];
+  }
+  if (fixture.replay_profile === "receipt_rebound_conflict") {
+    return [
+      {
+        ...buildExternalAcceptanceReceiptQuarantineCapsule({
+          validationResult,
+          bindingResult,
+          receiptFingerprint,
+          bindingFingerprint,
+        }),
+        binding_fingerprint: "c".repeat(64),
+      },
+    ];
+  }
+  return priorCapsules;
+}
+
 function buildSyntheticReceiptForMatrix(candidate, descriptor, overrides = {}) {
   const template = candidate.receipts.find(
     (receipt) => receipt.recipient_project === (overrides.recipient_project ?? "IRIS")
@@ -2186,6 +2593,8 @@ async function main() {
     ? await runExternalAcceptanceCandidateBundleSummary()
     : cli.mode === "receipt-intake-matrix"
     ? await runExternalAcceptanceReceiptIntakeMatrix({ headSha })
+    : cli.mode === "receipt-intake-fixture-pack"
+    ? await runExternalAcceptanceReceiptDryRunFixturePack({ headSha })
     : cli.mode === "matrix"
       ? await runLoopbackIntegrationFailureMatrix({ headSha })
       : await runLoopbackIntegrationEvidence({ headSha });
@@ -2203,6 +2612,7 @@ function parseReceiptCliArguments(argv) {
     if (arg === "--matrix") modes.push({ mode: "matrix", index });
     else if (arg === "--candidate-bundle") modes.push({ mode: "candidate-bundle", index });
     else if (arg === "--receipt-intake-matrix") modes.push({ mode: "receipt-intake-matrix", index });
+    else if (arg === "--receipt-intake-fixture-pack") modes.push({ mode: "receipt-intake-fixture-pack", index });
     else if (arg === "--validate-receipt") modes.push({ mode: "validate-receipt", index });
     else if (arg === "--validate-receipt-against-bundle") {
       modes.push({ mode: "validate-receipt-against-bundle", index });

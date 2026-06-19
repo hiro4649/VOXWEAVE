@@ -1,0 +1,19 @@
+{
+  "schema": "voxweave_external_acceptance_receipt_dry_run_fixture_manifest_v1",
+  "fixture_pack_kind": "redacted_synthetic_receipt_specification_pack",
+  "fixture_schema": "voxweave_external_acceptance_receipt_dry_run_fixture_v1",
+  "fixture_files": [
+    "test/fixtures/external-acceptance/receipt-intake-dry-run/owner-provided-pending.fixture.safe.json",
+    "test/fixtures/external-acceptance/receipt-intake-dry-run/owner-provided-accepted-candidate-unverified.fixture.safe.json",
+    "test/fixtures/external-acceptance/receipt-intake-dry-run/owner-provided-rejected.fixture.safe.json",
+    "test/fixtures/external-acceptance/receipt-intake-dry-run/synthetic-pending.fixture.safe.json",
+    "test/fixtures/external-acceptance/receipt-intake-dry-run/duplicate-replay.fixture.safe.json",
+    "test/fixtures/external-acceptance/receipt-intake-dry-run/rebound-conflict.fixture.safe.json"
+  ],
+  "actual_receipt": false,
+  "external_team_supplied": false,
+  "external_acceptance_effective": false,
+  "runtime_readiness_claimed": false,
+  "production_readiness_claimed": false,
+  "safe_summary_only": true
+}
