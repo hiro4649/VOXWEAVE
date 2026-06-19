@@ -16,7 +16,7 @@ smallest relevant verification was run or honestly reported unavailable without
 raw logs or secret-like output.
 
 <!-- CODEX_QUALITY_HARNESS_BEGIN -->
-CODEX_QUALITY_HARNESS_FILE v1.2.6
+CODEX_QUALITY_HARNESS_FILE v1.2.7
 
 ## Prime Directive
 
@@ -28,9 +28,9 @@ docs/process.
 
 ## Active Harness
 
-Active target harness: v1.2.6 / v126.
+Active target harness: v1.2.7 / v127.
 Read first: AGENTS.md, docs/process/CODEX_HARNESS_MANIFEST.json,
-docs/process/CODEX_V126_SPEC.md, and docs/process/CODEX_ACTIVE_POLICY_INDEX.json.
+docs/process/CODEX_V127_SPEC.md, and docs/process/CODEX_ACTIVE_POLICY_INDEX.json.
 README, legacy specs, and PR history are conditional reads only.
 
 ## Authority
@@ -69,7 +69,7 @@ proposal-only and owner-approval-required.
 ## Local Task Discipline
 
 Start from clean default branch or clean worktree. Preserve user changes.
-Run v126 self-test and the local quality gate for harness rollout. v125, v124,
+Run v127 self-test and the local quality gate for harness rollout. v125, v124,
 v123, and v122 self-tests are compatibility checks when relevant. For product
 work, use the repo-specific commands above and keep product evidence separate
 from harness evidence.

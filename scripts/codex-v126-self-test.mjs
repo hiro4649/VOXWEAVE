@@ -1,9 +1,8 @@
 #!/usr/bin/env node
-// CODEX_QUALITY_HARNESS_FILE v1.2.6
+// CODEX_QUALITY_HARNESS_FILE v1.2.7
 
 import fs from 'node:fs';
 import { writeJsonReport, exitFor } from './codex-v080-lib.mjs';
-import { buildHarnessVersionRegistry } from './codex-harness-version.mjs';
 import {
   V126_OPERATOR_STATUS_KEYS,
   V126_P0_ARTIFACTS,
@@ -17,14 +16,6 @@ import {
 } from './codex-orchestration-capsule.mjs';
 import { buildWorkerProofCapsule, validateWorkerProofCapsule } from './codex-worker-proof-capsule.mjs';
 import { buildOwnerDecisionBrief, validateOwnerDecisionBrief } from './codex-owner-decision-brief.mjs';
-
-function readText(path) {
-  return fs.readFileSync(path, 'utf8');
-}
-
-function readJson(path) {
-  return JSON.parse(readText(path));
-}
 
 function test(name, fn) {
   try {
@@ -49,67 +40,7 @@ const compatibilityCases = [
   ['v126_preserves_v118_final_decision', () => buildOrchestrationCapsule().finalAuthority === 'v1.1.8_final_decision_kernel'],
   ['v126_preserves_v119_orchestration_artifacts', () => V126_P0_ARTIFACTS.includes('codex-orchestration-capsule.safe.json')],
   ['v126_no_bridge_or_tunnel_default_on', () => !fs.existsSync('scripts/codex-mcp-bridge-daemon.mjs') && !fs.existsSync('scripts/codex-tunnel-daemon.mjs')],
-  ['v126_active_authority_tuple_is_current', () => buildOrchestrationCapsule().skillContextRouting.activeAuthorityTuple.activeSelfTestSuite === 'v126'],
-  ['agents_local_task_discipline_uses_v126', () => readText('AGENTS.md').includes('Run v126 self-test and the local quality gate for harness rollout')],
-  ['agents_local_task_discipline_does_not_require_v125_as_current', () => !readText('AGENTS.md').includes('Run v125 self-test and the local quality gate for harness rollout')],
-  ['agents_authority_mentions_v126_observed_state_loop', () => {
-    const text = readText('AGENTS.md');
-    return text.includes('v1.2.6 adds observed workspace state') && text.includes('checker-builder loop');
-  }],
-  ['active_manifest_tuple_matches_v126', () => {
-    const manifest = readJson('docs/process/CODEX_HARNESS_MANIFEST.json');
-    return manifest.activeHarnessVersion === '1.2.6'
-      && manifest.activeSelfTestSuite === 'v126'
-      && manifest.activeSelfTestStatusKey === 'v126SelfTestStatus';
-  }],
-  ['active_policy_required_reads_include_v126_spec', () => {
-    const index = readJson('docs/process/CODEX_ACTIVE_POLICY_INDEX.json');
-    return index.requiredReads.includes('docs/process/CODEX_V126_SPEC.md')
-      && index.profiles.routine.requiredReads.includes('docs/process/CODEX_V126_SPEC.md');
-  }],
-  ['v125_compatibility_self_test_accepts_v126', () => readText('scripts/codex-v125-self-test.mjs').includes("['v125', 'v126'].includes")],
-  ['v124_compatibility_self_test_accepts_v126', () => readText('scripts/codex-v124-self-test.mjs').includes("['v124', 'v125', 'v126'].includes")],
-  ['v122_context_routing_accepts_v126', () => readText('scripts/codex-v122-self-test.mjs').includes("'1.2.6'")],
-  ['source_release_boundary_remains_source_only', () => buildHarnessVersionRegistry().versionLineagePolicy.sourceReleaseBoundary === 'source_body_only' && buildHarnessVersionRegistry().versionLineagePolicy.sourceOnlyRelease === true],
-  ['source_release_does_not_authorize_target_rollout', () => buildHarnessVersionRegistry().versionLineagePolicy.sourceReleaseAuthorizesTargetRollout === false],
-  ['target_repo_rollout_is_completed', () => {
-    const registry = buildHarnessVersionRegistry();
-    const manifest = readJson('docs/process/CODEX_HARNESS_MANIFEST.json');
-    return registry.versionLineagePolicy.targetRepoRolloutStatus === 'completed'
-      && manifest.targetRollout === 'completed';
-  }],
-  ['target_repo_active_harness_is_v126', () => buildHarnessVersionRegistry().versionLineagePolicy.targetRepoActiveHarness === '1.2.6'],
-  ['target_manifest_is_authoritative_for_target_state', () => buildHarnessVersionRegistry().versionLineagePolicy.targetRepoManifestAuthoritative === true],
-  ['source_and_target_statuses_are_not_conflated', () => {
-    const policy = buildHarnessVersionRegistry().versionLineagePolicy;
-    return policy.sourceOnlyRelease === true
-      && policy.targetRollout === 'not_started'
-      && policy.targetRepoRolloutStatus === 'completed'
-      && policy.sourceReleaseAuthorizesTargetRollout === false;
-  }],
-  ['representative_real_pr_validation_closed', () => readJson('docs/process/CODEX_HARNESS_MANIFEST.json').representativeRealPrValidation === 'pass'],
-  ['representative_real_pr_replay_closed', () => readJson('docs/process/CODEX_HARNESS_MANIFEST.json').representativeRealPrReplay === 'pass'],
-  ['representative_live_pr_validation_closed', () => readJson('docs/process/CODEX_HARNESS_MANIFEST.json').representativeLivePrValidation === 'pass'],
-  ['synthetic_representative_validation_closed', () => readJson('docs/process/CODEX_HARNESS_MANIFEST.json').syntheticRepresentativeValidation === 'pass'],
-  ['representative_validation_uses_safe_metadata_only', () => readText('docs/process/CODEX_VOXWEAVE_V126_REPRESENTATIVE_VALIDATION_CLOSURE.md').includes('rawLogsRead: no')],
-  ['representative_validation_does_not_claim_readiness', () => {
-    const text = readText('docs/process/CODEX_VOXWEAVE_V126_REPRESENTATIVE_VALIDATION_CLOSURE.md');
-    return text.includes('runtimeReadinessClaimed: no') && text.includes('productionReadinessClaimed: no');
-  }],
-  ['local_pre_pr_remote_evidence_missing_is_not_blocking', () => {
-    const text = readText('scripts/codex-local-quality-gate.mjs');
-    return text.includes('normalizeLocalPrePrRemoteEvidenceStatuses')
-      && text.includes('remoteProductBaselineStatus')
-      && text.includes('manual_confirmation_required')
-      && text.includes('normalizedKeys')
-      && text.includes('failureList')
-      && text.includes("report.status = 'pass'")
-      && text.includes('local_pre_pr_remote_evidence_not_required');
-  }],
-  ['same_head_remote_gate_still_required_for_pr_context', () => {
-    const text = readText('scripts/codex-local-quality-gate.mjs');
-    return text.includes('isLocalPrePrEvidenceLane') && text.includes("includes('/pull/')");
-  }],
+  ['v126_compatibility_survives_v127_active_authority', () => ['v126', 'v127'].includes(buildOrchestrationCapsule().skillContextRouting.activeAuthorityTuple.activeSelfTestSuite)],
 ];
 
 const observedStateCases = [
