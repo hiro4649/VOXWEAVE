@@ -37,6 +37,25 @@ function productRelevantFromInput(input, env = process.env) {
   const classified = parseChangeClassification(env);
   return Boolean(classified.productRelevantChanged || classified.packageOrLockfileChanged || classified.runtimeReadinessClaimed);
 }
+function explicitBool(value) {
+  if (value === undefined || value === null || value === '') return null;
+  return parseBool(value);
+}
+function numberOrNull(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+function nestedDiagnostic(value) {
+  return value?.diagnostic || value?.remoteNpmDiagnosticStatus?.diagnostic || value || {};
+}
+function firstNonEmpty(...values) {
+  return values.map((value) => String(value || '').trim()).find(Boolean) || '';
+}
+function sameDefinedValues(values) {
+  const defined = values.filter((value) => value !== null && value !== undefined);
+  return defined.length <= 1 || defined.every((value) => value === defined[0]);
+}
 function hasText(file, pattern) {
   const text = readText(file) || '';
   return typeof pattern === 'string' ? text.includes(pattern) : pattern.test(text);
@@ -103,11 +122,74 @@ export function buildRemoteNpmDiagnosticNormalizationReport(input = parseJson(pr
   if (!parseBool(input.forceCheck) && !productRelevant) return notApplicable('remoteNpmDiagnosticNormalizationStatus', 'remote_npm_diagnostic_normalization_not_applicable');
   const reasonCodes = [];
   const npmExecuted = parseBool(input.npmExecuted);
-  const npmExitCode = Number(input.npmExitCode ?? 0);
+  const npmExitCode = numberOrNull(input.npmExitCode);
+  const runnerStatus = String(input.runnerStatus || '');
+  const evidenceStatus = String(input.evidenceStatus || '');
+  const diagnosticStatus = String(input.diagnosticStatus || '');
+  const sameHead = input.sameHead === undefined ? true : parseBool(input.sameHead);
+  const executionEvidenceConsistent = input.executionEvidenceConsistent === undefined ? true : parseBool(input.executionEvidenceConsistent);
+  const remotePhase = parseBool(input.isPullRequest) || parseBool(input.forceCheck);
+  const missingExecutionEvidence = productRelevant && (input.npmExecuted === undefined || input.npmExitCode === undefined || npmExitCode === null);
+  if (missingExecutionEvidence) reasonCodes.push('remote_npm_evidence_missing');
   if (productRelevant && !npmExecuted) reasonCodes.push('remote_npm_not_executed_for_product_pr');
-  if (npmExitCode !== 0 || parseBool(input.npmFailMarkedPass)) reasonCodes.push('remote_npm_diagnostic_normalization_failed');
+  if (!sameHead) reasonCodes.push('remote_npm_evidence_head_mismatch');
+  if (!executionEvidenceConsistent) reasonCodes.push('remote_npm_evidence_inconsistent');
+  if (npmExitCode !== null && npmExitCode !== 0 || parseBool(input.npmFailMarkedPass)) reasonCodes.push('remote_npm_diagnostic_normalization_failed');
+  if (remotePhase && productRelevant && ['runnerStatus', 'evidenceStatus', 'diagnosticStatus'].some((key) => String(input[key] || '') !== 'pass')) reasonCodes.push('remote_npm_diagnostic_normalization_failed');
   if (parseBool(input.diagnosticPendingFinalPass) || parseBool(input.diagnosticMissingNoFormalEvidence) || parseBool(input.remoteNpmNotExecutedEmittedDespiteExecuted)) reasonCodes.push('remote_npm_diagnostic_normalization_failed');
-  return safe('remoteNpmDiagnosticNormalizationStatus', reasonCodes.length ? 'fail' : 'pass', { reasonCodes, productRelevant, npmExecuted, npmExitCode });
+  return safe('remoteNpmDiagnosticNormalizationStatus', reasonCodes.length ? 'fail' : 'pass', {
+    reasonCodes,
+    productRelevant,
+    isPullRequest: parseBool(input.isPullRequest),
+    npmExecuted,
+    npmExitCode,
+    runnerStatus,
+    evidenceStatus,
+    diagnosticStatus,
+    sameHead,
+    executionEvidenceConsistent,
+  });
+}
+
+export function buildRemoteNpmDiagnosticNormalizationInput(report = {}, env = process.env) {
+  const runner = report.remoteProductEvidenceRunnerStatus || {};
+  const evidence = report.productVerificationEvidenceStatus || report.formalEvidence || {};
+  const diagnosticReport = report.remoteNpmDiagnosticStatus || {};
+  const diagnostic = nestedDiagnostic(diagnosticReport);
+  const productRelevant = productRelevantFromInput({ productRelevant: report.changeClassificationStatus?.productRelevantChanged || runner.productRelevant || evidence.productRelevant || diagnostic.productRelevant }, env);
+  const runnerExecuted = explicitBool(runner.npmExecuted);
+  const evidenceExecuted = explicitBool(evidence.npmExecuted);
+  const diagnosticExecuted = explicitBool(diagnostic.npmExecuted);
+  const envExecuted = explicitBool(env.CODEX_REMOTE_NPM_EXECUTED === undefined ? undefined : env.CODEX_REMOTE_NPM_EXECUTED === '1');
+  const executionValues = [runnerExecuted, evidenceExecuted, diagnosticExecuted, envExecuted];
+  const runnerExit = numberOrNull(runner.npmExitCode);
+  const evidenceExit = numberOrNull(evidence.npmExitCode);
+  const diagnosticExit = numberOrNull(diagnostic.npmExitCode);
+  const envExit = numberOrNull(env.CODEX_NPM_EXIT_CODE);
+  const exitValues = [runnerExit, evidenceExit, diagnosticExit, envExit];
+  const npmExecuted = executionValues.find((value) => value !== null && value !== undefined);
+  const npmExitCode = exitValues.find((value) => value !== null && value !== undefined);
+  const expectedHeadSha = firstNonEmpty(env.CODEX_PR_HEAD_SHA, env.GITHUB_SHA, report.expectedHeadSha);
+  const evidenceHeadSha = firstNonEmpty(evidence.headSha, evidence.evidence?.headSha);
+  const diagnosticHeadSha = firstNonEmpty(diagnostic.headSha, diagnosticReport.headSha);
+  const headValues = [evidenceHeadSha, diagnosticHeadSha].filter(Boolean);
+  const sameHead = !expectedHeadSha || (headValues.length > 0 && headValues.every((value) => value === expectedHeadSha));
+  return {
+    forceCheck: productRelevant,
+    productRelevant,
+    isPullRequest: env.CODEX_EVENT_NAME === 'pull_request' || Boolean(env.CODEX_PR_NUMBER),
+    npmExecuted,
+    npmExitCode,
+    runnerStatus: statusOf(runner),
+    evidenceStatus: statusOf(evidence),
+    diagnosticStatus: statusOf(diagnosticReport),
+    evidenceHeadSha,
+    diagnosticHeadSha,
+    expectedHeadSha,
+    sameHead,
+    executionEvidenceConsistent: sameDefinedValues(executionValues) && sameDefinedValues(exitValues),
+    safeSummaryOnly: true,
+  };
 }
 
 export function buildLegacySelfTestAdvisoryReport(input = parseJson(process.env.CODEX_LEGACY_SELF_TEST_ADVISORY_JSON) || {}) {

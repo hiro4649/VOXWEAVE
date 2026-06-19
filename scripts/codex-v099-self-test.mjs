@@ -7,6 +7,7 @@ import {
   buildFormalEvidencePrecedenceReport,
   buildLifeboatSemanticsReport,
   buildPlaceholderOnlyEvidenceReport,
+  buildRemoteNpmDiagnosticNormalizationInput,
   buildRemoteNpmDiagnosticNormalizationReport,
   buildLegacySelfTestAdvisoryReport,
   buildAuthSurfaceClassifierRefinementReport,
@@ -57,10 +58,28 @@ export function buildV099SelfTestReport() {
   assertCase('missing_reason_summary_fails', statusOf(report, 'safeArtifactBundleCompletenessStatus') === 'fail', failures, cases, statusOf(report, 'safeArtifactBundleCompletenessStatus'), reasonsOf(report, 'safeArtifactBundleCompletenessStatus'));
   report = buildFormalEvidencePrecedenceReport({ forceCheck: true, productRelevant: true, formalEvidence: passEvidence, remoteBaseline: passEvidence, remoteNpmDiagnostic: passEvidence, sameHeadMatch: true, npmFailure: true });
   assertCase('npm_failure_remains_fail', statusOf(report, 'formalEvidencePrecedenceStatus') === 'fail', failures, cases, statusOf(report, 'formalEvidencePrecedenceStatus'), reasonsOf(report, 'formalEvidencePrecedenceStatus'));
-  report = buildRemoteNpmDiagnosticNormalizationReport({ forceCheck: true, productRelevant: true, npmExecuted: true, npmExitCode: 0, formalEvidence: passEvidence, remoteBaseline: passEvidence, diagnosticStatus: 'superseded_by_formal_evidence' });
+  report = buildRemoteNpmDiagnosticNormalizationReport({ forceCheck: true, productRelevant: true, isPullRequest: true, npmExecuted: true, npmExitCode: 0, runnerStatus: 'pass', evidenceStatus: 'pass', diagnosticStatus: 'pass', sameHead: true, executionEvidenceConsistent: true, formalEvidence: passEvidence, remoteBaseline: passEvidence });
   assertCase('remote_npm_diagnostic_normalized_when_formal_evidence_pass', statusOf(report, 'remoteNpmDiagnosticNormalizationStatus') === 'pass', failures, cases, statusOf(report, 'remoteNpmDiagnosticNormalizationStatus'), reasonsOf(report, 'remoteNpmDiagnosticNormalizationStatus'));
   report = buildRemoteNpmDiagnosticNormalizationReport({ forceCheck: true, productRelevant: true, npmExecuted: false });
   assertCase('remote_npm_not_executed_emitted_when_npm_not_run', statusOf(report, 'remoteNpmDiagnosticNormalizationStatus') === 'fail', failures, cases, statusOf(report, 'remoteNpmDiagnosticNormalizationStatus'), reasonsOf(report, 'remoteNpmDiagnosticNormalizationStatus'));
+  const normalizationInput = buildRemoteNpmDiagnosticNormalizationInput({
+    changeClassificationStatus: { productRelevantChanged: true },
+    remoteProductEvidenceRunnerStatus: { status: 'pass', productRelevant: true, npmExecuted: true, npmExitCode: 0 },
+    productVerificationEvidenceStatus: { status: 'pass', productRelevant: true, npmExecuted: true, npmExitCode: 0, headSha: 'safehead' },
+    remoteNpmDiagnosticStatus: { status: 'pass', diagnostic: { status: 'pass', productRelevant: true, npmExecuted: true, npmExitCode: 0, headSha: 'safehead', diagnosticState: 'passed', safeFailureCategory: 'none' } },
+  }, { CODEX_EVENT_NAME: 'pull_request', CODEX_PR_HEAD_SHA: 'safehead', CODEX_REMOTE_NPM_EXECUTED: '1', CODEX_NPM_EXIT_CODE: '0' });
+  report = buildRemoteNpmDiagnosticNormalizationReport(normalizationInput);
+  assertCase('remote_npm_normalization_input_accepts_consistent_formal_evidence', statusOf(report, 'remoteNpmDiagnosticNormalizationStatus') === 'pass', failures, cases, statusOf(report, 'remoteNpmDiagnosticNormalizationStatus'), reasonsOf(report, 'remoteNpmDiagnosticNormalizationStatus'));
+  const inconsistentNormalizationInput = buildRemoteNpmDiagnosticNormalizationInput({
+    changeClassificationStatus: { productRelevantChanged: true },
+    remoteProductEvidenceRunnerStatus: { status: 'pass', productRelevant: true, npmExecuted: true, npmExitCode: 0 },
+    productVerificationEvidenceStatus: { status: 'pass', productRelevant: true, npmExecuted: false, npmExitCode: 0, headSha: 'safehead' },
+    remoteNpmDiagnosticStatus: { status: 'pass', diagnostic: { status: 'pass', productRelevant: true, npmExecuted: true, npmExitCode: 0, headSha: 'safehead', diagnosticState: 'passed', safeFailureCategory: 'none' } },
+  }, { CODEX_EVENT_NAME: 'pull_request', CODEX_PR_HEAD_SHA: 'safehead', CODEX_REMOTE_NPM_EXECUTED: '1', CODEX_NPM_EXIT_CODE: '0' });
+  report = buildRemoteNpmDiagnosticNormalizationReport(inconsistentNormalizationInput);
+  assertCase('remote_npm_normalization_rejects_execution_inconsistency', statusOf(report, 'remoteNpmDiagnosticNormalizationStatus') === 'fail' && reasonsOf(report, 'remoteNpmDiagnosticNormalizationStatus').includes('remote_npm_evidence_inconsistent'), failures, cases, statusOf(report, 'remoteNpmDiagnosticNormalizationStatus'), reasonsOf(report, 'remoteNpmDiagnosticNormalizationStatus'));
+  report = buildRemoteNpmDiagnosticNormalizationReport({ forceCheck: true, productRelevant: true, isPullRequest: true, npmExecuted: true, npmExitCode: 0, runnerStatus: 'pass', evidenceStatus: 'pass', diagnosticStatus: 'pass', sameHead: false, executionEvidenceConsistent: true });
+  assertCase('remote_npm_normalization_rejects_head_mismatch', statusOf(report, 'remoteNpmDiagnosticNormalizationStatus') === 'fail' && reasonsOf(report, 'remoteNpmDiagnosticNormalizationStatus').includes('remote_npm_evidence_head_mismatch'), failures, cases, statusOf(report, 'remoteNpmDiagnosticNormalizationStatus'), reasonsOf(report, 'remoteNpmDiagnosticNormalizationStatus'));
   report = buildLegacySelfTestAdvisoryReport({ harnessVersion: '0.9.9', selfTestFilePresent: true, localGateHasStatus: true, legacyFailureAdvisory: true });
   assertCase('legacy_self_test_advisory_for_non_active_version', statusOf(report, 'legacySelfTestAdvisoryStatus') === 'pass', failures, cases, statusOf(report, 'legacySelfTestAdvisoryStatus'), reasonsOf(report, 'legacySelfTestAdvisoryStatus'));
   report = buildLegacySelfTestAdvisoryReport({ harnessVersion: '0.9.9', selfTestFilePresent: true, localGateHasStatus: true, activeV099Failure: true });

@@ -11,6 +11,7 @@ import {
 } from './codex-v080-lib.mjs';
 
 const SAFE_CATEGORIES = new Set([
+  'none',
   'test_assertion_failure',
   'lint_failure',
   'typecheck_failure',
@@ -32,6 +33,10 @@ function numberOrNull(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function parseBool(value) {
+  return value === true || value === '1' || value === 'true' || value === 'yes';
+}
+
 function inputFromEnv(env = process.env) {
   if (env.CODEX_NPM_TEST_SAFE_SUMMARY_JSON) {
     try {
@@ -46,9 +51,17 @@ function inputFromEnv(env = process.env) {
     return parsed.value;
   }
   if (env.CODEX_NPM_EXIT_CODE || env.CODEX_NPM_SAFE_FAILURE_CATEGORY) {
+    const npmExecuted = env.CODEX_REMOTE_NPM_EXECUTED === '1';
+    const npmExitCode = numberOrNull(env.CODEX_NPM_EXIT_CODE);
     return {
-      npmExitCode: env.CODEX_NPM_EXIT_CODE,
-      safeFailureCategory: env.CODEX_NPM_SAFE_FAILURE_CATEGORY || 'unknown_npm_failure',
+      status: npmExecuted && npmExitCode === 0 ? 'pass' : 'fail',
+      productRelevant: env.CODEX_PRODUCT_RELEVANT === '1',
+      npmExecuted,
+      npmExitCode,
+      headSha: env.CODEX_PR_HEAD_SHA || env.GITHUB_SHA,
+      baseSha: env.CODEX_PR_BASE_SHA,
+      diagnosticState: !npmExecuted ? 'not_executed' : npmExitCode === 0 ? 'passed' : 'failed',
+      safeFailureCategory: env.CODEX_NPM_SAFE_FAILURE_CATEGORY || (npmExecuted && npmExitCode === 0 ? 'none' : 'unknown_npm_failure'),
       nodeMajor: env.CODEX_NODE_MAJOR,
       platform: env.CODEX_PLATFORM_LABEL,
       packageManager: env.CODEX_PACKAGE_MANAGER,
@@ -74,10 +87,23 @@ export function normalizeRemoteNpmDiagnostic(input = {}) {
   const category = SAFE_CATEGORIES.has(String(input.safeFailureCategory || input.safe_failure_category || ''))
     ? String(input.safeFailureCategory || input.safe_failure_category)
     : 'unknown_npm_failure';
+  const productRelevant = parseBool(input.productRelevant ?? input.product_relevant);
+  const npmExecuted = parseBool(input.npmExecuted ?? input.npm_executed);
+  const npmExitCode = numberOrNull(input.npmExitCode ?? input.npm_exit_code);
+  const status = String(input.status || (!productRelevant ? 'not_applicable' : npmExecuted && npmExitCode === 0 ? 'pass' : 'fail'));
+  const diagnosticState = String(input.diagnosticState || input.diagnostic_state || (
+    !productRelevant ? 'not_applicable' : !npmExecuted ? 'not_executed' : npmExitCode === 0 ? 'passed' : 'failed'
+  ));
   const diagnostic = {
     schemaVersion: '0.8.3',
     harnessVersion: HARNESS_VERSION,
-    npmExitCode: numberOrNull(input.npmExitCode ?? input.npm_exit_code),
+    status,
+    productRelevant,
+    npmExecuted,
+    npmExitCode,
+    headSha: String(input.headSha || input.head_sha || '').slice(0, 80),
+    baseSha: String(input.baseSha || input.base_sha || '').slice(0, 80),
+    diagnosticState,
     nodeMajor: numberOrNull(input.nodeMajor ?? input.node_version_major),
     platform: String(input.platform || input.platform_label || 'unknown').slice(0, 60),
     os: String(input.os || 'unknown').slice(0, 60),
@@ -108,10 +134,29 @@ export function buildRemoteNpmDiagnosticReport(env = process.env) {
   }
   const { diagnostic, unsafe } = normalizeRemoteNpmDiagnostic(input);
   if (unsafe) return simpleStatus('remoteNpmDiagnosticStatus', 'fail', { reasonCodes: ['remote_npm_diagnostic_unsafe'] });
-  const unknown = diagnostic.safeFailureCategory === 'unknown_npm_failure';
-  return simpleStatus('remoteNpmDiagnosticStatus', unknown ? 'manual_confirmation_required' : 'pass', {
+  const reasonCodes = [];
+  if (!diagnostic.productRelevant) {
+    return simpleStatus('remoteNpmDiagnosticStatus', 'not_applicable', {
+      diagnostic: { ...diagnostic, status: 'not_applicable', diagnosticState: 'not_applicable', safeFailureCategory: 'none' },
+      reasonCodes: [],
+      safeSummaryOnly: true,
+    });
+  }
+  if (!diagnostic.npmExecuted) reasonCodes.push('remote_npm_not_executed_for_product_pr');
+  if (diagnostic.npmExitCode === null) reasonCodes.push('remote_npm_diagnostic_invalid');
+  if (diagnostic.npmExecuted && diagnostic.npmExitCode !== 0 && diagnostic.safeFailureCategory === 'none') reasonCodes.push('remote_npm_diagnostic_invalid');
+  if (diagnostic.npmExecuted && diagnostic.npmExitCode === 0 && diagnostic.safeFailureCategory !== 'none') reasonCodes.push('remote_npm_diagnostic_invalid');
+  if (diagnostic.status === 'fail' && diagnostic.npmExitCode === 0 && diagnostic.safeFailureCategory !== 'none') reasonCodes.push('remote_npm_diagnostic_invalid');
+  const status = reasonCodes.length
+    ? 'fail'
+    : diagnostic.npmExitCode === 0 && diagnostic.diagnosticState === 'passed' && diagnostic.safeFailureCategory === 'none'
+      ? 'pass'
+      : 'fail';
+  if (status === 'fail' && reasonCodes.length === 0) reasonCodes.push('remote_npm_diagnostic_unknown');
+  return simpleStatus('remoteNpmDiagnosticStatus', status, {
     diagnostic,
-    reasonCodes: unknown ? ['remote_npm_diagnostic_unknown'] : [],
+    reasonCodes,
+    safeSummaryOnly: true,
   });
 }
 
