@@ -271,6 +271,21 @@ function assertArtifactUrl(value) {
   assert.equal(value.startsWith("artifact://voxweave/"), true);
 }
 
+function assertSubtitleTimingInvariants(timing) {
+  assert.equal(timing.schema, "voxweave_subtitle_timing_v1");
+  assert.equal(timing.display_start_ms <= timing.display_end_ms, true);
+  assert.equal(timing.chunks.length > 0, true);
+  let previousEnd = timing.display_start_ms;
+  for (const chunk of timing.chunks) {
+    assert.equal(chunk.start_ms >= timing.display_start_ms, true);
+    assert.equal(chunk.end_ms <= timing.display_end_ms, true);
+    assert.equal(chunk.start_ms >= previousEnd, true);
+    assert.equal(chunk.start_ms <= chunk.end_ms, true);
+    previousEnd = chunk.end_ms;
+  }
+  assert.equal(previousEnd, timing.display_end_ms);
+}
+
 function assertIntegrationBoundarySnapshot(snapshot) {
   assert.equal(snapshot.schema, "voxweave_integration_boundary_snapshot_v1");
   assert.equal(snapshot.integration_state, "boundary_defined_execution_unverified");
@@ -778,6 +793,35 @@ test("subtitle packet returns subtitle timing and segments safe shape", async ()
   assert.equal(result.subtitle_timing.script_direction, "ltr");
   assertArtifactUrl(result.artifact_url);
   assertNoForbiddenFields(result);
+});
+
+test("subtitle timing invariant matrix stays within display window", async () => {
+  const service = makeService();
+  const cases = [
+    makeSubtitlePacket({
+      subtitle_text: "One two three four five six seven eight nine ten eleven twelve.",
+      display_start_ms: 120,
+      display_end_ms: 420,
+    }),
+    makeSubtitlePacket({
+      subtitle_text: Array.from({ length: 90 }, (_, index) => `word${index}`).join(" "),
+      display_start_ms: 250,
+      display_end_ms: 2_450,
+    }),
+    makeSubtitlePacket({
+      subtitle_text: "これは安全な字幕タイミング境界を確認するための日本語テキストです。".repeat(12),
+      subtitle_language: "ja",
+      display_start_ms: 80,
+      display_end_ms: 1_880,
+    }),
+  ];
+
+  for (const packet of cases) {
+    const result = await service.orchestrate(packet, { routeKind: "subtitle" });
+    assertSubtitleTimingInvariants(result.subtitle_timing);
+    assert.equal(result.subtitle_segments.length, result.subtitle_timing.chunks.length);
+    assertNoForbiddenFields(result);
+  }
 });
 
 test("live2d packet returns safe cue and delivery without renderer endpoint", async () => {
