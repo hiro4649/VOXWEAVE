@@ -4,6 +4,13 @@ import {
   AI_CHARACTER_CONTRACT_FAMILY_COUNT,
   AI_CHARACTER_CONTRACT_REGISTRY,
 } from "../src/contracts.js";
+import {
+  assertAiCharacterResponseSafeSummary as assertAiCharacterResponseSafeSummaryFromModule,
+  buildAiCharacterContractAdapterMetadata,
+  buildAiCharacterContractPresence,
+  buildAiCharacterContractResponseGuard,
+  buildAiCharacterContractSafeSummary,
+} from "../src/aiCharacterMetadata.js";
 import { createVoxWeaveService } from "../src/orchestrator.js";
 
 const NOW = 1_777_000_000_000;
@@ -74,6 +81,38 @@ test("service health returns safe metadata and runtime boundaries", () => {
   assert.equal(health.boundaries.not_tts_engine, true);
   assert.equal(health.boundaries.not_live2d_renderer, true);
   assertNoForbiddenFields(health);
+});
+
+test("AI character metadata module builds aggregate-only safe boundary objects", () => {
+  const contractsByFamily = {
+    character_identity: {
+      schema: "voxweave_character_identity_contract_v1",
+      character_profile_id: "profile-safe",
+      safe_summary_only: true,
+      identity_source_kind: "owner_supplied",
+      identity_consent_status: "allowed",
+      identity_asset_license_status: "allowed",
+      identity_drift_risk: "low",
+    },
+  };
+  const presence = buildAiCharacterContractPresence(contractsByFamily);
+  const summary = buildAiCharacterContractSafeSummary(contractsByFamily, presence);
+  const metadata = buildAiCharacterContractAdapterMetadata(presence, summary, "tts");
+  const guard = buildAiCharacterContractResponseGuard();
+
+  assert.equal(presence.ai_character_contracts_present, true);
+  assert.equal(presence.contract_presence_count, 1);
+  assert.equal(summary.raw_identity_values_excluded, true);
+  assert.equal(metadata.adapter_kind, "tts");
+  assert.equal(metadata.runtime_execution_required, false);
+  assert.equal(guard.response_guard_applied, true);
+  assertAiCharacterResponseSafeSummaryFromModule({
+    ai_character_contract_summary: summary,
+    response_summary: {
+      ai_character_adapter_metadata: metadata,
+      ai_character_contract_response_guard: guard,
+    },
+  });
 });
 
 test("orchestrate consumes top-level text fallbacks", async () => {
