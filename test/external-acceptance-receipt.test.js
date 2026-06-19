@@ -18,6 +18,15 @@ import {
   parseExternalAcceptanceReceiptText,
   validateExternalAcceptanceReceipt,
 } from "../src/externalAcceptanceReceipt.js";
+import {
+  MAX_PRIOR_RECEIPT_QUARANTINE_CAPSULES,
+  VOXWEAVE_RECEIPT_QUARANTINE_CAPSULE_SCHEMA,
+  VOXWEAVE_RECEIPT_REPLAY_CLASSIFICATION_SCHEMA,
+  assertExternalAcceptanceReceiptQuarantineCapsuleSafe,
+  buildExternalAcceptanceReceiptQuarantineCapsule,
+  buildExternalAcceptanceReceiptReplayKey,
+  classifyExternalAcceptanceReceiptReplay,
+} from "../src/externalAcceptanceReceiptQuarantine.js";
 
 const descriptor = Object.freeze({
   candidate_bundle_version: "1.7.0",
@@ -214,6 +223,219 @@ test("binding fingerprint is deterministic and mutation-sensitive", () => {
       descriptor,
       receiptFingerprint: buildExternalAcceptanceReceiptFingerprint(safeReceipt),
       result: changed,
+    })
+  );
+});
+
+test("quarantine capsule keeps owner-provided accepted candidate under owner review", () => {
+  const validationResult = validateExternalAcceptanceReceipt(safeReceipt);
+  const bindingResult = bindExternalAcceptanceReceiptToCandidateDescriptor({
+    descriptor,
+    receipt: safeReceipt,
+    receiptTemplates,
+    receiptSourceKind: "owner_provided",
+  });
+  const capsule = buildExternalAcceptanceReceiptQuarantineCapsule({
+    validationResult,
+    bindingResult,
+    receiptFingerprint: validationResult.receipt_fingerprint,
+    bindingFingerprint: bindingResult.binding_fingerprint,
+  });
+
+  assertExternalAcceptanceReceiptQuarantineCapsuleSafe(capsule);
+  assert.equal(capsule.schema, VOXWEAVE_RECEIPT_QUARANTINE_CAPSULE_SCHEMA);
+  assert.equal(capsule.quarantine_disposition, "quarantined_for_owner_review");
+  assert.equal(capsule.owner_review_required, true);
+  assert.equal(capsule.replay_status, "new");
+  assert.equal(capsule.raw_receipt_stored, false);
+  assert.equal(capsule.actual_receipt_persisted, false);
+  assert.equal(capsule.acceptance_authority_created, false);
+  assert.equal(capsule.external_acceptance_effective, false);
+  assert.equal(capsule.external_team_acceptance_status, "not_claimed_by_quarantine");
+  assert.equal(capsule.real_integration_proof_status, "no");
+  assert.equal(capsule.runtime_readiness_claimed, false);
+  assert.equal(capsule.production_readiness_claimed, false);
+  assert.equal(capsule.safe_summary_only, true);
+  assert.equal(Object.isFrozen(capsule), true);
+});
+
+test("quarantine capsule preserves pending rejected and failed binding policy", () => {
+  const pendingReceipt = {
+    ...safeReceipt,
+    received_status: "pending",
+    parsed_status: "pending",
+    forbidden_material_absent_status: "pending",
+    expected_schema_observed_status: "pending",
+    raw_values_absent_status: "pending",
+    readiness_claim_absent_status: "pending",
+    acceptance_candidate_status: "pending",
+  };
+  const rejectedReceipt = {
+    ...safeReceipt,
+    received_status: "rejected",
+    parsed_status: "fail",
+    acceptance_candidate_status: "rejected_candidate",
+  };
+  const wrongRoleBinding = bindExternalAcceptanceReceiptToCandidateDescriptor({
+    descriptor,
+    receipt: { ...safeReceipt, recipient_role: "renderer_boundary_owner" },
+    receiptTemplates,
+    receiptSourceKind: "owner_provided",
+  });
+
+  for (const receipt of [pendingReceipt, rejectedReceipt]) {
+    const validationResult = validateExternalAcceptanceReceipt(receipt);
+    const bindingResult = bindExternalAcceptanceReceiptToCandidateDescriptor({
+      descriptor,
+      receipt,
+      receiptTemplates,
+      receiptSourceKind: "owner_provided",
+    });
+    const capsule = buildExternalAcceptanceReceiptQuarantineCapsule({
+      validationResult,
+      bindingResult,
+      receiptFingerprint: validationResult.receipt_fingerprint,
+      bindingFingerprint: bindingResult.binding_fingerprint,
+    });
+    assert.equal(capsule.quarantine_disposition, "quarantined_for_owner_review");
+    assert.equal(capsule.owner_review_required, true);
+  }
+
+  const failedCapsule = buildExternalAcceptanceReceiptQuarantineCapsule({
+    validationResult: validateExternalAcceptanceReceipt(safeReceipt),
+    bindingResult: wrongRoleBinding,
+    receiptFingerprint: buildExternalAcceptanceReceiptFingerprint(safeReceipt),
+    bindingFingerprint: wrongRoleBinding.binding_fingerprint,
+  });
+  assert.equal(failedCapsule.quarantine_disposition, "rejected_no_persistence");
+  assert.equal(failedCapsule.owner_review_required, false);
+  assert.equal(failedCapsule.actual_receipt_persisted, false);
+});
+
+test("receipt replay classifier covers duplicate rebound and collision states", () => {
+  const validationResult = validateExternalAcceptanceReceipt(safeReceipt);
+  const bindingResult = bindExternalAcceptanceReceiptToCandidateDescriptor({
+    descriptor,
+    receipt: safeReceipt,
+    receiptTemplates,
+    receiptSourceKind: "owner_provided",
+  });
+  const first = buildExternalAcceptanceReceiptQuarantineCapsule({
+    validationResult,
+    bindingResult,
+    receiptFingerprint: validationResult.receipt_fingerprint,
+    bindingFingerprint: bindingResult.binding_fingerprint,
+  });
+  const replayKey = buildExternalAcceptanceReceiptReplayKey({
+    receiptFingerprint: validationResult.receipt_fingerprint,
+    bindingFingerprint: bindingResult.binding_fingerprint,
+    candidateBundleVersion: bindingResult.candidate_bundle_version,
+    recipientProject: bindingResult.recipient_project,
+    receiptSourceKind: bindingResult.receipt_source_kind,
+    intakeDisposition: bindingResult.intake_disposition,
+  });
+  const duplicate = classifyExternalAcceptanceReceiptReplay({
+    receiptFingerprint: validationResult.receipt_fingerprint,
+    bindingFingerprint: bindingResult.binding_fingerprint,
+    replayKey,
+    priorCapsules: [first],
+  });
+  const rebound = classifyExternalAcceptanceReceiptReplay({
+    receiptFingerprint: validationResult.receipt_fingerprint,
+    bindingFingerprint: "c".repeat(64),
+    replayKey: "d".repeat(64),
+    priorCapsules: [first],
+  });
+  const collision = classifyExternalAcceptanceReceiptReplay({
+    receiptFingerprint: "e".repeat(64),
+    bindingFingerprint: bindingResult.binding_fingerprint,
+    replayKey: "f".repeat(64),
+    priorCapsules: [first],
+  });
+
+  assert.equal(duplicate.schema, VOXWEAVE_RECEIPT_REPLAY_CLASSIFICATION_SCHEMA);
+  assert.equal(duplicate.replay_status, "duplicate_same_binding");
+  assert.equal(rebound.replay_status, "receipt_fingerprint_rebound_conflict");
+  assert.equal(collision.replay_status, "binding_fingerprint_collision_conflict");
+  assert.equal(Object.isFrozen(duplicate), true);
+});
+
+test("quarantine replay guard suppresses duplicates and rejects conflicts", () => {
+  const validationResult = validateExternalAcceptanceReceipt(safeReceipt);
+  const bindingResult = bindExternalAcceptanceReceiptToCandidateDescriptor({
+    descriptor,
+    receipt: safeReceipt,
+    receiptTemplates,
+    receiptSourceKind: "owner_provided",
+  });
+  const first = buildExternalAcceptanceReceiptQuarantineCapsule({
+    validationResult,
+    bindingResult,
+    receiptFingerprint: validationResult.receipt_fingerprint,
+    bindingFingerprint: bindingResult.binding_fingerprint,
+  });
+  const duplicate = buildExternalAcceptanceReceiptQuarantineCapsule({
+    validationResult,
+    bindingResult,
+    receiptFingerprint: validationResult.receipt_fingerprint,
+    bindingFingerprint: bindingResult.binding_fingerprint,
+    priorCapsules: [first],
+  });
+  const conflict = buildExternalAcceptanceReceiptQuarantineCapsule({
+    validationResult,
+    bindingResult: { ...bindingResult, binding_fingerprint: "c".repeat(64) },
+    receiptFingerprint: validationResult.receipt_fingerprint,
+    bindingFingerprint: "c".repeat(64),
+    priorCapsules: [first],
+  });
+
+  assert.equal(duplicate.quarantine_disposition, "duplicate_suppressed");
+  assert.equal(duplicate.owner_review_required, false);
+  assert.equal(conflict.quarantine_disposition, "replay_conflict_rejected");
+  assert.equal(conflict.status, "fail");
+});
+
+test("quarantine rejects malformed prior capsules and unsafe material", () => {
+  const validationResult = validateExternalAcceptanceReceipt(safeReceipt);
+  const bindingResult = bindExternalAcceptanceReceiptToCandidateDescriptor({
+    descriptor,
+    receipt: safeReceipt,
+    receiptTemplates,
+    receiptSourceKind: "owner_provided",
+  });
+  const tooMany = Array.from({ length: MAX_PRIOR_RECEIPT_QUARANTINE_CAPSULES + 1 }, () => ({}));
+  const invalidReplay = classifyExternalAcceptanceReceiptReplay({
+    receiptFingerprint: validationResult.receipt_fingerprint,
+    bindingFingerprint: bindingResult.binding_fingerprint,
+    replayKey: "a".repeat(64),
+    priorCapsules: tooMany,
+  });
+  assert.equal(invalidReplay.replay_status, "invalid_replay_context");
+  assert.throws(() =>
+    assertExternalAcceptanceReceiptQuarantineCapsuleSafe({
+      schema: VOXWEAVE_RECEIPT_QUARANTINE_CAPSULE_SCHEMA,
+      status: "pass",
+      candidate_bundle_version: "1.7.0",
+      recipient_project: "IRIS",
+      receipt_source_kind: "owner_provided",
+      receipt_provenance_class: "owner_supplied_unverified_metadata",
+      receipt_candidate_status: "accepted_candidate",
+      intake_disposition: "trusted",
+      quarantine_disposition: "accepted",
+      owner_review_required: false,
+      receipt_fingerprint: validationResult.receipt_fingerprint,
+      binding_fingerprint: bindingResult.binding_fingerprint,
+      replay_key: "a".repeat(64),
+      replay_status: "trusted",
+      raw_receipt_stored: false,
+      actual_receipt_persisted: false,
+      acceptance_authority_created: false,
+      external_acceptance_effective: false,
+      external_team_acceptance_status: "not_claimed_by_quarantine",
+      real_integration_proof_status: "no",
+      runtime_readiness_claimed: false,
+      production_readiness_claimed: false,
+      safe_summary_only: true,
     })
   );
 });
