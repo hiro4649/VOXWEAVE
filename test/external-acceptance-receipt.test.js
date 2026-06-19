@@ -8,15 +8,19 @@ import {
   EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_POLICY_SCHEMA,
   EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_POLICY_VERSION,
   EXTERNAL_ACCEPTANCE_RECEIPT_SCHEMA,
+  EXTERNAL_ACCEPTANCE_RECEIPT_SOURCE_KINDS,
   MAX_RECEIPT_FILE_BYTES,
   MAX_RECEIPT_JSON_TEXT_LENGTH,
   MAX_RECEIPT_ROLE_LENGTH,
   MAX_RECEIPT_BUNDLE_VERSION_LENGTH,
   assertExternalAcceptanceReceiptBindingResultSafe,
+  assertExternalAcceptanceReceiptStandaloneResultSafe,
   bindExternalAcceptanceReceiptToCandidateDescriptor,
+  buildExternalAcceptanceReceiptBindingFailure,
   buildExternalAcceptanceReceiptBindingFingerprint,
   buildExternalAcceptanceReceiptFingerprint,
   decodeExternalAcceptanceReceiptBytes,
+  isExternalAcceptanceReceiptSourceKind,
   normalizeExternalAcceptanceReceiptSourceKind,
   parseExternalAcceptanceReceiptText,
   validateExternalAcceptanceReceipt,
@@ -33,9 +37,14 @@ import {
 import {
   EXTERNAL_ACCEPTANCE_RECEIPT_DRY_RUN_FIXTURE_SCHEMA,
   EXTERNAL_ACCEPTANCE_RECEIPT_DRY_RUN_PACK_SUMMARY_SCHEMA,
+  bindExternalAcceptanceReceiptToCandidateDescriptor as scriptBindExternalAcceptanceReceiptToCandidateDescriptor,
+  buildExternalAcceptanceCandidateDescriptor,
+  buildExternalAcceptanceReceiptBindingFailure as scriptBuildExternalAcceptanceReceiptBindingFailure,
   assertExternalAcceptanceReceiptDryRunFixturePackSafe,
   buildExternalAcceptanceReceiptDryRunFixturePackFingerprint,
   runExternalAcceptanceReceiptDryRunFixturePack,
+  validateExternalAcceptanceReceiptAgainstCandidate,
+  validateExternalAcceptanceReceipt as scriptValidateExternalAcceptanceReceipt,
 } from "../scripts/voxweave-loopback-integration-evidence.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -87,6 +96,17 @@ test("external receipt module exports v2 schemas and bounded constants", () => {
   assert.equal(MAX_RECEIPT_BUNDLE_VERSION_LENGTH, 32);
 });
 
+test("external receipt module exports frozen source kind authority", () => {
+  assert.deepEqual(EXTERNAL_ACCEPTANCE_RECEIPT_SOURCE_KINDS, [
+    "owner_provided",
+    "synthetic_test_only",
+    "unclassified",
+  ]);
+  assert.equal(Object.isFrozen(EXTERNAL_ACCEPTANCE_RECEIPT_SOURCE_KINDS), true);
+  assert.equal(isExternalAcceptanceReceiptSourceKind("owner_provided"), true);
+  assert.equal(isExternalAcceptanceReceiptSourceKind("externally_verified"), false);
+});
+
 test("external receipt module import has no observable runtime side effect", () => {
   assert.equal(typeof validateExternalAcceptanceReceipt, "function");
   assert.equal(typeof bindExternalAcceptanceReceiptToCandidateDescriptor, "function");
@@ -105,18 +125,43 @@ test("receipt byte decoding rejects BOM and fatal UTF-8", () => {
   assert.throws(() => decodeExternalAcceptanceReceiptBytes(Buffer.from([0xc3, 0x28])), /invalid_receipt_utf8/u);
 });
 
+test("receipt text parser accepts compact and pretty JSON whitespace only", () => {
+  const parsed = parseExternalAcceptanceReceiptText(JSON.stringify(safeReceipt, null, 2));
+  assert.deepEqual(parsed, safeReceipt);
+  assert.deepEqual(
+    parseExternalAcceptanceReceiptText(`${JSON.stringify(safeReceipt, null, 2).replace(/\n/gu, "\r\n")}\r\n`),
+    safeReceipt
+  );
+  assert.deepEqual(
+    parseExternalAcceptanceReceiptText(JSON.stringify(safeReceipt, null, "\t")),
+    safeReceipt
+  );
+});
+
 test("receipt text parser rejects duplicate keys nested values and unsafe text bounds", () => {
   assert.deepEqual(parseExternalAcceptanceReceiptText("{\"safe_summary_only\":true}"), {
     safe_summary_only: true,
   });
+  assert.throws(() => parseExternalAcceptanceReceiptText(`\uFEFF${JSON.stringify(safeReceipt)}`), /invalid_receipt_bom/u);
+  assert.throws(() => parseExternalAcceptanceReceiptText(`{"schema":"bad${String.fromCharCode(0xfeff)}"}`), /invalid_receipt_bom/u);
+  assert.throws(() => decodeExternalAcceptanceReceiptBytes(Buffer.from([0xc3, 0x28])), /invalid_receipt_utf8/u);
+  assert.throws(() => parseExternalAcceptanceReceiptText(`{"schema":"bad${String.fromCharCode(1)}"}`), /invalid_receipt_utf8|invalid_receipt_json/u);
   assert.throws(() => parseExternalAcceptanceReceiptText("{\"schema\":\"a\",\"schema\":\"b\"}"), /invalid_receipt_duplicate_key/u);
   assert.throws(() => parseExternalAcceptanceReceiptText("{\"recipient_project\":\"IRIS\",\"recipient\\u005fproject\":\"LIVE2D\"}"), /invalid_receipt_duplicate_key/u);
   assert.throws(() => parseExternalAcceptanceReceiptText("{\"schema\":{\"nested\":true}}"), /invalid_receipt_nested_value/u);
   assert.throws(() => parseExternalAcceptanceReceiptText(" ".repeat(MAX_RECEIPT_JSON_TEXT_LENGTH + 1)), /invalid_receipt_file_size/u);
+  assert.throws(
+    () => validateExternalAcceptanceReceipt({
+      ...safeReceipt,
+      recipient_role: "adapter\\npacket",
+    }),
+    /invalid_receipt_role/u
+  );
 });
 
 test("standalone safe receipt validates and fingerprints deterministically", () => {
   const result = validateExternalAcceptanceReceipt(safeReceipt);
+  assertExternalAcceptanceReceiptStandaloneResultSafe(result);
   assert.equal(result.status, "pass");
   assert.equal(result.acceptance_candidate_status, "accepted_candidate");
   assert.match(result.receipt_fingerprint, /^[a-f0-9]{64}$/u);
@@ -153,6 +198,19 @@ test("owner-provided accepted candidate binds as unverified without authority", 
   assert.equal(result.external_acceptance_effective, false);
   assert.equal(result.external_team_acceptance_status, "not_claimed_by_validator");
   assert.equal(result.primary_reason_code, "none");
+});
+
+test("invalid source kind binding failure is safe and fail closed", () => {
+  const result = buildExternalAcceptanceReceiptBindingFailure({
+    receiptSourceKind: "externally_verified",
+    receipt: safeReceipt,
+    reasonCode: "invalid_receipt_source_kind",
+  });
+  assertExternalAcceptanceReceiptBindingResultSafe(result);
+  assert.equal(result.status, "fail");
+  assert.equal(result.receipt_source_kind, "unclassified");
+  assert.equal(result.receipt_source_status, "fail");
+  assert.equal(result.primary_reason_code, "invalid_receipt_source_kind");
 });
 
 test("synthetic and unclassified accepted claims are rejected", () => {
@@ -237,6 +295,109 @@ test("binding fingerprint is deterministic and mutation-sensitive", () => {
       result: changed,
     })
   );
+});
+
+test("script public receipt exports are module single-source aliases", () => {
+  assert.equal(scriptValidateExternalAcceptanceReceipt, validateExternalAcceptanceReceipt);
+  assert.equal(
+    scriptBindExternalAcceptanceReceiptToCandidateDescriptor,
+    bindExternalAcceptanceReceiptToCandidateDescriptor
+  );
+  assert.equal(
+    scriptBuildExternalAcceptanceReceiptBindingFailure,
+    buildExternalAcceptanceReceiptBindingFailure
+  );
+});
+
+test("script candidate wrapper matches module binding reasons for receipt cases", async () => {
+  const bundle = await readCandidateBundleFixture();
+  const descriptorForBundle = buildExternalAcceptanceCandidateDescriptor(bundle);
+  const bundleReceipt = {
+    ...safeReceipt,
+    recipient_project: "IRIS",
+    recipient_role: bundle.receipts.find((receipt) => receipt.recipient_project === "IRIS").recipient_role,
+    candidate_bundle_version: descriptorForBundle.candidate_bundle_version,
+    source_main_sha: descriptorForBundle.runtime_source_head_sha,
+    candidate_bundle_fingerprint: descriptorForBundle.candidate_bundle_fingerprint,
+  };
+  const cases = [
+    ["owner-provided accepted candidate", bundleReceipt, "owner_provided"],
+    ["owner-provided pending", {
+      ...bundleReceipt,
+      received_status: "pending",
+      parsed_status: "pending",
+      forbidden_material_absent_status: "pending",
+      expected_schema_observed_status: "pending",
+      raw_values_absent_status: "pending",
+      readiness_claim_absent_status: "pending",
+      acceptance_candidate_status: "pending",
+    }, "owner_provided"],
+    ["owner-provided rejected", {
+      ...bundleReceipt,
+      received_status: "rejected",
+      parsed_status: "fail",
+      acceptance_candidate_status: "rejected_candidate",
+    }, "owner_provided"],
+    ["synthetic accepted", bundleReceipt, "synthetic_test_only"],
+    ["unclassified accepted", bundleReceipt, "unclassified"],
+    ["invalid source kind", bundleReceipt, "externally_verified"],
+    ["wrong version", { ...bundleReceipt, candidate_bundle_version: "1.0.0" }, "owner_provided"],
+    ["wrong source SHA", { ...bundleReceipt, source_main_sha: "a".repeat(40) }, "owner_provided"],
+    ["wrong fingerprint", { ...bundleReceipt, candidate_bundle_fingerprint: "b".repeat(64) }, "owner_provided"],
+    ["wrong recipient role", { ...bundleReceipt, recipient_role: "renderer_boundary_owner" }, "owner_provided"],
+    ["unsafe receipt", { ...bundleReceipt, raw_audio: "blocked" }, "owner_provided"],
+    ["invalid state", { ...bundleReceipt, received_status: "pending" }, "owner_provided"],
+  ];
+
+  for (const [, receipt, receiptSourceKind] of cases) {
+    const scriptResult = validateExternalAcceptanceReceiptAgainstCandidate({
+      ...bundle,
+      receipt,
+      receiptSourceKind,
+    });
+    const moduleResult = bindExternalAcceptanceReceiptToCandidateDescriptor({
+      descriptor: descriptorForBundle,
+      receipt,
+      receiptTemplates: bundle.receipts,
+      receiptSourceKind,
+    });
+    assertExternalAcceptanceReceiptBindingResultSafe(scriptResult);
+    assert.deepEqual(
+      pickBindingParityFields(scriptResult),
+      pickBindingParityFields(moduleResult)
+    );
+  }
+
+  const unknownDescriptorResult = bindExternalAcceptanceReceiptToCandidateDescriptor({
+    descriptor: null,
+    receipt: bundleReceipt,
+    receiptTemplates: bundle.receipts,
+    receiptSourceKind: "owner_provided",
+  });
+  assert.equal(unknownDescriptorResult.primary_reason_code, "candidate_receipt_binding_invalid");
+});
+
+test("script source has no duplicate receipt implementation declarations", async () => {
+  const scriptSource = await readFile("scripts/voxweave-loopback-integration-evidence.mjs", "utf8");
+  for (const functionName of [
+    "validateExternalAcceptanceReceipt",
+    "buildExternalAcceptanceReceiptFingerprint",
+    "buildReceiptBindingResult",
+    "applyReceiptStatePolicy",
+    "assertReceiptStateCoherence",
+    "assertReceiptPlainScalarObject",
+    "assertNoDuplicateTopLevelReceiptKeys",
+    "parseJsonStringToken",
+    "buildReceiptBindingFingerprint",
+  ]) {
+    assert.equal(
+      new RegExp(`function\\s+${functionName}\\s*\\(`, "u").test(scriptSource),
+      false,
+      functionName
+    );
+  }
+  assert.match(scriptSource, /externalReceiptModule\.bindExternalAcceptanceReceiptToCandidateDescriptor/u);
+  assert.match(scriptSource, /externalReceiptModule\.buildExternalAcceptanceReceiptBindingFailure/u);
 });
 
 test("quarantine capsule keeps owner-provided accepted candidate under owner review", () => {
@@ -552,3 +713,55 @@ test("redacted receipt dry-run fixture pack CLI emits one safe JSON summary", as
   assert.equal(summary.actual_receipt_generated, false);
   assert.equal(summary.external_acceptance_claimed, false);
 });
+
+async function readCandidateBundleFixture() {
+  const manifest = await readJson(
+    "test/fixtures/external-acceptance/voxweave-external-acceptance-candidate.manifest.safe.json"
+  );
+  const receipts = await Promise.all(
+    manifest.receipt_templates.map((fixturePath) => readJson(fixturePath))
+  );
+  const readmeText = await readFile(
+    "test/fixtures/external-acceptance/README.safe.md",
+    "utf8"
+  );
+  const checklist = await readJson(manifest.pre_send_checklist_path);
+  const decisionBrief = await readJson(manifest.owner_send_decision_brief_template_path);
+  const attachmentManifest = await readJson(manifest.proposed_attachment_manifest_path);
+  const fixtureManifest = await readJson(manifest.fixture_manifest_path);
+  const fixtures = await Promise.all(
+    manifest.fixture_files.map(async (fixturePath) => ({
+      path: fixturePath,
+      content: await readJson(fixturePath),
+    }))
+  );
+  return {
+    manifest,
+    receipts,
+    readmeText,
+    checklist,
+    decisionBrief,
+    attachmentManifest,
+    fixtureManifest,
+    fixtures,
+  };
+}
+
+async function readJson(path) {
+  return JSON.parse(await readFile(path, "utf8"));
+}
+
+function pickBindingParityFields(result) {
+  return {
+    status: result.status,
+    primary_reason_code: result.primary_reason_code,
+    intake_disposition: result.intake_disposition,
+    receipt_source_status: result.receipt_source_status,
+    receipt_state_status: result.receipt_state_status,
+    acceptance_claim_policy_status: result.acceptance_claim_policy_status,
+    recipient_project: result.recipient_project,
+    candidate_bundle_version: result.candidate_bundle_version,
+    receipt_candidate_status: result.receipt_candidate_status,
+    binding_fingerprint: result.binding_fingerprint,
+  };
+}

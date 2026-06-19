@@ -35,24 +35,51 @@ export const LOOPBACK_INTEGRATION_FAILURE_MATRIX_SCHEMA =
 export const EXTERNAL_ACCEPTANCE_CANDIDATE_BUNDLE_SUMMARY_SCHEMA =
   "voxweave_external_acceptance_candidate_bundle_summary_v1";
 export const EXTERNAL_ACCEPTANCE_RECEIPT_SCHEMA =
-  "voxweave_external_acceptance_receipt_v1";
+  externalReceiptModule.EXTERNAL_ACCEPTANCE_RECEIPT_SCHEMA;
 export const EXTERNAL_ACCEPTANCE_CANDIDATE_DESCRIPTOR_SCHEMA =
   "voxweave_external_acceptance_candidate_descriptor_v1";
 export const EXTERNAL_ACCEPTANCE_RECEIPT_BINDING_RESULT_SCHEMA =
-  "voxweave_external_acceptance_receipt_binding_result_v2";
+  externalReceiptModule.EXTERNAL_ACCEPTANCE_RECEIPT_BINDING_RESULT_SCHEMA;
 export const EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_POLICY_SCHEMA =
-  "voxweave_external_acceptance_receipt_intake_policy_v1";
+  externalReceiptModule.EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_POLICY_SCHEMA;
 export const EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_MATRIX_SCHEMA =
   "voxweave_external_acceptance_receipt_intake_matrix_v1";
 export const EXTERNAL_ACCEPTANCE_RECEIPT_DRY_RUN_FIXTURE_SCHEMA =
   "voxweave_external_acceptance_receipt_dry_run_fixture_v1";
 export const EXTERNAL_ACCEPTANCE_RECEIPT_DRY_RUN_PACK_SUMMARY_SCHEMA =
   "voxweave_external_acceptance_receipt_dry_run_pack_summary_v1";
-export const EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_POLICY_VERSION = 1;
-export const MAX_RECEIPT_FILE_BYTES = 32768;
-export const MAX_RECEIPT_JSON_TEXT_LENGTH = 32768;
-export const MAX_RECEIPT_ROLE_LENGTH = 64;
-export const MAX_RECEIPT_BUNDLE_VERSION_LENGTH = 32;
+export const EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_POLICY_VERSION =
+  externalReceiptModule.EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_POLICY_VERSION;
+export const MAX_RECEIPT_FILE_BYTES = externalReceiptModule.MAX_RECEIPT_FILE_BYTES;
+export const MAX_RECEIPT_JSON_TEXT_LENGTH =
+  externalReceiptModule.MAX_RECEIPT_JSON_TEXT_LENGTH;
+export const MAX_RECEIPT_ROLE_LENGTH = externalReceiptModule.MAX_RECEIPT_ROLE_LENGTH;
+export const MAX_RECEIPT_BUNDLE_VERSION_LENGTH =
+  externalReceiptModule.MAX_RECEIPT_BUNDLE_VERSION_LENGTH;
+export const EXTERNAL_ACCEPTANCE_RECEIPT_SOURCE_KINDS =
+  externalReceiptModule.EXTERNAL_ACCEPTANCE_RECEIPT_SOURCE_KINDS;
+export const isExternalAcceptanceReceiptSourceKind =
+  externalReceiptModule.isExternalAcceptanceReceiptSourceKind;
+export const normalizeExternalAcceptanceReceiptSourceKind =
+  externalReceiptModule.normalizeExternalAcceptanceReceiptSourceKind;
+export const decodeExternalAcceptanceReceiptBytes =
+  externalReceiptModule.decodeExternalAcceptanceReceiptBytes;
+export const parseExternalAcceptanceReceiptText =
+  externalReceiptModule.parseExternalAcceptanceReceiptText;
+export const validateExternalAcceptanceReceipt =
+  externalReceiptModule.validateExternalAcceptanceReceipt;
+export const buildExternalAcceptanceReceiptFingerprint =
+  externalReceiptModule.buildExternalAcceptanceReceiptFingerprint;
+export const bindExternalAcceptanceReceiptToCandidateDescriptor =
+  externalReceiptModule.bindExternalAcceptanceReceiptToCandidateDescriptor;
+export const buildExternalAcceptanceReceiptBindingFingerprint =
+  externalReceiptModule.buildExternalAcceptanceReceiptBindingFingerprint;
+export const buildExternalAcceptanceReceiptBindingFailure =
+  externalReceiptModule.buildExternalAcceptanceReceiptBindingFailure;
+export const assertExternalAcceptanceReceiptStandaloneResultSafe =
+  externalReceiptModule.assertExternalAcceptanceReceiptStandaloneResultSafe;
+export const assertExternalAcceptanceReceiptBindingResultSafe =
+  externalReceiptModule.assertExternalAcceptanceReceiptBindingResultSafe;
 
 const execFileAsync = promisify(execFile);
 const LOOPBACK_HOST = "127.0.0.1";
@@ -375,16 +402,7 @@ const EXPECTED_RECEIPT_DRY_RUN_FIXTURE_FILES = Object.freeze([
   `${RECEIPT_DRY_RUN_FIXTURE_BASE}duplicate-replay.fixture.safe.json`,
   `${RECEIPT_DRY_RUN_FIXTURE_BASE}rebound-conflict.fixture.safe.json`,
 ]);
-const ALLOWED_RECEIPT_SOURCE_KINDS = new Set([
-  "owner_provided",
-  "synthetic_test_only",
-  "unclassified",
-]);
-const RECEIPT_PROVENANCE_CLASS_BY_SOURCE_KIND = Object.freeze({
-  owner_provided: "owner_supplied_unverified_metadata",
-  synthetic_test_only: "synthetic_non_authoritative",
-  unclassified: "unclassified_non_authoritative",
-});
+const ALLOWED_RECEIPT_SOURCE_KINDS = new Set(EXTERNAL_ACCEPTANCE_RECEIPT_SOURCE_KINDS);
 const CANDIDATE_DESCRIPTOR_FIELDS = Object.freeze([
   "schema",
   "status",
@@ -403,65 +421,6 @@ const CANDIDATE_DESCRIPTOR_FIELDS = Object.freeze([
   "production_readiness_claimed",
   "safe_summary_only",
 ]);
-const RECEIPT_BINDING_RESULT_FIELDS = Object.freeze([
-  "schema",
-  "status",
-  "intake_policy_schema",
-  "intake_policy_version",
-  "validation_scope",
-  "receipt_source_kind",
-  "receipt_provenance_class",
-  "receipt_source_status",
-  "receipt_state_status",
-  "acceptance_claim_policy_status",
-  "acceptance_authority_created",
-  "external_acceptance_effective",
-  "intake_disposition",
-  "recipient_project",
-  "candidate_bundle_version",
-  "source_head_binding_status",
-  "bundle_version_binding_status",
-  "bundle_fingerprint_binding_status",
-  "recipient_template_binding_status",
-  "recipient_role_binding_status",
-  "receipt_safety_status",
-  "receipt_candidate_status",
-  "external_team_acceptance_status",
-  "real_integration_proof_status",
-  "primary_reason_code",
-  "binding_fingerprint_algorithm",
-  "binding_fingerprint",
-  "runtime_readiness_claimed",
-  "production_readiness_claimed",
-  "safe_summary_only",
-]);
-const EXTERNAL_ACCEPTANCE_RECEIPT_FIELDS = Object.freeze([
-  "schema",
-  "recipient_project",
-  "recipient_role",
-  "candidate_bundle_version",
-  "source_main_sha",
-  "candidate_bundle_fingerprint",
-  "received_status",
-  "parsed_status",
-  "forbidden_material_absent_status",
-  "expected_schema_observed_status",
-  "raw_values_absent_status",
-  "readiness_claim_absent_status",
-  "acceptance_candidate_status",
-  "real_integration_proof_status",
-  "runtime_readiness_claimed",
-  "production_readiness_claimed",
-  "safe_summary_only",
-]);
-const RECEIPT_PASS_PENDING_STATUSES = new Set(["pass", "fail", "pending"]);
-const RECEIPT_RECEIVED_STATUSES = new Set(["received", "rejected", "pending"]);
-const RECEIPT_ACCEPTANCE_STATUSES = new Set([
-  "accepted_candidate",
-  "rejected_candidate",
-  "pending",
-]);
-const RECEIPT_REAL_PROOF_STATUSES = new Set(["no", "not_claimed"]);
 const RECEIPT_INTAKE_DISPOSITIONS = new Set([
   "bound_pending",
   "bound_rejected",
@@ -814,14 +773,6 @@ export function validateExternalAcceptanceReceiptAgainstCandidate({
   fixtures,
   receiptSourceKind = "unclassified",
 }) {
-  const normalizedSourceKind = receiptSourceKind ?? "unclassified";
-  if (!ALLOWED_RECEIPT_SOURCE_KINDS.has(normalizedSourceKind)) {
-    return buildFailedReceiptBindingResult({
-      receiptSourceKind: "unclassified",
-      receipt,
-      reasonCode: "invalid_receipt_source_kind",
-    });
-  }
   try {
     const descriptor = buildExternalAcceptanceCandidateDescriptor({
       manifest,
@@ -833,266 +784,19 @@ export function validateExternalAcceptanceReceiptAgainstCandidate({
       fixtureManifest,
       fixtures,
     });
-    const standalone = validateExternalAcceptanceReceipt(receipt);
-    const template = receipts.find(
-      (candidateReceipt) => candidateReceipt.recipient_project === receipt.recipient_project
-    );
-    const result = buildReceiptBindingResult({
-      status: "pass",
-      receiptSourceKind: normalizedSourceKind,
-      recipientProject: receipt.recipient_project,
-      candidateBundleVersion: descriptor.candidate_bundle_version,
-      source_head_binding_status:
-        receipt.source_main_sha === descriptor.runtime_source_head_sha ? "pass" : "fail",
-      bundle_version_binding_status:
-        receipt.candidate_bundle_version === descriptor.candidate_bundle_version ? "pass" : "fail",
-      bundle_fingerprint_binding_status:
-        receipt.candidate_bundle_fingerprint === descriptor.candidate_bundle_fingerprint ? "pass" : "fail",
-      recipient_template_binding_status: template ? "pass" : "fail",
-      recipient_role_binding_status: template?.recipient_role === receipt.recipient_role ? "pass" : "fail",
-      receipt_safety_status: standalone.status === "pass" ? "pass" : "fail",
-      receipt_candidate_status: receipt.acceptance_candidate_status,
-      primary_reason_code: "none",
-    });
-    applyReceiptStatePolicy(result, receipt, normalizedSourceKind);
-    result.primary_reason_code = receiptBindingReason(result);
-    result.status = result.primary_reason_code === "none" ? "pass" : "fail";
-    result.intake_disposition = receiptIntakeDisposition(result);
-    result.binding_fingerprint = buildReceiptBindingFingerprint({
+    return externalReceiptModule.bindExternalAcceptanceReceiptToCandidateDescriptor({
       descriptor,
-      receiptFingerprint: standalone.receipt_fingerprint,
-      result,
-    });
-    assertExternalAcceptanceReceiptBindingResultSafe(result);
-    return result;
-  } catch (error) {
-    return buildFailedReceiptBindingResult({
-      receiptSourceKind: normalizedSourceKind,
       receipt,
-      reasonCode: receiptBindingErrorReason(error),
+      receiptTemplates: receipts,
+      receiptSourceKind,
+    });
+  } catch (error) {
+    return externalReceiptModule.buildExternalAcceptanceReceiptBindingFailure({
+      receiptSourceKind,
+      receipt,
+      reasonCode: safeReceiptCandidateBindingReason(error),
     });
   }
-}
-
-export function validateExternalAcceptanceReceipt(receipt) {
-  assertReceiptPlainScalarObject(receipt);
-  if (!receipt || typeof receipt !== "object" || Array.isArray(receipt)) {
-    throw new Error("invalid_receipt_object");
-  }
-  const keys = Object.keys(receipt).sort();
-  const allowed = [...EXTERNAL_ACCEPTANCE_RECEIPT_FIELDS].sort();
-  if (JSON.stringify(keys) !== JSON.stringify(allowed)) {
-    throw new Error("invalid_receipt_fields");
-  }
-  scanExternalAcceptanceReceiptSafe(receipt);
-  if (receipt.schema !== EXTERNAL_ACCEPTANCE_RECEIPT_SCHEMA) {
-    throw new Error("invalid_receipt_schema");
-  }
-  if (!["IRIS", "LIVE2D"].includes(receipt.recipient_project)) {
-    throw new Error("invalid_receipt_recipient");
-  }
-  if (!/^[A-Za-z0-9_.:-]{1,64}$/u.test(receipt.recipient_role)) {
-    throw new Error("invalid_receipt_role");
-  }
-  if (
-    receipt.candidate_bundle_version.length > MAX_RECEIPT_BUNDLE_VERSION_LENGTH ||
-    !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u.test(receipt.candidate_bundle_version)
-  ) {
-    throw new Error("invalid_receipt_bundle_version");
-  }
-  if (!/^[a-f0-9]{40}$/u.test(receipt.source_main_sha)) {
-    throw new Error("invalid_receipt_source_head");
-  }
-  if (!/^[a-f0-9]{64}$/u.test(receipt.candidate_bundle_fingerprint)) {
-    throw new Error("invalid_receipt_fingerprint");
-  }
-  if (!RECEIPT_RECEIVED_STATUSES.has(receipt.received_status)) {
-    throw new Error("invalid_receipt_received_status");
-  }
-  for (const key of [
-    "parsed_status",
-    "forbidden_material_absent_status",
-    "expected_schema_observed_status",
-    "raw_values_absent_status",
-    "readiness_claim_absent_status",
-  ]) {
-    if (!RECEIPT_PASS_PENDING_STATUSES.has(receipt[key])) {
-      throw new Error("invalid_receipt_safety_status");
-    }
-  }
-  if (!RECEIPT_ACCEPTANCE_STATUSES.has(receipt.acceptance_candidate_status)) {
-    throw new Error("invalid_receipt_acceptance_status");
-  }
-  if (!RECEIPT_REAL_PROOF_STATUSES.has(receipt.real_integration_proof_status)) {
-    throw new Error("invalid_receipt_real_proof_status");
-  }
-  if (
-    receipt.runtime_readiness_claimed !== false ||
-    receipt.production_readiness_claimed !== false ||
-    receipt.safe_summary_only !== true
-  ) {
-    throw new Error("unsafe_receipt_readiness");
-  }
-  if (receipt.acceptance_candidate_status === "accepted_candidate") {
-    const allSafetyPass = [
-      receipt.parsed_status,
-      receipt.forbidden_material_absent_status,
-      receipt.expected_schema_observed_status,
-      receipt.raw_values_absent_status,
-      receipt.readiness_claim_absent_status,
-    ].every((status) => status === "pass");
-    if (!allSafetyPass) throw new Error("unsafe_receipt_acceptance_status");
-  }
-  assertReceiptStateCoherence(receipt);
-  return {
-    status: "pass",
-    acceptance_candidate_status: receipt.acceptance_candidate_status,
-    recipient_project: receipt.recipient_project,
-    receipt_fingerprint: buildExternalAcceptanceReceiptFingerprint(receipt),
-  };
-}
-
-function buildReceiptBindingResult({
-  status,
-  receiptSourceKind,
-  recipientProject,
-  candidateBundleVersion,
-  source_head_binding_status,
-  bundle_version_binding_status,
-  bundle_fingerprint_binding_status,
-  recipient_template_binding_status,
-  recipient_role_binding_status,
-  receipt_safety_status,
-  receipt_candidate_status,
-  primary_reason_code,
-}) {
-  return {
-    schema: EXTERNAL_ACCEPTANCE_RECEIPT_BINDING_RESULT_SCHEMA,
-    status,
-    intake_policy_schema: EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_POLICY_SCHEMA,
-    intake_policy_version: EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_POLICY_VERSION,
-    validation_scope: "candidate_bound",
-    receipt_source_kind: receiptSourceKind,
-    receipt_provenance_class: RECEIPT_PROVENANCE_CLASS_BY_SOURCE_KIND[receiptSourceKind],
-    receipt_source_status: "pass",
-    receipt_state_status: "pass",
-    acceptance_claim_policy_status: "pass",
-    acceptance_authority_created: false,
-    external_acceptance_effective: false,
-    intake_disposition: "rejected",
-    recipient_project: ["IRIS", "LIVE2D"].includes(recipientProject) ? recipientProject : "unknown",
-    candidate_bundle_version: candidateBundleVersion,
-    source_head_binding_status,
-    bundle_version_binding_status,
-    bundle_fingerprint_binding_status,
-    recipient_template_binding_status,
-    recipient_role_binding_status,
-    receipt_safety_status,
-    receipt_candidate_status,
-    external_team_acceptance_status: "not_claimed_by_validator",
-    real_integration_proof_status: "no",
-    primary_reason_code,
-    binding_fingerprint_algorithm: "sha256",
-    binding_fingerprint: "",
-    runtime_readiness_claimed: false,
-    production_readiness_claimed: false,
-    safe_summary_only: true,
-  };
-}
-
-function applyReceiptStatePolicy(result, receipt, receiptSourceKind) {
-  try {
-    assertReceiptStateCoherence(receipt);
-  } catch {
-    result.receipt_state_status = "fail";
-    result.primary_reason_code = "invalid_receipt_state";
-  }
-  if (
-    receipt.acceptance_candidate_status === "accepted_candidate" &&
-    receiptSourceKind === "synthetic_test_only"
-  ) {
-    result.acceptance_claim_policy_status = "fail";
-    result.primary_reason_code = "synthetic_receipt_acceptance_claim_forbidden";
-  }
-  if (
-    receipt.acceptance_candidate_status === "accepted_candidate" &&
-    receiptSourceKind === "unclassified"
-  ) {
-    result.acceptance_claim_policy_status = "fail";
-    result.primary_reason_code = "receipt_acceptance_claim_requires_owner_provenance";
-  }
-}
-
-function receiptIntakeDisposition(result) {
-  if (result.status !== "pass") return "rejected";
-  if (result.receipt_candidate_status === "accepted_candidate") {
-    return "bound_accepted_candidate_unverified";
-  }
-  if (result.receipt_candidate_status === "rejected_candidate") return "bound_rejected";
-  return "bound_pending";
-}
-
-function assertReceiptStateCoherence(receipt) {
-  const safetyStatuses = [
-    receipt.parsed_status,
-    receipt.forbidden_material_absent_status,
-    receipt.expected_schema_observed_status,
-    receipt.raw_values_absent_status,
-    receipt.readiness_claim_absent_status,
-  ];
-  if (receipt.acceptance_candidate_status === "accepted_candidate") {
-    if (receipt.received_status !== "received") throw new Error("invalid_receipt_state");
-    if (!safetyStatuses.every((status) => status === "pass")) {
-      throw new Error("invalid_receipt_state");
-    }
-    return;
-  }
-  if (receipt.acceptance_candidate_status === "pending") {
-    if (!["pending", "received"].includes(receipt.received_status)) {
-      throw new Error("invalid_receipt_state");
-    }
-    return;
-  }
-  if (receipt.acceptance_candidate_status === "rejected_candidate") {
-    if (!["received", "rejected"].includes(receipt.received_status)) {
-      throw new Error("invalid_receipt_state");
-    }
-  }
-}
-
-function assertReceiptPlainScalarObject(receipt) {
-  if (!receipt || typeof receipt !== "object" || Array.isArray(receipt)) {
-    throw new Error("invalid_receipt_object");
-  }
-  const prototype = Object.getPrototypeOf(receipt);
-  if (prototype !== Object.prototype && prototype !== null) {
-    throw new Error("invalid_receipt_object");
-  }
-  for (const [key, value] of Object.entries(receipt)) {
-    assertSafeReceiptString(key, "invalid_receipt_fields");
-    if (typeof value !== "string" && typeof value !== "boolean") {
-      throw new Error("invalid_receipt_scalar");
-    }
-    if (typeof value === "string") assertSafeReceiptString(value, "invalid_receipt_scalar");
-  }
-}
-
-function assertSafeReceiptString(value, reasonCode) {
-  if (value.trim() !== value || value.length === 0) throw new Error(reasonCode);
-  if (/[\u0000-\u001f\u007f\uFEFF\uFFFD]/u.test(value)) throw new Error(reasonCode);
-  if (/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(value)) {
-    throw new Error(reasonCode);
-  }
-}
-
-export function buildExternalAcceptanceReceiptFingerprint(receipt) {
-  const canonical = {};
-  for (const key of [...EXTERNAL_ACCEPTANCE_RECEIPT_FIELDS].sort()) {
-    if (!Object.hasOwn(receipt, key)) throw new Error("invalid_receipt_fields");
-    canonical[key] = receipt[key];
-  }
-  scanExternalAcceptanceReceiptSafe(canonical);
-  return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
 }
 
 export function assertExternalAcceptanceCandidateDescriptorSafe(descriptor) {
@@ -1116,40 +820,6 @@ export function assertExternalAcceptanceCandidateDescriptorSafe(descriptor) {
     throw new Error("unsafe_candidate_descriptor_value");
   }
   return descriptor;
-}
-
-export function assertExternalAcceptanceReceiptBindingResultSafe(result) {
-  assertExactFields(result, RECEIPT_BINDING_RESULT_FIELDS, "unsafe_receipt_binding_fields");
-  scanEvidenceSafe(result);
-  if (result.schema !== EXTERNAL_ACCEPTANCE_RECEIPT_BINDING_RESULT_SCHEMA) {
-    throw new Error("unsafe_receipt_binding_schema");
-  }
-  if (
-    !["pass", "fail"].includes(result.status) ||
-    result.intake_policy_schema !== EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_POLICY_SCHEMA ||
-    result.intake_policy_version !== EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_POLICY_VERSION ||
-    result.validation_scope !== "candidate_bound" ||
-    !ALLOWED_RECEIPT_SOURCE_KINDS.has(result.receipt_source_kind) ||
-    result.receipt_provenance_class !== RECEIPT_PROVENANCE_CLASS_BY_SOURCE_KIND[result.receipt_source_kind] ||
-    !["pass", "fail"].includes(result.receipt_source_status) ||
-    !["pass", "fail"].includes(result.receipt_state_status) ||
-    !["pass", "fail"].includes(result.acceptance_claim_policy_status) ||
-    result.acceptance_authority_created !== false ||
-    result.external_acceptance_effective !== false ||
-    !RECEIPT_INTAKE_DISPOSITIONS.has(result.intake_disposition) ||
-    !["IRIS", "LIVE2D", "unknown"].includes(result.recipient_project) ||
-    !/^(unknown|[0-9]+\.[0-9]+\.[0-9]+)$/u.test(result.candidate_bundle_version) ||
-    result.external_team_acceptance_status !== "not_claimed_by_validator" ||
-    result.real_integration_proof_status !== "no" ||
-    result.binding_fingerprint_algorithm !== "sha256" ||
-    !/^[a-f0-9]{64}$/u.test(result.binding_fingerprint) ||
-    result.runtime_readiness_claimed !== false ||
-    result.production_readiness_claimed !== false ||
-    result.safe_summary_only !== true
-  ) {
-    throw new Error("unsafe_receipt_binding_value");
-  }
-  return result;
 }
 
 export function assertExternalAcceptanceCandidateBundleSummarySafe(summary) {
@@ -1337,16 +1007,16 @@ export async function runExternalAcceptanceReceiptIntakeMatrix({
       "candidate_bundle_fingerprint_mismatch"],
     ["binding", bindingReason(bundle, { ...acceptedReceipt, recipient_role: "renderer_boundary_owner" }, "owner_provided") ===
       "candidate_recipient_role_mismatch"],
-    ["encoding", throwsReason(() => decodeReceiptUtf8(Buffer.from([0xc3, 0x28])), "invalid_receipt_utf8")],
-    ["encoding", throwsReason(() => decodeReceiptUtf8(Buffer.from([0xef, 0xbb, 0xbf, 0x7b, 0x7d])), "invalid_receipt_bom")],
+    ["encoding", throwsReason(() => decodeExternalAcceptanceReceiptBytes(Buffer.from([0xc3, 0x28])), "invalid_receipt_utf8")],
+    ["encoding", throwsReason(() => decodeExternalAcceptanceReceiptBytes(Buffer.from([0xef, 0xbb, 0xbf, 0x7b, 0x7d])), "invalid_receipt_bom")],
     ["encoding", throwsReason(
-      () => assertReceiptJsonTextSafe(`{"schema":"bad${String.fromCharCode(0xfeff)}"}`),
+      () => parseExternalAcceptanceReceiptText(`{"schema":"bad${String.fromCharCode(0xfeff)}"}`),
       "invalid_receipt_bom"
     )],
-    ["duplicate", throwsReason(() => assertNoDuplicateTopLevelReceiptKeys("{\"schema\":\"a\",\"schema\":\"b\"}"), "invalid_receipt_duplicate_key")],
-    ["duplicate", throwsReason(() => assertNoDuplicateTopLevelReceiptKeys("{\"recipient_project\":\"IRIS\",\"recipient\\u005fproject\":\"LIVE2D\"}"), "invalid_receipt_duplicate_key")],
-    ["duplicate", throwsReason(() => assertNoDuplicateTopLevelReceiptKeys("{\"schema\":{\"nested\":true}}"), "invalid_receipt_nested_value")],
-    ["size", throwsReason(() => assertReceiptJsonTextSafe(" ".repeat(MAX_RECEIPT_JSON_TEXT_LENGTH + 1)), "invalid_receipt_file_size")],
+    ["duplicate", throwsReason(() => parseExternalAcceptanceReceiptText("{\"schema\":\"a\",\"schema\":\"b\"}"), "invalid_receipt_duplicate_key")],
+    ["duplicate", throwsReason(() => parseExternalAcceptanceReceiptText("{\"recipient_project\":\"IRIS\",\"recipient\\u005fproject\":\"LIVE2D\"}"), "invalid_receipt_duplicate_key")],
+    ["duplicate", throwsReason(() => parseExternalAcceptanceReceiptText("{\"schema\":{\"nested\":true}}"), "invalid_receipt_nested_value")],
+    ["size", throwsReason(() => parseExternalAcceptanceReceiptText(" ".repeat(MAX_RECEIPT_JSON_TEXT_LENGTH + 1)), "invalid_receipt_file_size")],
     ["cli", parseReceiptCliArguments(["--candidate-bundle", "--matrix"]).reasonCode === "invalid_receipt_cli_arguments"],
     ["cli", parseReceiptCliArguments(["--validate-receipt-against-bundle", "receipt.safe.json", "--receipt-source-kind", "owner_provided", "--receipt-source-kind", "synthetic_test_only"]).reasonCode === "invalid_receipt_cli_arguments"],
     ["cli", parseReceiptCliArguments(["--unknown-receipt-mode"]).reasonCode === "invalid_receipt_cli_arguments"],
@@ -2648,100 +2318,6 @@ function buildCandidateBundleFingerprint({
   return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
 }
 
-function receiptBindingReason(result) {
-  if (result.primary_reason_code !== "none") return result.primary_reason_code;
-  if (result.receipt_source_status !== "pass") return "invalid_receipt_source_kind";
-  if (result.receipt_state_status !== "pass") return "invalid_receipt_state";
-  if (result.acceptance_claim_policy_status !== "pass") return result.primary_reason_code;
-  if (result.bundle_version_binding_status !== "pass") return "candidate_bundle_version_mismatch";
-  if (result.source_head_binding_status !== "pass") return "candidate_source_head_mismatch";
-  if (result.bundle_fingerprint_binding_status !== "pass") return "candidate_bundle_fingerprint_mismatch";
-  if (result.recipient_template_binding_status !== "pass") return "candidate_recipient_template_missing";
-  if (result.recipient_role_binding_status !== "pass") return "candidate_recipient_role_mismatch";
-  if (result.receipt_safety_status !== "pass") return "candidate_receipt_safety_invalid";
-  return "none";
-}
-
-function buildFailedReceiptBindingResult({ receiptSourceKind, receipt, reasonCode }) {
-  const result = buildReceiptBindingResult({
-    status: "fail",
-    receiptSourceKind,
-    recipientProject: safeReceiptProject(receipt),
-    candidateBundleVersion: "unknown",
-    source_head_binding_status: "fail",
-    bundle_version_binding_status: "fail",
-    bundle_fingerprint_binding_status: "fail",
-    recipient_template_binding_status: "fail",
-    recipient_role_binding_status: "fail",
-    receipt_safety_status: reasonCode.startsWith("invalid_receipt") ||
-      reasonCode.startsWith("unsafe_receipt") ? "fail" : "unknown",
-    receipt_candidate_status: "unknown",
-    primary_reason_code: reasonCode,
-  });
-  if (reasonCode === "invalid_receipt_source_kind") result.receipt_source_status = "fail";
-  result.binding_fingerprint = buildReceiptBindingFingerprint({
-    descriptor: null,
-    receiptFingerprint: "invalid_receipt",
-    result,
-  });
-  assertExternalAcceptanceReceiptBindingResultSafe(result);
-  return result;
-}
-
-function receiptBindingErrorReason(error) {
-  const reason = safeReasonCode(error);
-  if (reason.startsWith("invalid_receipt_template")) return "candidate_receipt_binding_invalid";
-  if (reason.startsWith("unsafe_receipt") || reason.startsWith("invalid_receipt")) {
-    return "candidate_receipt_safety_invalid";
-  }
-  if (reason.startsWith("invalid_candidate")) return "candidate_receipt_binding_invalid";
-  return "candidate_receipt_binding_invalid";
-}
-
-function buildReceiptBindingFingerprint({ descriptor, receiptFingerprint, result }) {
-  const canonical = {
-    descriptor: descriptor ? sortObject(descriptor) : "descriptor_unavailable",
-    receiptFingerprint,
-    intake_policy_schema: result.intake_policy_schema,
-    intake_policy_version: result.intake_policy_version,
-    validation_scope: result.validation_scope,
-    receipt_source_kind: result.receipt_source_kind,
-    receipt_provenance_class: result.receipt_provenance_class,
-    receipt_source_status: result.receipt_source_status,
-    receipt_state_status: result.receipt_state_status,
-    acceptance_claim_policy_status: result.acceptance_claim_policy_status,
-    acceptance_authority_created: result.acceptance_authority_created,
-    external_acceptance_effective: result.external_acceptance_effective,
-    intake_disposition: result.intake_disposition,
-    recipient_project: result.recipient_project,
-    candidate_bundle_version: result.candidate_bundle_version,
-    source_head_binding_status: result.source_head_binding_status,
-    bundle_version_binding_status: result.bundle_version_binding_status,
-    bundle_fingerprint_binding_status: result.bundle_fingerprint_binding_status,
-    recipient_template_binding_status: result.recipient_template_binding_status,
-    recipient_role_binding_status: result.recipient_role_binding_status,
-    receipt_safety_status: result.receipt_safety_status,
-    receipt_candidate_status: result.receipt_candidate_status,
-    external_team_acceptance_status: result.external_team_acceptance_status,
-    real_integration_proof_status: result.real_integration_proof_status,
-    primary_reason_code: result.primary_reason_code,
-  };
-  scanEvidenceSafe(canonical);
-  return createHash("sha256").update(JSON.stringify(sortObject(canonical))).digest("hex");
-}
-
-function safeReceiptProject(receipt) {
-  return ["IRIS", "LIVE2D"].includes(receipt?.recipient_project)
-    ? receipt.recipient_project
-    : "unknown";
-}
-
-function safeReceiptBundleVersion(receipt) {
-  return /^[0-9]+\.[0-9]+\.[0-9]+$/u.test(String(receipt?.candidate_bundle_version ?? ""))
-    ? receipt.candidate_bundle_version
-    : "unknown";
-}
-
 function sortObject(value) {
   if (Array.isArray(value)) return value.map(sortObject);
   if (!value || typeof value !== "object") return value;
@@ -2975,8 +2551,23 @@ function safeReceiptBindingCliReason(error) {
   return allowed.has(reason) ? reason : "receipt_binding_exception";
 }
 
+function safeReceiptCandidateBindingReason(error) {
+  const reason = safeReasonCode(error);
+  if (reason === "invalid_receipt_source_kind") return reason;
+  if (reason.startsWith("invalid_receipt_template")) {
+    return "candidate_receipt_binding_invalid";
+  }
+  if (reason.startsWith("invalid_receipt") || reason.startsWith("unsafe_receipt")) {
+    return "candidate_receipt_safety_invalid";
+  }
+  if (reason.startsWith("invalid_candidate") || reason.startsWith("unsafe_candidate")) {
+    return "candidate_receipt_binding_invalid";
+  }
+  return "candidate_receipt_binding_invalid";
+}
+
 function buildSafeReceiptBindingCliFailure({ receiptSourceKind, reasonCode }) {
-  return buildFailedReceiptBindingResult({
+  return externalReceiptModule.buildExternalAcceptanceReceiptBindingFailure({
     receiptSourceKind,
     receipt: null,
     reasonCode,
@@ -3017,108 +2608,7 @@ async function readReceiptJsonFile(receiptPath) {
   const bytes = await readFile(receiptPath).catch(() => {
     throw new Error("invalid_receipt_file");
   });
-  const text = decodeReceiptUtf8(bytes);
-  assertReceiptJsonTextSafe(text);
-  assertNoDuplicateTopLevelReceiptKeys(text);
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new Error("invalid_receipt_json");
-  }
-}
-
-function decodeReceiptUtf8(bytes) {
-  if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
-    throw new Error("invalid_receipt_bom");
-  }
-  try {
-    return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
-  } catch {
-    throw new Error("invalid_receipt_utf8");
-  }
-}
-
-function assertReceiptJsonTextSafe(text) {
-  if (text.length < 1 || text.length > MAX_RECEIPT_JSON_TEXT_LENGTH) {
-    throw new Error("invalid_receipt_file_size");
-  }
-  if (text.charCodeAt(0) === 0xfeff || text.includes("\uFEFF")) {
-    throw new Error("invalid_receipt_bom");
-  }
-  if (/[\u0000-\u001f\u007f\uFFFD]/u.test(text)) throw new Error("invalid_receipt_utf8");
-}
-
-function assertNoDuplicateTopLevelReceiptKeys(text) {
-  const keys = new Set();
-  let index = skipWhitespace(text, 0);
-  if (text[index] !== "{") throw new Error("invalid_receipt_json");
-  index += 1;
-  index = skipWhitespace(text, index);
-  if (text[index] === "}") {
-    index = skipWhitespace(text, index + 1);
-    if (index !== text.length) throw new Error("invalid_receipt_json");
-    return;
-  }
-  while (index < text.length) {
-    if (text[index] !== "\"") throw new Error("invalid_receipt_json");
-    const parsedKey = parseJsonStringToken(text, index);
-    index = skipWhitespace(text, parsedKey.nextIndex);
-    if (text[index] !== ":") throw new Error("invalid_receipt_json");
-    if (keys.has(parsedKey.value)) throw new Error("invalid_receipt_duplicate_key");
-    keys.add(parsedKey.value);
-    index = skipWhitespace(text, index + 1);
-    index = skipFlatJsonScalar(text, index);
-    index = skipWhitespace(text, index);
-    if (text[index] === "}") {
-      index = skipWhitespace(text, index + 1);
-      if (index !== text.length) throw new Error("invalid_receipt_json");
-      return;
-    }
-    if (text[index] !== ",") throw new Error("invalid_receipt_json");
-    index = skipWhitespace(text, index + 1);
-  }
-  throw new Error("invalid_receipt_json");
-}
-
-function skipFlatJsonScalar(text, index) {
-  if (text[index] === "{" || text[index] === "[") throw new Error("invalid_receipt_nested_value");
-  if (text[index] === "\"") return parseJsonStringToken(text, index).nextIndex;
-  for (const literal of ["true", "false"]) {
-    if (text.startsWith(literal, index)) return index + literal.length;
-  }
-  throw new Error("invalid_receipt_json");
-}
-
-function parseJsonStringToken(text, index) {
-  let value = "";
-  index += 1;
-  while (index < text.length) {
-    const char = text[index];
-    if (char === "\"") return { value, nextIndex: index + 1 };
-    if (char === "\\") {
-      const escaped = text[index + 1];
-      if (escaped === "u") {
-        const hex = text.slice(index + 2, index + 6);
-        if (!/^[0-9a-fA-F]{4}$/u.test(hex)) throw new Error("invalid_receipt_json");
-        value += String.fromCharCode(Number.parseInt(hex, 16));
-        index += 6;
-        continue;
-      }
-      const mapped = { "\"": "\"", "\\": "\\", "/": "/", b: "\b", f: "\f", n: "\n", r: "\r", t: "\t" }[escaped];
-      if (mapped === undefined) throw new Error("invalid_receipt_json");
-      value += mapped;
-      index += 2;
-      continue;
-    }
-    value += char;
-    index += 1;
-  }
-  throw new Error("invalid_receipt_json");
-}
-
-function skipWhitespace(text, index) {
-  while (index < text.length && /[\t\n\r ]/u.test(text[index])) index += 1;
-  return index;
+  return parseExternalAcceptanceReceiptText(decodeExternalAcceptanceReceiptBytes(bytes));
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

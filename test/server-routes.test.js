@@ -1187,6 +1187,7 @@ test("external receipt binding CLI emits safe candidate-bound JSON only", async 
   const descriptor = buildExternalAcceptanceCandidateDescriptor(candidate);
   const boundReceipt = buildSyntheticBoundReceipt(candidate, descriptor);
   const receiptPath = join(tmpdir(), `voxweave-bound-receipt-${Date.now()}.json`);
+  const prettyReceiptPath = join(tmpdir(), `voxweave-pretty-bound-receipt-${Date.now()}.json`);
   const pendingPath = join(tmpdir(), `voxweave-pending-receipt-${Date.now()}.json`);
   const wrongVersionPath = join(tmpdir(), `voxweave-wrong-version-receipt-${Date.now()}.json`);
   const wrongSourcePath = join(tmpdir(), `voxweave-wrong-source-receipt-${Date.now()}.json`);
@@ -1204,6 +1205,7 @@ test("external receipt binding CLI emits safe candidate-bound JSON only", async 
   const directoryPath = join(tmpdir(), `voxweave-directory-receipt-${Date.now()}`);
   const paths = [
     receiptPath,
+    prettyReceiptPath,
     pendingPath,
     wrongVersionPath,
     wrongSourcePath,
@@ -1220,6 +1222,11 @@ test("external receipt binding CLI emits safe candidate-bound JSON only", async 
   ];
   try {
     await writeFile(receiptPath, JSON.stringify(boundReceipt), "utf8");
+    await writeFile(
+      prettyReceiptPath,
+      `${JSON.stringify(boundReceipt, null, "\t").replace(/\n/gu, "\r\n")}\r\n`,
+      "utf8"
+    );
     await writeFile(
       pendingPath,
       JSON.stringify(buildSyntheticBoundReceipt(candidate, descriptor, {
@@ -1276,6 +1283,11 @@ test("external receipt binding CLI emits safe candidate-bound JSON only", async 
     assert.equal(pass.output.runtime_readiness_claimed, false);
     assert.equal(pass.output.production_readiness_claimed, false);
     assertOneSafeJsonObject(pass.stdout);
+
+    const prettyPass = await runBindingCli(prettyReceiptPath, "owner_provided");
+    assert.equal(prettyPass.exitCode, 0);
+    assert.equal(prettyPass.output.primary_reason_code, "none");
+    assert.equal(prettyPass.output.binding_fingerprint, pass.output.binding_fingerprint);
 
     const syntheticAccepted = await runBindingCli(receiptPath, "synthetic_test_only");
     assert.equal(syntheticAccepted.exitCode, 1);
