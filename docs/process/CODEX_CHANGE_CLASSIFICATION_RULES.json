@@ -31,7 +31,9 @@
     "test/",
     "tests/",
     "__tests__/",
-    "scripts/run-tests.js"
+    "scripts/run-tests.js",
+    "scripts/voxweave-loopback-integration-evidence.mjs",
+    "scripts/voxweave-source-text-integrity.mjs"
   ],
   "specFiles": [
     "specs/",

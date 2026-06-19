@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
@@ -23,9 +24,42 @@ import {
   materializeReactionPlanResponse,
 } from "../src/orchestrationResponse.js";
 import { createVoxWeaveService } from "../src/orchestrator.js";
+import {
+  SOURCE_TEXT_INTEGRITY_SCHEMA,
+  scanSourceTextIntegrity,
+  scanTextContent,
+  validateNeutralReactionPolicy,
+} from "../scripts/voxweave-source-text-integrity.mjs";
+import {
+  classifyChange,
+  loadClassificationRules,
+} from "../scripts/codex-change-classification-gate.mjs";
 
 const NOW = 1_777_000_000_000;
 const SOURCE_ROOT = new URL("../src/", import.meta.url);
+
+function textFromCodePoints(hexValues) {
+  return String.fromCodePoint(...hexValues.map((value) => Number.parseInt(value, 16)));
+}
+
+const KNOWN_MOJIBAKE_SAMPLE_SHORT = textFromCodePoints(["90b5", "ff7a", "7e5d", "ff7b", "30fb", "30fb"]);
+const KNOWN_MOJIBAKE_SAMPLE_LONG = textFromCodePoints([
+  "90b5",
+  "ff7a",
+  "7e67",
+  "30fb",
+  "ff7d",
+  "9854",
+  "ff78",
+  "ff7a",
+  "8815",
+  "5a2f",
+  "30fb",
+  "90b5",
+  "ff7a",
+  "7e5d",
+  "ff7b",
+]);
 
 const FORBIDDEN_RESPONSE_KEYS = new Set([
   "canonical_envelope",
@@ -260,8 +294,8 @@ test("reaction plan builder keeps Japanese neutral cache policy exact", () => {
     "123",
     "user@example",
     "#personal",
-    "邵ｺ繝ｻ・・",
-    "邵ｺ繧・ｽ顔ｸｺ蠕娯・邵ｺ繝ｻ",
+    KNOWN_MOJIBAKE_SAMPLE_SHORT,
+    KNOWN_MOJIBAKE_SAMPLE_LONG,
   ];
 
   for (const text of cacheable) {
@@ -276,6 +310,100 @@ test("reaction plan builder keeps Japanese neutral cache policy exact", () => {
   assert.equal(isPersonalReactionCacheRiskFromModule("お兄ちゃん"), true);
   assert.equal(isPersonalReactionCacheRiskFromModule("trace-safe"), false);
   assert.equal(isPersonalReactionCacheRiskFromModule("event-safe"), false);
+});
+
+test("source text integrity guard rejects unsafe text without broad CJK ban", () => {
+  assert.equal(SOURCE_TEXT_INTEGRITY_SCHEMA, "voxweave_source_text_integrity_v1");
+  assert.deepEqual(scanTextContent("普通の日本語と中文以及한국어 العربية", "safe.test.js"), []);
+  assert.equal(scanTextContent("bad\uFFFDtext", "safe.test.js")[0].reason, "replacement_character");
+  assert.equal(scanTextContent("bad\u0000text", "safe.test.js")[0].reason, "nul_character");
+  assert.equal(scanTextContent(`ok\n\uFEFFbad`, "safe.test.js")[0].reason, "embedded_bom");
+  assert.equal(scanTextContent(KNOWN_MOJIBAKE_SAMPLE_SHORT, "safe.test.js")[0].reason, "known_mojibake_fragment");
+
+  const neutralPolicy = validateNeutralReactionPolicy();
+  assert.equal(neutralPolicy.neutral_policy_status, "pass");
+  assert.equal(neutralPolicy.personal_risk_policy_status, "pass");
+});
+
+test("source text integrity guard scans repository and CLI emits safe summary", () => {
+  const report = scanSourceTextIntegrity();
+  assert.equal(report.schema, "voxweave_source_text_integrity_v1");
+  assert.equal(report.status, "pass");
+  assert.equal(report.neutral_policy_status, "pass");
+  assert.equal(report.personal_risk_policy_status, "pass");
+  assert.equal(report.invalid_utf8_count, 0);
+  assert.equal(report.replacement_character_count, 0);
+  assert.equal(report.embedded_bom_count, 0);
+  assert.equal(report.known_mojibake_count, 0);
+  assert.equal(report.safe_summary_only, true);
+
+  const cli = spawnSync(process.execPath, ["scripts/voxweave-source-text-integrity.mjs"], {
+    encoding: "utf8",
+  });
+  assert.equal(cli.status, 0);
+  const cliReport = JSON.parse(cli.stdout);
+  assert.equal(cliReport.schema, "voxweave_source_text_integrity_v1");
+  assert.equal(cliReport.status, "pass");
+  assert.equal(cliReport.safe_summary_only, true);
+  assert.equal(cli.stdout.trim().split(/\r?\n/u).length, 1);
+  assert.equal(/[A-Za-z]:[\\/]/u.test(cli.stdout), false);
+});
+
+test("source text integrity scripts are exact test classification paths", () => {
+  const env = {
+    ...process.env,
+    GITHUB_EVENT_NAME: "pull_request",
+    CODEX_PR_BODY: [
+      "runtime readiness claimed: no",
+      "production readiness claimed: no",
+    ].join("\n"),
+  };
+  const loaded = loadClassificationRules(env);
+  assert.equal(loaded.ok, true);
+
+  const expectedExactPaths = [
+    "scripts/voxweave-loopback-integration-evidence.mjs",
+    "scripts/voxweave-source-text-integrity.mjs",
+  ];
+  for (const exactPath of expectedExactPaths) {
+    assert.equal(loaded.rules.testFiles.includes(exactPath), true);
+  }
+
+  const forbiddenGlobs = [
+    "scripts/voxweave-*",
+    "scripts/*.mjs",
+    "scripts/**",
+    "scripts/",
+  ];
+  for (const pattern of forbiddenGlobs) {
+    assert.equal(loaded.rules.testFiles.includes(pattern), false);
+  }
+  assert.equal(
+    loaded.rules.harnessFiles.includes("scripts/voxweave-source-text-integrity.mjs"),
+    false,
+  );
+
+  const phaseD = classifyChange([
+    "docs/process/CODEX_CHANGE_CLASSIFICATION_RULES.json",
+    "docs/process/CODEX_VOXWEAVE_SOURCE_TEXT_INTEGRITY_GUARD_V1_2_7.md",
+    "scripts/voxweave-source-text-integrity.mjs",
+    "test/orchestrator-extraction-integration.test.js",
+  ], env);
+  assert.equal(phaseD.status, "pass");
+  assert.equal(phaseD.unknownFiles, 0);
+  assert.equal(phaseD.classification.testsChanged, true);
+  assert.equal(phaseD.productRelevantChanged, true);
+
+  const candidate = classifyChange([
+    "scripts/voxweave-loopback-integration-evidence.mjs",
+    "test/server-routes.test.js",
+    "test/fixtures/external-acceptance/voxweave-external-acceptance-candidate.manifest.safe.json",
+    "docs/process/CODEX_VOXWEAVE_CANDIDATE_BUNDLE_1_5_0_REFRESH_V1_2_7.md",
+  ], env);
+  assert.equal(candidate.status, "pass");
+  assert.equal(candidate.unknownFiles, 0);
+  assert.equal(candidate.classification.testsChanged, true);
+  assert.equal(candidate.productRelevantChanged, true);
 });
 
 test("orchestration response materializer returns request-bound safe response", async () => {
