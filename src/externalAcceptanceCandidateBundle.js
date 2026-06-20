@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import { AI_CHARACTER_CONTRACT_FAMILY_COUNT } from "./contracts.js";
 import * as externalReceiptModule from "./externalAcceptanceReceipt.js";
+import {
+  VOXWEAVE_RECEIPT_QUARANTINE_CAPSULE_SCHEMA,
+} from "./externalAcceptanceReceiptQuarantine.js";
 
 export const EXTERNAL_ACCEPTANCE_CANDIDATE_BUNDLE_SUMMARY_SCHEMA =
   "voxweave_external_acceptance_candidate_bundle_summary_v1";
@@ -12,8 +15,14 @@ export const EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_POLICY_SCHEMA =
   externalReceiptModule.EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_POLICY_SCHEMA;
 export const EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_POLICY_VERSION =
   externalReceiptModule.EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_POLICY_VERSION;
-export const EXTERNAL_ACCEPTANCE_RECEIPT_SOURCE_KINDS =
-  externalReceiptModule.EXTERNAL_ACCEPTANCE_RECEIPT_SOURCE_KINDS;
+export const MAX_CANDIDATE_BUNDLE_DEPTH = 24;
+export const MAX_CANDIDATE_BUNDLE_NODES = 4096;
+export const MAX_CANDIDATE_BUNDLE_ARRAY_LENGTH = 256;
+export const MAX_CANDIDATE_BUNDLE_OBJECT_KEYS = 256;
+export const MAX_CANDIDATE_BUNDLE_STRING_LENGTH = 32768;
+export const MAX_CANDIDATE_README_LENGTH = 65536;
+
+const STRICT_SEMVER = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u;
 const ALLOWED_CANDIDATE_BUNDLE_KEYS = Object.freeze([
   "schema",
   "status",
@@ -184,36 +193,60 @@ const PROPOSED_ATTACHMENT_MANIFEST_FIELDS = Object.freeze([
   "actual_send_status",
   "safe_summary_only",
 ]);
-const EXPECTED_FIXTURE_MANIFEST_PATH =
+export const EXTERNAL_ACCEPTANCE_INTEROP_FIXTURE_MANIFEST_PATH =
   "test/fixtures/interop/voxweave-interop-manifest.safe.json";
-const EXPECTED_FIXTURE_FILES = Object.freeze([
-  EXPECTED_FIXTURE_MANIFEST_PATH,
+export const EXTERNAL_ACCEPTANCE_INTEROP_FIXTURE_FILES = Object.freeze([
+  EXTERNAL_ACCEPTANCE_INTEROP_FIXTURE_MANIFEST_PATH,
   "test/fixtures/interop/iris-tts-packet.safe.json",
   "test/fixtures/interop/iris-subtitle-packet.safe.json",
   "test/fixtures/interop/iris-live2d-packet.safe.json",
 ]);
-const EXPECTED_RECEIPT_TEMPLATE_PATHS = Object.freeze([
+export const EXTERNAL_ACCEPTANCE_RECEIPT_TEMPLATE_PATHS = Object.freeze([
   "test/fixtures/external-acceptance/iris-team-receipt-template.safe.json",
   "test/fixtures/external-acceptance/live2d-team-receipt-template.safe.json",
 ]);
-const EXPECTED_PRE_SEND_CHECKLIST_PATH =
+export const EXTERNAL_ACCEPTANCE_PRE_SEND_CHECKLIST_PATH =
   "test/fixtures/external-acceptance/owner-pre-send-checklist.safe.json";
-const EXPECTED_OWNER_SEND_DECISION_BRIEF_TEMPLATE_PATH =
+export const EXTERNAL_ACCEPTANCE_OWNER_SEND_DECISION_BRIEF_TEMPLATE_PATH =
   "test/fixtures/external-acceptance/owner-external-send-decision-brief-template.safe.json";
-const EXPECTED_PROPOSED_ATTACHMENT_MANIFEST_PATH =
+export const EXTERNAL_ACCEPTANCE_PROPOSED_ATTACHMENT_MANIFEST_PATH =
   "test/fixtures/external-acceptance/proposed-external-send-attachment-manifest.safe.json";
-const RECEIPT_DRY_RUN_FIXTURE_BASE =
-  "test/fixtures/external-acceptance/receipt-intake-dry-run/";
-const EXPECTED_RECEIPT_DRY_RUN_FIXTURE_FILES = Object.freeze([
-  `${RECEIPT_DRY_RUN_FIXTURE_BASE}manifest.safe.json`,
-  `${RECEIPT_DRY_RUN_FIXTURE_BASE}owner-provided-pending.fixture.safe.json`,
-  `${RECEIPT_DRY_RUN_FIXTURE_BASE}owner-provided-accepted-candidate-unverified.fixture.safe.json`,
-  `${RECEIPT_DRY_RUN_FIXTURE_BASE}owner-provided-rejected.fixture.safe.json`,
-  `${RECEIPT_DRY_RUN_FIXTURE_BASE}synthetic-pending.fixture.safe.json`,
-  `${RECEIPT_DRY_RUN_FIXTURE_BASE}duplicate-replay.fixture.safe.json`,
-  `${RECEIPT_DRY_RUN_FIXTURE_BASE}rebound-conflict.fixture.safe.json`,
+export const EXTERNAL_ACCEPTANCE_PROPOSED_ATTACHMENT_PATHS = Object.freeze([
+  "test/fixtures/external-acceptance/voxweave-external-acceptance-candidate.manifest.safe.json",
+  "test/fixtures/external-acceptance/README.safe.md",
+  EXTERNAL_ACCEPTANCE_INTEROP_FIXTURE_MANIFEST_PATH,
+  "test/fixtures/interop/iris-tts-packet.safe.json",
+  "test/fixtures/interop/iris-subtitle-packet.safe.json",
+  "test/fixtures/interop/iris-live2d-packet.safe.json",
+  ...EXTERNAL_ACCEPTANCE_RECEIPT_TEMPLATE_PATHS,
+  EXTERNAL_ACCEPTANCE_PRE_SEND_CHECKLIST_PATH,
+  EXTERNAL_ACCEPTANCE_OWNER_SEND_DECISION_BRIEF_TEMPLATE_PATH,
+  EXTERNAL_ACCEPTANCE_PROPOSED_ATTACHMENT_MANIFEST_PATH,
 ]);
-const ALLOWED_RECEIPT_SOURCE_KINDS = new Set(EXTERNAL_ACCEPTANCE_RECEIPT_SOURCE_KINDS);
+export const EXTERNAL_ACCEPTANCE_FORBIDDEN_ATTACHMENT_CLASSES = Object.freeze([
+  "contact_material",
+  "endpoint_material",
+  "credential_material",
+  "raw_log_material",
+  "raw_receipt_material",
+  "workflow_artifact",
+  "git_metadata",
+  "scripts",
+  "tests",
+  "process_docs",
+]);
+export const EXTERNAL_ACCEPTANCE_FORBIDDEN_MATERIAL_POLICY = Object.freeze([
+  "no_secret",
+  "no_token",
+  "no_endpoint",
+  "no_url",
+  "no_private_path",
+  "no_raw_log",
+  "no_raw_audio",
+  "no_raw_transcript",
+  "no_raw_renderer_payload",
+  "no_raw_contract",
+]);
 const CANDIDATE_DESCRIPTOR_FIELDS = Object.freeze([
   "schema",
   "status",
@@ -281,7 +314,7 @@ export function buildExternalAcceptanceCandidateBundleSummary({
     production_readiness_claimed: false,
     safe_summary_only: true,
     candidate_bundle_fingerprint_algorithm: "sha256",
-    candidate_bundle_fingerprint: buildCandidateBundleFingerprint(bundle),
+    candidate_bundle_fingerprint: buildCandidateBundleFingerprintUnchecked(bundle),
   };
   assertExternalAcceptanceCandidateBundleSummarySafe(summary);
   return summary;
@@ -297,16 +330,9 @@ export function buildExternalAcceptanceCandidateBundleFingerprint({
   fixtureManifest,
   fixtures,
 }) {
-  return buildCandidateBundleFingerprint({
-    manifest,
-    receipts,
-    readmeText,
-    checklist,
-    decisionBrief,
-    attachmentManifest,
-    fixtureManifest,
-    fixtures,
-  });
+  const bundle = { manifest, receipts, readmeText, checklist, decisionBrief, attachmentManifest, fixtureManifest, fixtures };
+  validateExternalAcceptanceCandidateBundle(bundle);
+  return buildCandidateBundleFingerprintUnchecked(bundle);
 }
 
 export function buildExternalAcceptanceCandidateDescriptor({
@@ -336,7 +362,7 @@ export function buildExternalAcceptanceCandidateDescriptor({
     runtime_source_head_sha: manifest.source_main_sha,
     source_binding_kind: manifest.source_binding_kind,
     bundle_fingerprint_algorithm: "sha256",
-    candidate_bundle_fingerprint: buildCandidateBundleFingerprint({
+    candidate_bundle_fingerprint: buildCandidateBundleFingerprintUnchecked({
       manifest,
       receipts,
       readmeText,
@@ -437,10 +463,15 @@ export function assertExternalAcceptanceCandidateDescriptorSafe(descriptor) {
   }
   if (
     descriptor.status !== "pass" ||
+    !STRICT_SEMVER.test(descriptor.candidate_bundle_version) ||
     !/^[a-f0-9]{40}$/u.test(descriptor.runtime_source_head_sha) ||
     descriptor.source_binding_kind !== "runtime_source_snapshot" ||
     descriptor.bundle_fingerprint_algorithm !== "sha256" ||
     !/^[a-f0-9]{64}$/u.test(descriptor.candidate_bundle_fingerprint) ||
+    descriptor.fixture_file_count !== EXTERNAL_ACCEPTANCE_INTEROP_FIXTURE_FILES.length ||
+    descriptor.receipt_template_count !== EXTERNAL_ACCEPTANCE_RECEIPT_TEMPLATE_PATHS.length ||
+    JSON.stringify(descriptor.recipient_projects) !== JSON.stringify(["IRIS", "LIVE2D"]) ||
+    descriptor.candidate_status !== "candidate_prepared_not_sent" ||
     descriptor.external_team_acceptance_status !== "not_started" ||
     descriptor.real_integration_proof_status !== "no" ||
     descriptor.runtime_readiness_claimed !== false ||
@@ -463,8 +494,30 @@ export function assertExternalAcceptanceCandidateBundleSummarySafe(summary) {
     throw new Error("unsafe_candidate_bundle_schema");
   }
   if (
+    summary.status !== "pass" ||
+    !STRICT_SEMVER.test(summary.candidate_bundle_version) ||
+    summary.source_binding_kind !== "runtime_source_snapshot" ||
+    summary.bundle_binding_kind !== "transitive_sha256" ||
+    summary.manifest_status !== "pass" ||
+    summary.receipt_template_count !== EXTERNAL_ACCEPTANCE_RECEIPT_TEMPLATE_PATHS.length ||
+    summary.forbidden_material_scan_status !== "pass" ||
+    summary.fixture_reference_status !== "pass" ||
+    summary.fixture_manifest_status !== "pass" ||
+    summary.fixture_file_count !== EXTERNAL_ACCEPTANCE_INTEROP_FIXTURE_FILES.length ||
+    summary.transitive_fixture_binding_status !== "pass" ||
+    summary.pre_send_checklist_status !== "pending_owner_action" ||
+    summary.pre_send_checklist_binding_status !== "pass" ||
+    summary.owner_send_authorized !== false ||
     summary.external_team_acceptance_status !== "not_started" ||
     summary.real_integration_proof_status !== "no" ||
+    summary.safe_failure_taxonomy_registry_present !== true ||
+    summary.http_safe_error_projection_metadata_present !== true ||
+    summary.live2d_forward_taxonomy_metadata_present !== true ||
+    summary.safe_failure_event_envelope_available !== true ||
+    summary.public_metrics_endpoint_present !== false ||
+    summary.runtime_event_sink_present !== false ||
+    summary.candidate_bundle_fingerprint_algorithm !== "sha256" ||
+    !/^[a-f0-9]{64}$/u.test(summary.candidate_bundle_fingerprint) ||
     summary.runtime_readiness_claimed !== false ||
     summary.production_readiness_claimed !== false ||
     summary.safe_summary_only !== true
@@ -484,11 +537,21 @@ export function validateExternalAcceptanceCandidateBundle({
   fixtureManifest,
   fixtures,
 }) {
+  assertCandidateBundleGraphSafe({
+    manifest,
+    receipts,
+    readmeText,
+    checklist,
+    decisionBrief,
+    attachmentManifest,
+    fixtureManifest,
+    fixtures,
+  });
   assertExactFields(manifest, CANDIDATE_MANIFEST_FIELDS, "invalid_candidate_manifest_fields");
   if (manifest?.schema !== "voxweave_external_acceptance_candidate_manifest_v1") {
     throw new Error("invalid_candidate_manifest_schema");
   }
-  if (!/^[0-9]+\.[0-9]+\.[0-9]+$/u.test(manifest.candidate_bundle_version)) {
+  if (!STRICT_SEMVER.test(manifest.candidate_bundle_version)) {
     throw new Error("invalid_candidate_bundle_version");
   }
   if (!/^[a-f0-9]{40}$/u.test(manifest.source_main_sha)) {
@@ -499,12 +562,15 @@ export function validateExternalAcceptanceCandidateBundle({
     manifest.source_harness !== "v1.2.7" ||
     manifest.source_binding_kind !== "runtime_source_snapshot" ||
     manifest.bundle_binding_kind !== "transitive_sha256" ||
+    manifest.evidence_runner_script !== "scripts/voxweave-loopback-integration-evidence.mjs" ||
+    manifest.failure_matrix_command !==
+      "node scripts/voxweave-loopback-integration-evidence.mjs --matrix" ||
     manifest.receipt_intake_policy_schema !== EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_POLICY_SCHEMA ||
     manifest.receipt_intake_policy_version !== EXTERNAL_ACCEPTANCE_RECEIPT_INTAKE_POLICY_VERSION ||
     manifest.receipt_binding_result_schema !== EXTERNAL_ACCEPTANCE_RECEIPT_BINDING_RESULT_SCHEMA ||
     manifest.receipt_intake_matrix_command !==
       "node scripts/voxweave-loopback-integration-evidence.mjs --receipt-intake-matrix" ||
-    manifest.receipt_quarantine_capsule_schema !== "voxweave_external_acceptance_receipt_quarantine_capsule_v1" ||
+    manifest.receipt_quarantine_capsule_schema !== VOXWEAVE_RECEIPT_QUARANTINE_CAPSULE_SCHEMA ||
     manifest.receipt_dry_run_fixture_pack_command !==
       "node scripts/voxweave-loopback-integration-evidence.mjs --receipt-intake-fixture-pack"
   ) {
@@ -524,25 +590,25 @@ export function validateExternalAcceptanceCandidateBundle({
     if (manifest[key] !== true) throw new Error("invalid_candidate_receipt_intake_policy");
   }
   validateSafeRelativePath(manifest.fixture_manifest_path);
-  if (manifest.fixture_manifest_path !== EXPECTED_FIXTURE_MANIFEST_PATH) {
+  if (manifest.fixture_manifest_path !== EXTERNAL_ACCEPTANCE_INTEROP_FIXTURE_MANIFEST_PATH) {
     throw new Error("invalid_fixture_manifest_path");
   }
-  assertExactPathList(manifest.fixture_files, EXPECTED_FIXTURE_FILES, "invalid_fixture_files");
+  assertExactPathList(manifest.fixture_files, EXTERNAL_ACCEPTANCE_INTEROP_FIXTURE_FILES, "invalid_fixture_files");
   assertExactPathList(
     manifest.receipt_templates,
-    EXPECTED_RECEIPT_TEMPLATE_PATHS,
+    EXTERNAL_ACCEPTANCE_RECEIPT_TEMPLATE_PATHS,
     "invalid_receipt_template_paths"
   );
   validateSafeRelativePath(manifest.pre_send_checklist_path);
-  if (manifest.pre_send_checklist_path !== EXPECTED_PRE_SEND_CHECKLIST_PATH) {
+  if (manifest.pre_send_checklist_path !== EXTERNAL_ACCEPTANCE_PRE_SEND_CHECKLIST_PATH) {
     throw new Error("invalid_pre_send_checklist_path");
   }
   validateSafeRelativePath(manifest.owner_send_decision_brief_template_path);
-  if (manifest.owner_send_decision_brief_template_path !== EXPECTED_OWNER_SEND_DECISION_BRIEF_TEMPLATE_PATH) {
+  if (manifest.owner_send_decision_brief_template_path !== EXTERNAL_ACCEPTANCE_OWNER_SEND_DECISION_BRIEF_TEMPLATE_PATH) {
     throw new Error("invalid_decision_brief_template_path");
   }
   validateSafeRelativePath(manifest.proposed_attachment_manifest_path);
-  if (manifest.proposed_attachment_manifest_path !== EXPECTED_PROPOSED_ATTACHMENT_MANIFEST_PATH) {
+  if (manifest.proposed_attachment_manifest_path !== EXTERNAL_ACCEPTANCE_PROPOSED_ATTACHMENT_MANIFEST_PATH) {
     throw new Error("invalid_proposed_attachment_manifest_path");
   }
   if (manifest.candidate_status !== "candidate_prepared_not_sent") {
@@ -564,6 +630,11 @@ export function validateExternalAcceptanceCandidateBundle({
   ) {
     throw new Error("unsafe_candidate_manifest_readiness");
   }
+  assertExactPathList(
+    manifest.forbidden_material_policy,
+    EXTERNAL_ACCEPTANCE_FORBIDDEN_MATERIAL_POLICY,
+    "invalid_candidate_forbidden_material_policy"
+  );
   if (!Array.isArray(receipts) || receipts.length !== 2) {
     throw new Error("invalid_receipt_template_count");
   }
@@ -574,7 +645,8 @@ export function validateExternalAcceptanceCandidateBundle({
   for (const receipt of receipts) {
     validateExternalAcceptanceReceiptTemplate(receipt, manifest.candidate_bundle_version);
   }
-  if (typeof readmeText !== "string" || readmeText.trim() === "") {
+  assertSafeCandidateString(readmeText, "invalid_candidate_readme", MAX_CANDIDATE_README_LENGTH);
+  if (readmeText.trim() === "") {
     throw new Error("invalid_candidate_readme");
   }
   validateExternalAcceptancePreSendChecklist(checklist, manifest.candidate_bundle_version);
@@ -662,7 +734,7 @@ export function validateOwnerExternalSendDecisionBriefTemplate(template, candida
     template.decision_status !== "pending_owner_decision" ||
     template.owner_send_authorized !== false ||
     template.authority_created_by_template !== false ||
-    template.decision_scope !== "candidate_bundle_1_8_0_external_send_decision_only" ||
+    template.decision_scope !== buildOwnerExternalSendDecisionScope(candidateBundleVersion) ||
     template.recipient_contact_confirmation_status !== "not_collected" ||
     template.single_use_send_receipt_required !== true ||
     template.actual_send_status !== "not_started" ||
@@ -690,6 +762,13 @@ export function validateOwnerExternalSendDecisionBriefTemplate(template, candida
   }
 }
 
+export function buildOwnerExternalSendDecisionScope(candidateBundleVersion) {
+  if (!STRICT_SEMVER.test(String(candidateBundleVersion ?? ""))) {
+    throw new Error("invalid_candidate_bundle_version");
+  }
+  return `candidate_bundle_${candidateBundleVersion.replaceAll(".", "_")}_external_send_decision_only`;
+}
+
 export function validateProposedExternalSendAttachmentManifest(attachmentManifest, candidateBundleVersion) {
   assertExactFields(
     attachmentManifest,
@@ -713,37 +792,14 @@ export function validateProposedExternalSendAttachmentManifest(attachmentManifes
   }
   assertExactPathList(
     attachmentManifest.proposed_attachment_paths,
-    [
-      "test/fixtures/external-acceptance/voxweave-external-acceptance-candidate.manifest.safe.json",
-      "test/fixtures/external-acceptance/README.safe.md",
-      EXPECTED_FIXTURE_MANIFEST_PATH,
-      "test/fixtures/interop/iris-tts-packet.safe.json",
-      "test/fixtures/interop/iris-subtitle-packet.safe.json",
-      "test/fixtures/interop/iris-live2d-packet.safe.json",
-      ...EXPECTED_RECEIPT_TEMPLATE_PATHS,
-      EXPECTED_PRE_SEND_CHECKLIST_PATH,
-      EXPECTED_OWNER_SEND_DECISION_BRIEF_TEMPLATE_PATH,
-      EXPECTED_PROPOSED_ATTACHMENT_MANIFEST_PATH,
-    ],
+    EXTERNAL_ACCEPTANCE_PROPOSED_ATTACHMENT_PATHS,
     "invalid_proposed_attachment_paths"
   );
-  if (
-    !Array.isArray(attachmentManifest.forbidden_attachment_classes) ||
-    ![
-      "contact_material",
-      "endpoint_material",
-      "credential_material",
-      "raw_log_material",
-      "raw_receipt_material",
-      "workflow_artifact",
-      "git_metadata",
-      "scripts",
-      "tests",
-      "process_docs",
-    ].every((entry) => attachmentManifest.forbidden_attachment_classes.includes(entry))
-  ) {
-    throw new Error("invalid_forbidden_attachment_classes");
-  }
+  assertExactPathList(
+    attachmentManifest.forbidden_attachment_classes,
+    EXTERNAL_ACCEPTANCE_FORBIDDEN_ATTACHMENT_CLASSES,
+    "invalid_forbidden_attachment_classes"
+  );
 }
 
 export function validateExternalAcceptanceReceiptTemplate(receipt, candidateBundleVersion = null) {
@@ -754,8 +810,20 @@ export function validateExternalAcceptanceReceiptTemplate(receipt, candidateBund
   if (!["IRIS", "LIVE2D"].includes(receipt.recipient_project)) {
     throw new Error("invalid_receipt_template_recipient");
   }
+  const expectedRole = receipt.recipient_project === "IRIS"
+    ? "adapter_packet_owner"
+    : "renderer_boundary_owner";
+  if (receipt.recipient_role !== expectedRole) {
+    throw new Error("invalid_receipt_template_role");
+  }
   if (candidateBundleVersion && receipt.candidate_bundle_version !== candidateBundleVersion) {
     throw new Error("invalid_receipt_template_bundle_version");
+  }
+  if (
+    receipt.source_main_sha_placeholder !== "owner_supplied_source_head_sha" ||
+    receipt.candidate_bundle_fingerprint_placeholder !== "owner_supplied_candidate_bundle_fingerprint"
+  ) {
+    throw new Error("invalid_receipt_template_placeholder");
   }
   for (const key of [
     "received_status",
@@ -779,27 +847,69 @@ export function validateExternalAcceptanceReceiptTemplate(receipt, candidateBund
 }
 
 export function validateExternalAcceptanceInteropFixtureBinding(fixtureManifest, fixtures) {
+  assertExactFields(fixtureManifest, [
+    "schema",
+    "fixture_version",
+    "adapter_packet_schema",
+    "service_response_schema",
+    "live2d_cue_schema",
+    "live2d_delivery_schema",
+    "loopback_evidence_schema",
+    "contract_registry_family_count",
+    "fixture_ids",
+    "safe_summary_only",
+    "runtime_readiness_claimed",
+    "production_readiness_claimed",
+  ], "invalid_fixture_manifest_fields");
   if (fixtureManifest?.schema !== "voxweave_safe_interop_fixture_manifest_v1") {
     throw new Error("invalid_fixture_manifest_schema");
+  }
+  if (
+    !STRICT_SEMVER.test(fixtureManifest.fixture_version) ||
+    fixtureManifest.adapter_packet_schema !== "iris_adapter_packet_v1" ||
+    fixtureManifest.service_response_schema !== "voxweave_orchestration_result_v1" ||
+    fixtureManifest.live2d_cue_schema !== "iris_live2d_renderer_cue_v1" ||
+    fixtureManifest.live2d_delivery_schema !== "iris_live2d_renderer_cue_delivery_v1" ||
+    fixtureManifest.loopback_evidence_schema !== "voxweave_loopback_integration_evidence_v1" ||
+    fixtureManifest.safe_summary_only !== true ||
+    fixtureManifest.runtime_readiness_claimed !== false ||
+    fixtureManifest.production_readiness_claimed !== false
+  ) {
+    throw new Error("invalid_fixture_manifest_value");
   }
   if (fixtureManifest.contract_registry_family_count !== AI_CHARACTER_CONTRACT_FAMILY_COUNT) {
     throw new Error("invalid_fixture_registry_family_count");
   }
-  if (!Array.isArray(fixtures) || fixtures.length !== EXPECTED_FIXTURE_FILES.length) {
+  assertExactPathList(fixtureManifest.fixture_ids, [
+    "iris_tts_minimal_v1",
+    "iris_subtitle_minimal_v1",
+    "iris_live2d_all_contracts_v1",
+  ], "invalid_fixture_ids");
+  if (!Array.isArray(fixtures) || fixtures.length !== EXTERNAL_ACCEPTANCE_INTEROP_FIXTURE_FILES.length) {
     throw new Error("invalid_fixture_count");
   }
-  assertExactPathList(fixtures.map((fixture) => fixture.path), EXPECTED_FIXTURE_FILES, "invalid_fixture_paths");
+  assertExactPathList(fixtures.map((fixture) => fixture.path), EXTERNAL_ACCEPTANCE_INTEROP_FIXTURE_FILES, "invalid_fixture_paths");
   const fixtureIds = new Set();
   for (const fixture of fixtures) {
     validateSafeRelativePath(fixture.path);
     if (!fixture.content || typeof fixture.content !== "object" || Array.isArray(fixture.content)) {
       throw new Error("invalid_fixture_content");
     }
-    if (fixture.path === EXPECTED_FIXTURE_MANIFEST_PATH) {
-      if (fixture.content.schema !== fixtureManifest.schema) throw new Error("invalid_fixture_manifest_content");
+    if (fixture.path === EXTERNAL_ACCEPTANCE_INTEROP_FIXTURE_MANIFEST_PATH) {
+      if (JSON.stringify(sortObject(fixture.content)) !== JSON.stringify(sortObject(fixtureManifest))) {
+        throw new Error("invalid_fixture_manifest_content");
+      }
       continue;
     }
     if (fixture.content.schema !== "iris_adapter_packet_v1") throw new Error("invalid_packet_fixture_schema");
+    const expectedPacket = expectedPacketForFixturePath(fixture.path);
+    if (
+      fixture.content.fixture_id !== expectedPacket.fixtureId ||
+      fixture.content.adapter_kind !== expectedPacket.adapterKind ||
+      fixture.content.adapter_validation_required !== true
+    ) {
+      throw new Error("invalid_packet_fixture_binding");
+    }
     if (!fixture.content.fixture_id || fixtureIds.has(fixture.content.fixture_id)) {
       throw new Error("invalid_packet_fixture_id");
     }
@@ -845,30 +955,7 @@ function validateSafeRelativePath(path) {
   }
 }
 
-function scanExternalAcceptanceReceiptSafe(receipt) {
-  const stack = [receipt];
-  const forbiddenKeyOrValue = /(?:endpoint|url|token|secret|authorization|api_key|private_path|raw_log|raw_audio|raw_transcript|raw_payload|raw_renderer_payload|stack|error_detail)/iu;
-  while (stack.length > 0) {
-    const current = stack.pop();
-    if (typeof current === "string") {
-      if (forbiddenKeyOrValue.test(current)) throw new Error("unsafe_receipt_material");
-      if (/\bhttps?:\/\//iu.test(current)) throw new Error("unsafe_receipt_material");
-      if (/[A-Za-z]:[\\/]/u.test(current)) throw new Error("unsafe_receipt_material");
-      continue;
-    }
-    if (!current || typeof current !== "object") continue;
-    if (Array.isArray(current)) {
-      for (const child of current) stack.push(child);
-      continue;
-    }
-    for (const [key, child] of Object.entries(current)) {
-      if (forbiddenKeyOrValue.test(key)) throw new Error("unsafe_receipt_material");
-      stack.push(child);
-    }
-  }
-}
-
-function buildCandidateBundleFingerprint({
+function buildCandidateBundleFingerprintUnchecked({
   manifest,
   receipts,
   readmeText,
@@ -911,6 +998,116 @@ function sortObject(value) {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([key, child]) => [key, sortObject(child)])
   );
+}
+
+function expectedPacketForFixturePath(path) {
+  if (path.endsWith("iris-tts-packet.safe.json")) {
+    return { fixtureId: "iris_tts_minimal_v1", adapterKind: "tts" };
+  }
+  if (path.endsWith("iris-subtitle-packet.safe.json")) {
+    return { fixtureId: "iris_subtitle_minimal_v1", adapterKind: "subtitle" };
+  }
+  if (path.endsWith("iris-live2d-packet.safe.json")) {
+    return { fixtureId: "iris_live2d_all_contracts_v1", adapterKind: "live2d" };
+  }
+  throw new Error("invalid_fixture_paths");
+}
+
+function assertCandidateBundleGraphSafe(value) {
+  const seen = new WeakSet();
+  const stack = [{ value, depth: 0 }];
+  let nodes = 0;
+  while (stack.length > 0) {
+    const current = stack.pop();
+    nodes += 1;
+    if (nodes > MAX_CANDIDATE_BUNDLE_NODES) {
+      throw new Error("candidate_bundle_node_limit_exceeded");
+    }
+    if (current.depth > MAX_CANDIDATE_BUNDLE_DEPTH) {
+      throw new Error("candidate_bundle_depth_exceeded");
+    }
+    const item = current.value;
+    if (item === null || typeof item === "boolean") continue;
+    if (typeof item === "number") {
+      if (!Number.isFinite(item)) throw new Error("invalid_candidate_bundle_value");
+      continue;
+    }
+    if (typeof item === "string") {
+      assertSafeCandidateString(item, "unsafe_candidate_bundle_string");
+      continue;
+    }
+    if (
+      typeof item === "undefined" ||
+      typeof item === "function" ||
+      typeof item === "symbol" ||
+      typeof item === "bigint"
+    ) {
+      throw new Error("invalid_candidate_bundle_value");
+    }
+    if (!item || typeof item !== "object") throw new Error("invalid_candidate_bundle_value");
+    if (seen.has(item)) throw new Error("invalid_candidate_bundle_reference_graph");
+    seen.add(item);
+    if (item instanceof Date || item instanceof Map || item instanceof Set || ArrayBuffer.isView(item)) {
+      throw new Error("invalid_candidate_bundle_value");
+    }
+    if (Array.isArray(item)) {
+      if (item.length > MAX_CANDIDATE_BUNDLE_ARRAY_LENGTH) {
+        throw new Error("candidate_bundle_array_limit_exceeded");
+      }
+      for (const child of item) stack.push({ value: child, depth: current.depth + 1 });
+      continue;
+    }
+    const prototype = Object.getPrototypeOf(item);
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new Error("invalid_candidate_bundle_object");
+    }
+    const entries = Object.entries(item);
+    if (entries.length > MAX_CANDIDATE_BUNDLE_OBJECT_KEYS) {
+      throw new Error("candidate_bundle_object_key_limit_exceeded");
+    }
+    for (const [key, child] of entries) {
+      assertSafeCandidateString(key, "unsafe_candidate_bundle_string");
+      if (isForbiddenCandidateMaterialKey(key)) throw new Error("unsafe_candidate_bundle_key");
+      stack.push({ value: child, depth: current.depth + 1 });
+    }
+  }
+}
+
+function assertSafeCandidateString(value, reasonCode, maxLength = MAX_CANDIDATE_BUNDLE_STRING_LENGTH) {
+  if (typeof value !== "string") throw new Error(reasonCode);
+  if (value.length > maxLength) throw new Error("candidate_bundle_string_limit_exceeded");
+  if (/[\u0000\uFEFF\uFFFD]/u.test(value)) throw new Error(reasonCode);
+  if (/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(value)) {
+    throw new Error(reasonCode);
+  }
+}
+
+function isForbiddenCandidateMaterialKey(key) {
+  const normalized = String(key).toLowerCase();
+  if ([
+    "endpoint_material_included",
+    "credential_material_included",
+    "raw_log_material_included",
+    "raw_receipt_material_included",
+  ].includes(normalized)) {
+    return false;
+  }
+  return [
+    "endpoint",
+    "url",
+    "token",
+    "secret",
+    "authorization",
+    "api_key",
+    "private_path",
+    "raw_log",
+    "raw_audio",
+    "raw_transcript",
+    "raw_payload",
+    "raw_renderer_payload",
+    "stack",
+    "error_detail",
+  ].includes(normalized);
 }
 
 function scanCandidateBundleSafe(value) {

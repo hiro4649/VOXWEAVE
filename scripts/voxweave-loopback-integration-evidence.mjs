@@ -83,6 +83,8 @@ export const assertExternalAcceptanceReceiptBindingResultSafe =
   externalReceiptModule.assertExternalAcceptanceReceiptBindingResultSafe;
 export const validateExternalAcceptanceCandidateBundle =
   externalCandidateBundleModule.validateExternalAcceptanceCandidateBundle;
+export const EXTERNAL_ACCEPTANCE_INTEROP_FIXTURE_FILES =
+  externalCandidateBundleModule.EXTERNAL_ACCEPTANCE_INTEROP_FIXTURE_FILES;
 export const buildExternalAcceptanceCandidateBundleFingerprint =
   externalCandidateBundleModule.buildExternalAcceptanceCandidateBundleFingerprint;
 export const buildExternalAcceptanceCandidateDescriptor =
@@ -227,12 +229,6 @@ const ALLOWED_RECEIPT_DRY_RUN_PACK_KEYS = Object.freeze([
   "runtime_readiness_claimed",
   "production_readiness_claimed",
   "safe_summary_only",
-]);
-const EXPECTED_FIXTURE_FILES = Object.freeze([
-  "test/fixtures/interop/voxweave-interop-manifest.safe.json",
-  "test/fixtures/interop/iris-tts-packet.safe.json",
-  "test/fixtures/interop/iris-subtitle-packet.safe.json",
-  "test/fixtures/interop/iris-live2d-packet.safe.json",
 ]);
 const RECEIPT_DRY_RUN_FIXTURE_BASE =
   "test/fixtures/external-acceptance/receipt-intake-dry-run/";
@@ -1519,7 +1515,7 @@ async function readCandidateBundleFiles() {
     decisionBrief: JSON.parse(decisionBriefText),
     attachmentManifest: JSON.parse(attachmentManifestText),
     fixtureManifest: JSON.parse(fixtureTexts[0]),
-    fixtures: EXPECTED_FIXTURE_FILES.map((path, index) => ({
+    fixtures: EXTERNAL_ACCEPTANCE_INTEROP_FIXTURE_FILES.map((path, index) => ({
       path,
       content: JSON.parse(fixtureTexts[index]),
     })),
