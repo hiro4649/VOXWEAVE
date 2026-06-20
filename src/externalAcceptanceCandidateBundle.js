@@ -271,6 +271,16 @@ const REQUIRED_README_DISCLAIMER_PHRASES = Object.freeze([
   "actual external acceptance remains not started",
   "external send remains not started",
 ]);
+const FORBIDDEN_README_AUTHORITY_PATTERNS = Object.freeze([
+  /\bexternal send\s*(?:is\s+|has\s+been\s+)?authorized\b/u,
+  /\bowner send\s*(?:is\s+|has\s+been\s+)?authorized\b/u,
+  /\bsend authorization\s*(?:is\s+|has\s+been\s+)?(?:granted|authorized)\b/u,
+  /\bactual receipt\s*(?:exists|has\s+been\s+received|is\s+received|is\s+present)\b/u,
+  /\bexternal acceptance\s*(?:is\s+|has\s+been\s+)?(?:complete|completed|confirmed|accepted|approved)\b/u,
+  /\bruntime readiness\s*(?:is\s+|has\s+been\s+)?confirmed\b/u,
+  /\bproduction readiness\s*(?:is\s+|has\s+been\s+)?confirmed\b/u,
+  /\bthis bundle\s*(?:is\s+|has\s+been\s+)?ready for production\b/u,
+]);
 const CANDIDATE_DESCRIPTOR_FIELDS = Object.freeze([
   "schema",
   "status",
@@ -625,6 +635,8 @@ export function validateExternalAcceptancePreSendChecklist(checklist, candidateB
   if (checklist?.schema !== "voxweave_external_acceptance_pre_send_checklist_v1") {
     throw new Error("invalid_pre_send_checklist_schema");
   }
+  assertStrictCandidateBundleVersion(candidateBundleVersion, "invalid_pre_send_checklist_bundle_version");
+  assertStrictCandidateBundleVersion(checklist.candidate_bundle_version, "invalid_pre_send_checklist_bundle_version");
   if (checklist.candidate_bundle_version !== candidateBundleVersion) {
     throw new Error("invalid_pre_send_checklist_bundle_version");
   }
@@ -684,13 +696,15 @@ export function validateOwnerExternalSendDecisionBriefTemplate(template, candida
     OWNER_SEND_DECISION_BRIEF_TEMPLATE_FIELDS,
     "invalid_decision_brief_template_fields"
   );
+  const decisionScope = buildOwnerExternalSendDecisionScope(candidateBundleVersion);
+  assertStrictCandidateBundleVersion(template.candidate_bundle_version, "unsafe_decision_brief_template_status");
   if (
     template.schema !== "voxweave_owner_external_send_decision_brief_template_v1" ||
     template.candidate_bundle_version !== candidateBundleVersion ||
     template.decision_status !== "pending_owner_decision" ||
     template.owner_send_authorized !== false ||
     template.authority_created_by_template !== false ||
-    template.decision_scope !== buildOwnerExternalSendDecisionScope(candidateBundleVersion) ||
+    template.decision_scope !== decisionScope ||
     template.recipient_contact_confirmation_status !== "not_collected" ||
     template.single_use_send_receipt_required !== true ||
     template.actual_send_status !== "not_started" ||
@@ -719,10 +733,11 @@ export function validateOwnerExternalSendDecisionBriefTemplate(template, candida
 }
 
 export function buildOwnerExternalSendDecisionScope(candidateBundleVersion) {
-  if (typeof candidateBundleVersion !== "string" || !STRICT_SEMVER.test(candidateBundleVersion)) {
-    throw new Error("invalid_candidate_bundle_version");
-  }
-  return `candidate_bundle_${candidateBundleVersion.replaceAll(".", "_")}_external_send_decision_only`;
+  const safeCandidateBundleVersion = assertStrictCandidateBundleVersion(
+    candidateBundleVersion,
+    "invalid_candidate_bundle_version"
+  );
+  return `candidate_bundle_${safeCandidateBundleVersion.replaceAll(".", "_")}_external_send_decision_only`;
 }
 
 export function validateProposedExternalSendAttachmentManifest(attachmentManifest, candidateBundleVersion) {
@@ -731,6 +746,11 @@ export function validateProposedExternalSendAttachmentManifest(attachmentManifes
     attachmentManifest,
     PROPOSED_ATTACHMENT_MANIFEST_FIELDS,
     "invalid_proposed_attachment_manifest_fields"
+  );
+  assertStrictCandidateBundleVersion(candidateBundleVersion, "unsafe_proposed_attachment_manifest_status");
+  assertStrictCandidateBundleVersion(
+    attachmentManifest.candidate_bundle_version,
+    "unsafe_proposed_attachment_manifest_status"
   );
   if (
     attachmentManifest.schema !== "voxweave_proposed_external_send_attachment_manifest_v1" ||
@@ -774,7 +794,15 @@ export function validateExternalAcceptanceReceiptTemplate(receipt, candidateBund
   if (receipt.recipient_role !== expectedRole) {
     throw new Error("invalid_receipt_template_role");
   }
-  if (candidateBundleVersion && receipt.candidate_bundle_version !== candidateBundleVersion) {
+  assertStrictCandidateBundleVersion(receipt.candidate_bundle_version, "invalid_receipt_template_bundle_version");
+  if (candidateBundleVersion !== null && candidateBundleVersion !== undefined) {
+    assertStrictCandidateBundleVersion(candidateBundleVersion, "invalid_receipt_template_bundle_version");
+  }
+  if (
+    candidateBundleVersion !== null &&
+    candidateBundleVersion !== undefined &&
+    receipt.candidate_bundle_version !== candidateBundleVersion
+  ) {
     throw new Error("invalid_receipt_template_bundle_version");
   }
   if (
@@ -1094,16 +1122,28 @@ function assertSafeCandidateString(value, reasonCode, maxLength = MAX_CANDIDATE_
 }
 
 function assertCandidateReadmeDisclaimer(readmeText) {
-  const normalized = readmeText.toLowerCase().replace(/\s+/gu, " ").trim();
+  const normalized = readmeText.toLowerCase().replace(/\r\n?/gu, "\n").replace(/\s+/gu, " ").trim();
   for (const phrase of REQUIRED_README_DISCLAIMER_PHRASES) {
     if (!normalized.includes(phrase)) {
       throw new Error("invalid_candidate_readme_disclaimer");
     }
   }
+  for (const pattern of FORBIDDEN_README_AUTHORITY_PATTERNS) {
+    if (pattern.test(normalized)) {
+      throw new Error("invalid_candidate_readme_authority_claim");
+    }
+  }
 }
 
 function isUnixPrivatePath(value) {
-  return /^\/(?:home|Users|private|tmp|var|etc|root|opt|srv|mnt|Volumes)(?:\/|$)/u.test(value);
+  return /(?:^|[^A-Za-z0-9._~-])\/(?:home|Users|private|tmp|var|etc|root|opt|srv|mnt|Volumes)(?:\/|$)/u.test(value);
+}
+
+function assertStrictCandidateBundleVersion(value, reasonCode) {
+  if (typeof value !== "string" || !STRICT_SEMVER.test(value)) {
+    throw new Error(reasonCode);
+  }
+  return value;
 }
 
 function isForbiddenCandidateMaterialKey(key) {

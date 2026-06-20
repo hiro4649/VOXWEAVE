@@ -13,8 +13,8 @@ This is not an external send, actual receipt, external acceptance, real integrat
 - activeSelfTestSuite: v127
 - sourceMainSha: fecf1615789af2b967e73b500718741d829e5c8f
 - candidateBundleVersion: 1.8.0
-- oldCandidateHeadStatus: superseded_by_api_boundary_repair
-- oldCandidateHeadSha: 9ff1fc00185bcc22896ba70ed6352de8300bc52d
+- oldCandidateHeadStatus: superseded_by_direct_contract_repair
+- oldCandidateHeadSha: 4198687f8eba14ce75befd301fde7721ff7a2b8b
 - candidateFingerprintCompatibilityStatus: pass
 - candidateFingerprintValue: 10540c2de8eb841373fb0cea57f6e35e370667326bcc9b170f9848458a74c71f
 
@@ -40,12 +40,20 @@ This is not an external send, actual receipt, external acceptance, real integrat
 - nonEnumerableFieldRejectionStatus: pass
 - denseArrayPolicyStatus: pass
 - directPublicValidatorBoundStatus: pass
+- directReceiptTemplateSemverStatus: pass
+- directChecklistSemverStatus: pass
+- directAttachmentManifestSemverStatus: pass
+- directDecisionBriefSemverStatus: pass
 - cyclicSummaryAssertionStatus: pass
 - cyclicDescriptorAssertionStatus: pass
 - cyclicFixtureValidatorStatus: pass
 - readmeEffectiveMaxStatus: 65536
 - readmeDisclaimerContractStatus: pass
 - unixPrivatePathRejectionStatus: pass
+- embeddedUnixPrivatePathStatus: pass
+- relativePathFalsePositiveStatus: none
+- readmePositiveAuthorityClaimStatus: forbidden
+- readmeContradictionGuardStatus: pass
 - scriptCandidatePathAuthorityStatus: module_owned
 - fingerprintCompatibilityStatus: pass
 - serverRouteTestDecompositionStatus: pass

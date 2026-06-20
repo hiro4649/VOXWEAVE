@@ -130,6 +130,58 @@ test("candidate subdocument validators bind to the candidate version and safe st
   );
 });
 
+test("candidate subdocument validators reject equal malformed bundle versions", async () => {
+  const bundle = await loadCandidateBundleForTest();
+  const version = bundle.manifest.candidate_bundle_version;
+  const malformedVersions = ["1.8", "01.8.0", "1.8.0-beta", "", "1.8.0.0"];
+
+  for (const malformedVersion of malformedVersions) {
+    assert.throws(
+      () => validateExternalAcceptanceReceiptTemplate({
+        ...bundle.receipts[0],
+        candidate_bundle_version: malformedVersion,
+      }),
+      /invalid_receipt_template_bundle_version/u
+    );
+    assert.throws(
+      () => validateExternalAcceptanceReceiptTemplate({
+        ...bundle.receipts[0],
+        candidate_bundle_version: malformedVersion,
+      }, malformedVersion),
+      /invalid_receipt_template_bundle_version/u
+    );
+    assert.throws(
+      () => validateExternalAcceptancePreSendChecklist({
+        ...bundle.checklist,
+        candidate_bundle_version: malformedVersion,
+      }, malformedVersion),
+      /invalid_pre_send_checklist_bundle_version/u
+    );
+    assert.throws(
+      () => validateProposedExternalSendAttachmentManifest({
+        ...bundle.attachmentManifest,
+        candidate_bundle_version: malformedVersion,
+      }, malformedVersion),
+      /unsafe_proposed_attachment_manifest_status/u
+    );
+    assert.throws(
+      () => validateOwnerExternalSendDecisionBriefTemplate({
+        ...bundle.decisionBrief,
+        candidate_bundle_version: malformedVersion,
+      }, malformedVersion),
+      /invalid_candidate_bundle_version/u
+    );
+  }
+
+  assert.throws(
+    () => validateOwnerExternalSendDecisionBriefTemplate({
+      ...bundle.decisionBrief,
+      candidate_bundle_version: "1.8",
+    }, version),
+    /unsafe_decision_brief_template_status/u
+  );
+});
+
 test("candidate decision scope is derived from strict semantic versions", () => {
   assert.equal(
     buildOwnerExternalSendDecisionScope("1.8.0"),
@@ -338,18 +390,85 @@ test("candidate README length and disclaimer contracts are enforced", async () =
     }),
     /invalid_candidate_readme_disclaimer/u
   );
+  for (const authorityClaim of [
+    "External send is authorized.",
+    "Owner send is authorized.",
+    "Send authorization has been granted.",
+    "Actual receipt exists.",
+    "Actual receipt has been received.",
+    "External acceptance is complete.",
+    "External acceptance has been confirmed.",
+    "Runtime readiness is confirmed.",
+    "Production readiness is confirmed.",
+    "This bundle is ready for production.",
+    "EXTERNAL\nSEND   IS   AUTHORIZED.",
+  ]) {
+    assert.throws(
+      () => validateExternalAcceptanceCandidateBundle({
+        ...bundle,
+        readmeText: `${bundle.readmeText}\n${authorityClaim}`,
+      }),
+      /invalid_candidate_readme_authority_claim/u
+    );
+  }
+  for (const safePhrase of [
+    "do not authorize sending",
+    "accepted candidate, if one is provided",
+    "external send remains not started",
+  ]) {
+    assert.doesNotThrow(() =>
+      validateExternalAcceptanceCandidateBundle({
+        ...bundle,
+        readmeText: `${bundle.readmeText}\n${safePhrase}`,
+      })
+    );
+  }
 });
 
 test("candidate string policy rejects private paths while preserving relative fixture paths", async () => {
   const bundle = await loadCandidateBundleForTest();
   assert.doesNotThrow(() => validateExternalAcceptanceCandidateBundle(bundle));
-  for (const unsafePath of ["/home/blocked", "/Users/blocked", "/private/blocked", "/tmp/blocked", "/var/blocked", "/etc/blocked", "/root/blocked", "/opt/blocked", "/srv/blocked", "/mnt/blocked", "/Volumes/blocked", "C:/blocked"]) {
+  for (const unsafePath of [
+    "/home/blocked",
+    "/Users/blocked",
+    "/private/blocked",
+    "/tmp/blocked",
+    "/var/blocked",
+    "/etc/blocked",
+    "/root/blocked",
+    "/opt/blocked",
+    "/srv/blocked",
+    "/mnt/blocked",
+    "/Volumes/blocked",
+    "C:/blocked",
+    "safe note /home/user/file",
+    "path=/tmp/private.json",
+    "source: /Users/account/file",
+    "open(/mnt/private/data)",
+    "\"quoted /var/private\"",
+    "prefix=/etc/config",
+  ]) {
     assert.throws(
       () => validateExternalAcceptanceCandidateBundle({
         ...bundle,
-        manifest: { ...bundle.manifest, source_project: unsafePath },
+        readmeText: `${bundle.readmeText}\n${unsafePath}`,
       }),
       /unsafe_candidate_bundle_private_path/u
+    );
+  }
+  for (const safeRelativePath of [
+    "docs/home/example",
+    "test/fixtures/tmp/example.safe.json",
+    "relative/Users/example",
+    "relative/mnt/example",
+    "/health",
+    "/v1/adapter/tts",
+  ]) {
+    assert.doesNotThrow(() =>
+      validateExternalAcceptanceCandidateBundle({
+        ...bundle,
+        readmeText: `${bundle.readmeText}\n${safeRelativePath}`,
+      })
     );
   }
 });
