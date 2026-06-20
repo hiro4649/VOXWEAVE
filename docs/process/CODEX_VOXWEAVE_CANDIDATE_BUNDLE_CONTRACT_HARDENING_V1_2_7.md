@@ -13,6 +13,8 @@ This is not an external send, actual receipt, external acceptance, real integrat
 - activeSelfTestSuite: v127
 - sourceMainSha: fecf1615789af2b967e73b500718741d829e5c8f
 - candidateBundleVersion: 1.8.0
+- oldCandidateHeadStatus: superseded_by_api_boundary_repair
+- oldCandidateHeadSha: 9ff1fc00185bcc22896ba70ed6352de8300bc52d
 - candidateFingerprintCompatibilityStatus: pass
 - candidateFingerprintValue: 10540c2de8eb841373fb0cea57f6e35e370667326bcc9b170f9848458a74c71f
 
@@ -31,6 +33,21 @@ This is not an external send, actual receipt, external acceptance, real integrat
 - summaryAssertionStatus: pass
 - descriptorAssertionStatus: pass
 - scriptPathAuthorityStatus: module_owned
+- rootBundleExactFieldStatus: pass
+- rootExtraFieldRejectionStatus: pass
+- symbolKeyRejectionStatus: pass
+- accessorNonInvocationStatus: pass
+- nonEnumerableFieldRejectionStatus: pass
+- denseArrayPolicyStatus: pass
+- directPublicValidatorBoundStatus: pass
+- cyclicSummaryAssertionStatus: pass
+- cyclicDescriptorAssertionStatus: pass
+- cyclicFixtureValidatorStatus: pass
+- readmeEffectiveMaxStatus: 65536
+- readmeDisclaimerContractStatus: pass
+- unixPrivatePathRejectionStatus: pass
+- scriptCandidatePathAuthorityStatus: module_owned
+- fingerprintCompatibilityStatus: pass
 - serverRouteTestDecompositionStatus: pass
 
 ## Implementation Boundary
@@ -75,7 +92,7 @@ This is not an external send, actual receipt, external acceptance, real integrat
 
 ## Quality Gate Evidence
 
-- naturalQualityGateStatus: pending_pr_creation
+- naturalQualityGateStatus: pending_new_same_head
 - localQualityGateTerminalStatus: fail
 - localQualityGatePrimaryReason: pre_pr_remote_evidence_pending
 - localQualityGateTargetQualityScore: 70
@@ -83,6 +100,7 @@ This is not an external send, actual receipt, external acceptance, real integrat
 - reviewRequestStatus: no_review_request
 - commentStatus: no_comment
 - mergeReadiness: no
+- mergeStatus: pending_new_same_head_owner_decision
 
 ## Decision Matrix
 
@@ -104,4 +122,4 @@ This is not an external send, actual receipt, external acceptance, real integrat
 
 ## Safe Next Action
 
-Create the candidate pull request only after final local validation passes. Let the natural quality gate run without manual rerun, comments, review requests, or merge.
+Push the repair commit to PR #461, then let the natural same-head quality gate run without manual rerun, comments, review requests, or merge. Merge remains an owner decision only.

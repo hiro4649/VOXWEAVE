@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   EXTERNAL_ACCEPTANCE_CANDIDATE_BUNDLE_SUMMARY_SCHEMA,
   EXTERNAL_ACCEPTANCE_CANDIDATE_DESCRIPTOR_SCHEMA,
+  EXTERNAL_ACCEPTANCE_CANDIDATE_MANIFEST_PATH,
   EXTERNAL_ACCEPTANCE_FORBIDDEN_ATTACHMENT_CLASSES,
   EXTERNAL_ACCEPTANCE_FORBIDDEN_MATERIAL_POLICY,
   EXTERNAL_ACCEPTANCE_INTEROP_FIXTURE_FILES,
@@ -11,7 +12,10 @@ import {
   EXTERNAL_ACCEPTANCE_PRE_SEND_CHECKLIST_PATH,
   EXTERNAL_ACCEPTANCE_PROPOSED_ATTACHMENT_PATHS,
   EXTERNAL_ACCEPTANCE_PROPOSED_ATTACHMENT_MANIFEST_PATH,
+  EXTERNAL_ACCEPTANCE_README_PATH,
   EXTERNAL_ACCEPTANCE_RECEIPT_TEMPLATE_PATHS,
+  MAX_CANDIDATE_BUNDLE_STRING_LENGTH,
+  MAX_CANDIDATE_README_LENGTH,
   buildOwnerExternalSendDecisionScope,
   assertExternalAcceptanceCandidateBundleSummarySafe,
   assertExternalAcceptanceCandidateDescriptorSafe,
@@ -178,10 +182,197 @@ test("candidate bundle contract rejects unsafe graph shapes and scalar values", 
   assert.throws(() => buildExternalAcceptanceCandidateBundleFingerprint({ ...bundle, readmeText: "x".repeat(65537) }));
 });
 
+test("candidate bundle root contract rejects hidden fields before fingerprinting", async () => {
+  const bundle = await loadCandidateBundleForTest();
+  let getterCalls = 0;
+  const accessorBundle = { ...bundle };
+  Object.defineProperty(accessorBundle, "accessor", {
+    enumerable: true,
+    get() {
+      getterCalls += 1;
+      return "blocked";
+    },
+  });
+  const nonEnumerableBundle = { ...bundle };
+  Object.defineProperty(nonEnumerableBundle, "hidden", {
+    enumerable: false,
+    value: "blocked",
+  });
+  const symbolBundle = { ...bundle };
+  symbolBundle[Symbol("blocked")] = "blocked";
+  const missingBundle = { ...bundle };
+  delete missingBundle.manifest;
+
+  for (const invalid of [
+    { ...bundle, extra: "blocked" },
+    { ...bundle, extra: "http://blocked.invalid" },
+    symbolBundle,
+    nonEnumerableBundle,
+    accessorBundle,
+    missingBundle,
+    [],
+  ]) {
+    assert.throws(() => validateExternalAcceptanceCandidateBundle(invalid));
+    assert.throws(() => buildExternalAcceptanceCandidateBundleFingerprint(invalid));
+  }
+  assert.equal(getterCalls, 0);
+});
+
+test("candidate bundle dense array policy rejects hidden array material", async () => {
+  const bundle = await loadCandidateBundleForTest();
+  const sparseReceipts = [...bundle.receipts];
+  delete sparseReceipts[1];
+  const extraReceipts = [...bundle.receipts];
+  extraReceipts.extra = "blocked";
+  const symbolReceipts = [...bundle.receipts];
+  symbolReceipts[Symbol("blocked")] = "blocked";
+  const accessorReceipts = [...bundle.receipts];
+  let getterCalls = 0;
+  Object.defineProperty(accessorReceipts, "1", {
+    enumerable: true,
+    get() {
+      getterCalls += 1;
+      return bundle.receipts[1];
+    },
+  });
+
+  for (const receipts of [sparseReceipts, extraReceipts, symbolReceipts, accessorReceipts]) {
+    assert.throws(() => validateExternalAcceptanceCandidateBundle({ ...bundle, receipts }));
+  }
+  assert.equal(getterCalls, 0);
+});
+
+test("candidate direct validators reject hidden properties and cycles synchronously", async () => {
+  const bundle = await loadCandidateBundleForTest();
+  const summary = buildExternalAcceptanceCandidateBundleSummary(bundle);
+  const descriptor = buildExternalAcceptanceCandidateDescriptor(bundle);
+  const cyclicSummary = { ...summary };
+  cyclicSummary.self = cyclicSummary;
+  const cyclicDescriptor = { ...descriptor };
+  cyclicDescriptor.self = cyclicDescriptor;
+  const cyclicFixture = structuredClone(bundle.fixtures);
+  cyclicFixture[1].content.self = cyclicFixture[1].content;
+  const accessorChecklist = { ...bundle.checklist };
+  let getterCalls = 0;
+  Object.defineProperty(accessorChecklist, "blocked", {
+    enumerable: true,
+    get() {
+      getterCalls += 1;
+      return "blocked";
+    },
+  });
+  const hiddenAttachment = { ...bundle.attachmentManifest };
+  Object.defineProperty(hiddenAttachment, "hidden", {
+    enumerable: false,
+    value: "blocked",
+  });
+  const symbolSummary = { ...summary };
+  symbolSummary[Symbol("blocked")] = "blocked";
+  const symbolDescriptor = { ...descriptor };
+  symbolDescriptor[Symbol("blocked")] = "blocked";
+
+  assert.throws(() => assertExternalAcceptanceCandidateBundleSummarySafe(cyclicSummary), /invalid_candidate_bundle_reference_graph/u);
+  assert.throws(() => assertExternalAcceptanceCandidateDescriptorSafe(cyclicDescriptor), /invalid_candidate_bundle_reference_graph/u);
+  assert.throws(() => validateExternalAcceptanceInteropFixtureBinding(bundle.fixtureManifest, cyclicFixture), /invalid_candidate_bundle_reference_graph/u);
+  assert.throws(() => validateExternalAcceptancePreSendChecklist(accessorChecklist, bundle.manifest.candidate_bundle_version), /invalid_candidate_bundle_property/u);
+  assert.throws(() => validateProposedExternalSendAttachmentManifest(hiddenAttachment, bundle.manifest.candidate_bundle_version), /invalid_candidate_bundle_property/u);
+  assert.throws(() => assertExternalAcceptanceCandidateBundleSummarySafe(symbolSummary), /invalid_candidate_bundle_property/u);
+  assert.throws(() => assertExternalAcceptanceCandidateDescriptorSafe(symbolDescriptor), /invalid_candidate_bundle_property/u);
+  assert.equal(getterCalls, 0);
+});
+
+test("candidate README length and disclaimer contracts are enforced", async () => {
+  const bundle = await loadCandidateBundleForTest();
+  const compactDisclaimer = [
+    "not acceptance",
+    "not send authorization",
+    "not runtime readiness",
+    "not production readiness",
+    "pending owner action",
+    "actual receipt remains none",
+    "actual external acceptance remains not started",
+    "external send remains not started",
+  ].join(" ");
+  const paddedReadme = (targetLength) =>
+    `${compactDisclaimer} ${"x".repeat(targetLength - compactDisclaimer.length - 1)}`;
+
+  for (const length of [
+    MAX_CANDIDATE_BUNDLE_STRING_LENGTH,
+    MAX_CANDIDATE_BUNDLE_STRING_LENGTH + 1,
+    MAX_CANDIDATE_README_LENGTH,
+  ]) {
+    assert.doesNotThrow(() =>
+      validateExternalAcceptanceCandidateBundle({ ...bundle, readmeText: paddedReadme(length) })
+    );
+  }
+  assert.throws(
+    () => validateExternalAcceptanceCandidateBundle({
+      ...bundle,
+      readmeText: paddedReadme(MAX_CANDIDATE_README_LENGTH + 1),
+    }),
+    /candidate_bundle_string_limit_exceeded/u
+  );
+  assert.throws(
+    () => validateExternalAcceptanceCandidateBundle({
+      ...bundle,
+      manifest: { ...bundle.manifest, source_project: "x".repeat(MAX_CANDIDATE_BUNDLE_STRING_LENGTH + 1) },
+    }),
+    /candidate_bundle_string_limit_exceeded/u
+  );
+  assert.doesNotThrow(() =>
+    validateExternalAcceptanceCandidateBundle({
+      ...bundle,
+      readmeText: paddedReadme(MAX_CANDIDATE_BUNDLE_STRING_LENGTH).toUpperCase(),
+    })
+  );
+  assert.doesNotThrow(() =>
+    validateExternalAcceptanceCandidateBundle({
+      ...bundle,
+      readmeText: compactDisclaimer.replaceAll(" ", "\n  "),
+    })
+  );
+  assert.throws(
+    () => validateExternalAcceptanceCandidateBundle({
+      ...bundle,
+      readmeText: bundle.readmeText.replace("not acceptance", "accepted"),
+    }),
+    /invalid_candidate_readme_disclaimer/u
+  );
+});
+
+test("candidate string policy rejects private paths while preserving relative fixture paths", async () => {
+  const bundle = await loadCandidateBundleForTest();
+  assert.doesNotThrow(() => validateExternalAcceptanceCandidateBundle(bundle));
+  for (const unsafePath of ["/home/blocked", "/Users/blocked", "/private/blocked", "/tmp/blocked", "/var/blocked", "/etc/blocked", "/root/blocked", "/opt/blocked", "/srv/blocked", "/mnt/blocked", "/Volumes/blocked", "C:/blocked"]) {
+    assert.throws(
+      () => validateExternalAcceptanceCandidateBundle({
+        ...bundle,
+        manifest: { ...bundle.manifest, source_project: unsafePath },
+      }),
+      /unsafe_candidate_bundle_private_path/u
+    );
+  }
+});
+
+test("candidate decision scope rejects coercive version values", () => {
+  for (const value of [
+    { toString: () => "1.8.0" },
+    new String("1.8.0"),
+    1.8,
+    ["1.8.0"],
+    null,
+    undefined,
+  ]) {
+    assert.throws(() => buildOwnerExternalSendDecisionScope(value), /invalid_candidate_bundle_version/u);
+  }
+});
+
 test("candidate bundle manifest and path authorities are exact module-owned contracts", async () => {
   const bundle = await loadCandidateBundleForTest();
   validateExternalAcceptanceCandidateBundle(bundle);
   assert.deepEqual(bundle.manifest.fixture_files, EXTERNAL_ACCEPTANCE_INTEROP_FIXTURE_FILES);
+  assert.equal(bundle.attachmentManifest.proposed_attachment_paths.includes(EXTERNAL_ACCEPTANCE_CANDIDATE_MANIFEST_PATH), true);
+  assert.equal(bundle.attachmentManifest.proposed_attachment_paths.includes(EXTERNAL_ACCEPTANCE_README_PATH), true);
   assert.deepEqual(bundle.manifest.receipt_templates, EXTERNAL_ACCEPTANCE_RECEIPT_TEMPLATE_PATHS);
   assert.equal(bundle.manifest.pre_send_checklist_path, EXTERNAL_ACCEPTANCE_PRE_SEND_CHECKLIST_PATH);
   assert.equal(
@@ -365,6 +556,20 @@ test("candidate bundle implementation is no longer duplicated in the loopback sc
   assert.equal(source.includes("externalCandidateBundleModule"), true);
   assert.equal(source.includes("const EXPECTED_FIXTURE_FILES"), false);
   assert.equal(source.includes("EXTERNAL_ACCEPTANCE_INTEROP_FIXTURE_FILES"), true);
+  for (const forbidden of [
+    "voxweave-external-acceptance-candidate.manifest.safe.json",
+    "iris-team-receipt-template.safe.json",
+    "live2d-team-receipt-template.safe.json",
+    "README.safe.md",
+    "owner-pre-send-checklist.safe.json",
+    "owner-external-send-decision-brief-template.safe.json",
+    "proposed-external-send-attachment-manifest.safe.json",
+    "iris-tts-packet.safe.json",
+    "iris-subtitle-packet.safe.json",
+    "iris-live2d-packet.safe.json",
+  ]) {
+    assert.equal(source.includes(forbidden), false);
+  }
 });
 
 test("candidate bundle module does not retain stale script or receipt policy copies", async () => {
@@ -389,6 +594,16 @@ test("candidate bundle module does not retain stale script or receipt policy cop
   }
   assert.equal(source.includes("VOXWEAVE_RECEIPT_QUARANTINE_CAPSULE_SCHEMA"), true);
   assert.equal(source.includes("voxweave_external_acceptance_receipt_quarantine_capsule_v1"), false);
+  for (const forbidden of [
+    "function validateExternalAcceptanceCandidateBundle({",
+    "function buildExternalAcceptanceCandidateBundleFingerprint({",
+    "function buildExternalAcceptanceCandidateBundleSummary({",
+    "function buildExternalAcceptanceCandidateDescriptor({",
+    "function scanCandidateBundleSafe",
+    "Object.entries(item)",
+  ]) {
+    assert.equal(source.includes(forbidden), false);
+  }
 });
 
 async function loadCandidateBundleForTest() {
