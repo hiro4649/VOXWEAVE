@@ -66,17 +66,19 @@ const BINDING_RESULT_FIELDS = Object.freeze([
   "safe_summary_only",
 ]);
 
-const ALLOWED_SOURCE_KINDS = new Set([
+export const EXTERNAL_ACCEPTANCE_RECEIPT_SOURCE_KINDS = deepFreeze([
   "owner_provided",
   "synthetic_test_only",
   "unclassified",
 ]);
+const ALLOWED_SOURCE_KINDS = new Set(EXTERNAL_ACCEPTANCE_RECEIPT_SOURCE_KINDS);
 
 const PROVENANCE_BY_SOURCE = Object.freeze({
   owner_provided: "owner_supplied_unverified_metadata",
   synthetic_test_only: "synthetic_non_authoritative",
   unclassified: "unclassified_non_authoritative",
 });
+assertSourceKindProvenanceParity();
 
 const RECEIPT_PASS_PENDING_STATUSES = new Set(["pass", "fail", "pending"]);
 const RECEIPT_RECEIVED_STATUSES = new Set(["received", "rejected", "pending"]);
@@ -96,6 +98,10 @@ const RECEIPT_INTAKE_DISPOSITIONS = new Set([
 export function normalizeExternalAcceptanceReceiptSourceKind(value) {
   const sourceKind = String(value ?? "unclassified");
   return ALLOWED_SOURCE_KINDS.has(sourceKind) ? sourceKind : "unclassified";
+}
+
+export function isExternalAcceptanceReceiptSourceKind(value) {
+  return ALLOWED_SOURCE_KINDS.has(value);
 }
 
 export function decodeExternalAcceptanceReceiptBytes(bytes) {
@@ -118,6 +124,24 @@ export function parseExternalAcceptanceReceiptText(text) {
   } catch {
     throw new Error("invalid_receipt_json");
   }
+}
+
+export function assertExternalAcceptanceReceiptStandaloneResultSafe(result) {
+  assertExactFields(
+    result,
+    ["status", "recipient_project", "acceptance_candidate_status", "receipt_fingerprint"],
+    "unsafe_receipt_validation_result_fields"
+  );
+  scanExternalAcceptanceReceiptSafe(result);
+  if (
+    result.status !== "pass" ||
+    !["IRIS", "LIVE2D"].includes(result.recipient_project) ||
+    !RECEIPT_ACCEPTANCE_STATUSES.has(result.acceptance_candidate_status) ||
+    !/^[a-f0-9]{64}$/u.test(result.receipt_fingerprint)
+  ) {
+    throw new Error("unsafe_receipt_validation_result_value");
+  }
+  return result;
 }
 
 export function validateExternalAcceptanceReceipt(receipt) {
@@ -167,12 +191,12 @@ export function validateExternalAcceptanceReceipt(receipt) {
     throw new Error("unsafe_receipt_material");
   }
   assertReceiptStateCoherent(receipt);
-  return {
+  return assertExternalAcceptanceReceiptStandaloneResultSafe({
     status: "pass",
     recipient_project: receipt.recipient_project,
     acceptance_candidate_status: receipt.acceptance_candidate_status,
     receipt_fingerprint: buildExternalAcceptanceReceiptFingerprint(receipt),
-  };
+  });
 }
 
 export function buildExternalAcceptanceReceiptFingerprint(receipt) {
@@ -241,6 +265,20 @@ export function bindExternalAcceptanceReceiptToCandidateDescriptor({
       reasonCode: receiptBindingErrorReason(error),
     });
   }
+}
+
+export function buildExternalAcceptanceReceiptBindingFailure({
+  receiptSourceKind = "unclassified",
+  receipt = null,
+  reasonCode = "candidate_receipt_binding_invalid",
+} = {}) {
+  const normalizedSourceKind = normalizeExternalAcceptanceReceiptSourceKind(receiptSourceKind);
+  const safeReason = safeReasonCode({ message: reasonCode });
+  return buildFailedReceiptBindingResult({
+    receiptSourceKind: normalizedSourceKind,
+    receipt,
+    reasonCode: safeReason,
+  });
 }
 
 export function buildExternalAcceptanceReceiptBindingFingerprint({
@@ -514,7 +552,9 @@ function assertReceiptJsonTextSafe(text) {
   if (text.charCodeAt(0) === 0xfeff || text.includes("\uFEFF")) {
     throw new Error("invalid_receipt_bom");
   }
-  if (/[\u0000-\u001f\u007f\uFFFD]/u.test(text)) throw new Error("invalid_receipt_utf8");
+  if (/[\u0000-\u0008\u000B\u000C\u000E-\u001f\u007f\uFFFD]/u.test(text)) {
+    throw new Error("invalid_receipt_utf8");
+  }
 }
 
 function assertNoDuplicateTopLevelReceiptKeys(text) {
@@ -579,10 +619,25 @@ function parseJsonStringToken(text, index) {
       index += 2;
       continue;
     }
+    if (/[\u0000-\u001f\u007f]/u.test(char)) throw new Error("invalid_receipt_json");
     value += char;
     index += 1;
   }
   throw new Error("invalid_receipt_json");
+}
+
+function deepFreeze(value) {
+  if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
+  for (const child of Object.values(value)) deepFreeze(child);
+  return Object.freeze(value);
+}
+
+function assertSourceKindProvenanceParity() {
+  const sourceKinds = [...EXTERNAL_ACCEPTANCE_RECEIPT_SOURCE_KINDS].sort();
+  const provenanceKeys = Object.keys(PROVENANCE_BY_SOURCE).sort();
+  if (JSON.stringify(sourceKinds) !== JSON.stringify(provenanceKeys)) {
+    throw new Error("invalid_receipt_source_kind_provenance_mapping");
+  }
 }
 
 function skipWhitespace(text, index) {
