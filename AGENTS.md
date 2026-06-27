@@ -2,7 +2,7 @@
 
 ## VOXWEAVE Working Guide
 
-This repository is the FUNKY repair workspace. Normal work must stay inside the
+This repository is the VOXWEAVE workspace. Normal work must stay inside the
 owner-approved scope and should preserve backend/D8, staging, and runtime
 boundaries unless explicitly authorized.
 
@@ -31,7 +31,7 @@ Truth, trust, security, maintainability, product value, and the smallest correct
 
 Route routine harness work through the target quality gate and safe summaries. Route product, runtime, security, deployment, wallet/RPC, package, lockfile, or authority changes to their explicit repo profile and evidence lane before acting.
 Active target harness: v1.3.0 Core / v130 metadata gate target.
-Repository profile: FUNKY.
+Repository profile: VOXWEAVE.
 Read first: AGENTS.md, docs/process/CODEX_HARNESS_MANIFEST.json, docs/process/CODEX_V130_SPEC.md, and docs/process/CODEX_ACTIVE_POLICY_INDEX.json when present.
 README, legacy specs, PR history, and full Source HARNESS files are conditional reads only.
 
