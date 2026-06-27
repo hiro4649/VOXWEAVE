@@ -83,6 +83,20 @@ export const assertExternalAcceptanceReceiptBindingResultSafe =
   externalReceiptModule.assertExternalAcceptanceReceiptBindingResultSafe;
 export const validateExternalAcceptanceCandidateBundle =
   externalCandidateBundleModule.validateExternalAcceptanceCandidateBundle;
+export const EXTERNAL_ACCEPTANCE_CANDIDATE_MANIFEST_PATH =
+  externalCandidateBundleModule.EXTERNAL_ACCEPTANCE_CANDIDATE_MANIFEST_PATH;
+export const EXTERNAL_ACCEPTANCE_README_PATH =
+  externalCandidateBundleModule.EXTERNAL_ACCEPTANCE_README_PATH;
+export const EXTERNAL_ACCEPTANCE_INTEROP_FIXTURE_FILES =
+  externalCandidateBundleModule.EXTERNAL_ACCEPTANCE_INTEROP_FIXTURE_FILES;
+export const EXTERNAL_ACCEPTANCE_RECEIPT_TEMPLATE_PATHS =
+  externalCandidateBundleModule.EXTERNAL_ACCEPTANCE_RECEIPT_TEMPLATE_PATHS;
+export const EXTERNAL_ACCEPTANCE_PRE_SEND_CHECKLIST_PATH =
+  externalCandidateBundleModule.EXTERNAL_ACCEPTANCE_PRE_SEND_CHECKLIST_PATH;
+export const EXTERNAL_ACCEPTANCE_OWNER_SEND_DECISION_BRIEF_TEMPLATE_PATH =
+  externalCandidateBundleModule.EXTERNAL_ACCEPTANCE_OWNER_SEND_DECISION_BRIEF_TEMPLATE_PATH;
+export const EXTERNAL_ACCEPTANCE_PROPOSED_ATTACHMENT_MANIFEST_PATH =
+  externalCandidateBundleModule.EXTERNAL_ACCEPTANCE_PROPOSED_ATTACHMENT_MANIFEST_PATH;
 export const buildExternalAcceptanceCandidateBundleFingerprint =
   externalCandidateBundleModule.buildExternalAcceptanceCandidateBundleFingerprint;
 export const buildExternalAcceptanceCandidateDescriptor =
@@ -227,12 +241,6 @@ const ALLOWED_RECEIPT_DRY_RUN_PACK_KEYS = Object.freeze([
   "runtime_readiness_claimed",
   "production_readiness_claimed",
   "safe_summary_only",
-]);
-const EXPECTED_FIXTURE_FILES = Object.freeze([
-  "test/fixtures/interop/voxweave-interop-manifest.safe.json",
-  "test/fixtures/interop/iris-tts-packet.safe.json",
-  "test/fixtures/interop/iris-subtitle-packet.safe.json",
-  "test/fixtures/interop/iris-live2d-packet.safe.json",
 ]);
 const RECEIPT_DRY_RUN_FIXTURE_BASE =
   "test/fixtures/external-acceptance/receipt-intake-dry-run/";
@@ -1486,8 +1494,6 @@ function fingerprintEvidence(evidence) {
 }
 
 async function readCandidateBundleFiles() {
-  const base = new URL("../test/fixtures/external-acceptance/", import.meta.url);
-  const interopBase = new URL("../test/fixtures/interop/", import.meta.url);
   const [
     manifestText,
     irisText,
@@ -1497,20 +1503,17 @@ async function readCandidateBundleFiles() {
     decisionBriefText,
     attachmentManifestText,
   ] = await Promise.all([
-    readFile(new URL("voxweave-external-acceptance-candidate.manifest.safe.json", base), "utf8"),
-    readFile(new URL("iris-team-receipt-template.safe.json", base), "utf8"),
-    readFile(new URL("live2d-team-receipt-template.safe.json", base), "utf8"),
-    readFile(new URL("README.safe.md", base), "utf8"),
-    readFile(new URL("owner-pre-send-checklist.safe.json", base), "utf8"),
-    readFile(new URL("owner-external-send-decision-brief-template.safe.json", base), "utf8"),
-    readFile(new URL("proposed-external-send-attachment-manifest.safe.json", base), "utf8"),
+    readRepoRelativeText(EXTERNAL_ACCEPTANCE_CANDIDATE_MANIFEST_PATH),
+    readRepoRelativeText(EXTERNAL_ACCEPTANCE_RECEIPT_TEMPLATE_PATHS[0]),
+    readRepoRelativeText(EXTERNAL_ACCEPTANCE_RECEIPT_TEMPLATE_PATHS[1]),
+    readRepoRelativeText(EXTERNAL_ACCEPTANCE_README_PATH),
+    readRepoRelativeText(EXTERNAL_ACCEPTANCE_PRE_SEND_CHECKLIST_PATH),
+    readRepoRelativeText(EXTERNAL_ACCEPTANCE_OWNER_SEND_DECISION_BRIEF_TEMPLATE_PATH),
+    readRepoRelativeText(EXTERNAL_ACCEPTANCE_PROPOSED_ATTACHMENT_MANIFEST_PATH),
   ]);
-  const fixtureTexts = await Promise.all([
-    readFile(new URL("voxweave-interop-manifest.safe.json", interopBase), "utf8"),
-    readFile(new URL("iris-tts-packet.safe.json", interopBase), "utf8"),
-    readFile(new URL("iris-subtitle-packet.safe.json", interopBase), "utf8"),
-    readFile(new URL("iris-live2d-packet.safe.json", interopBase), "utf8"),
-  ]);
+  const fixtureTexts = await Promise.all(
+    EXTERNAL_ACCEPTANCE_INTEROP_FIXTURE_FILES.map((path) => readRepoRelativeText(path))
+  );
   return {
     manifest: JSON.parse(manifestText),
     receipts: [JSON.parse(irisText), JSON.parse(live2dText)],
@@ -1519,11 +1522,15 @@ async function readCandidateBundleFiles() {
     decisionBrief: JSON.parse(decisionBriefText),
     attachmentManifest: JSON.parse(attachmentManifestText),
     fixtureManifest: JSON.parse(fixtureTexts[0]),
-    fixtures: EXPECTED_FIXTURE_FILES.map((path, index) => ({
+    fixtures: EXTERNAL_ACCEPTANCE_INTEROP_FIXTURE_FILES.map((path, index) => ({
       path,
       content: JSON.parse(fixtureTexts[index]),
     })),
   };
+}
+
+async function readRepoRelativeText(path) {
+  return readFile(new URL(`../${path}`, import.meta.url), "utf8");
 }
 
 function assertExactFields(value, allowedFields, reasonCode) {
