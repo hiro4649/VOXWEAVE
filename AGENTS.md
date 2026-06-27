@@ -30,7 +30,7 @@ Truth, trust, security, maintainability, product value, and the smallest correct
 ## Routing
 
 Route routine harness work through the target quality gate and safe summaries. Route product, runtime, security, deployment, wallet/RPC, package, lockfile, or authority changes to their explicit repo profile and evidence lane before acting.
-Active target harness: v1.3.0 Core / v130 metadata gate target.
+Active target harness: v1.3.0 Core / v130 full quality gate target.
 Repository profile: VOXWEAVE.
 Read first: AGENTS.md, docs/process/CODEX_HARNESS_MANIFEST.json, docs/process/CODEX_V130_SPEC.md, and docs/process/CODEX_ACTIVE_POLICY_INDEX.json when present.
 README, legacy specs, PR history, and full Source HARNESS files are conditional reads only.
