@@ -564,7 +564,7 @@
     "activeSelfTestSuite": "v127",
     "compatibility": "readable"
   },
-  "targetRepoProfile": "FUNKY",
+  "targetRepoProfile": "VOXWEAVE",
   "targetRepository": "hiro4649/VOXWEAVE",
   "prBodyMachineEvidence": false,
   "deterministicDecisionProjectionAndTokenMinimalLoopClosure": {
