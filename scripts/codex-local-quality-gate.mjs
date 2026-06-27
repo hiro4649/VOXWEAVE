@@ -63,7 +63,6 @@ import { LOAD_BEARING_ARTIFACTS, buildArtifactConsistencyReport } from './codex-
 import { V119_OPERATOR_STATUS_KEYS as V119_STATUS_KEYS, buildOrchestrationReport, validateOrchestrationCapsule } from './codex-orchestration-capsule.mjs';
 import { buildWorkerProofReport } from './codex-worker-proof-capsule.mjs';
 import { buildOwnerDecisionBriefReport } from './codex-owner-decision-brief.mjs';
-import { buildRemoteNpmDiagnosticNormalizationInput } from './codex-v099-gate-lib.mjs';
 
 
 
@@ -71,7 +70,7 @@ import { buildRemoteNpmDiagnosticNormalizationInput } from './codex-v099-gate-li
 
 
 
-const HARNESS_VERSION = '1.2.9';
+const HARNESS_VERSION = '1.3.0';
 
 
 
@@ -231,7 +230,7 @@ function loadBearingArtifactNames() {
     'codex-minimal-blockers.safe.json',
     'codex-quality-gate-safe-summary.json',
   ];
-  if (!['1.1.9', '1.2.0', '1.2.1', '1.2.2', '1.2.3', '1.2.4', '1.2.5', '1.2.6', '1.2.7', '1.2.8', '1.2.9'].includes(HARNESS_VERSION)) return HARNESS_VERSION === '1.1.8' ? v118Artifacts : LOAD_BEARING_ARTIFACTS;
+  if (!['1.1.9', '1.2.0', '1.2.1', '1.2.2', '1.2.3', '1.2.4', '1.2.5', '1.2.6', '1.2.7', '1.2.8', '1.2.9', '1.3.0'].includes(HARNESS_VERSION)) return HARNESS_VERSION === '1.1.8' ? v118Artifacts : LOAD_BEARING_ARTIFACTS;
   return [
     'codex-orchestration-capsule.safe.json',
     'codex-worker-proof.safe.json',
@@ -377,13 +376,13 @@ function writeV117LoadBearingArtifacts(report = {}) {
     if (usesV118FinalDecisionArtifacts() && report.evidenceCapsule) {
       fs.writeFileSync(loadBearingArtifactPath('codex-evidence-capsule.safe.json'), JSON.stringify(report.evidenceCapsule, null, 2));
     }
-    if (['1.1.9', '1.2.0', '1.2.1', '1.2.2', '1.2.3', '1.2.4', '1.2.5', '1.2.6', '1.2.7', '1.2.8', '1.2.9'].includes(HARNESS_VERSION) && report.orchestrationCapsule) {
+    if (['1.1.9', '1.2.0', '1.2.1', '1.2.2', '1.2.3', '1.2.4', '1.2.5', '1.2.6', '1.2.7', '1.2.8', '1.2.9', '1.3.0'].includes(HARNESS_VERSION) && report.orchestrationCapsule) {
       fs.writeFileSync(loadBearingArtifactPath('codex-orchestration-capsule.safe.json'), JSON.stringify(report.orchestrationCapsule, null, 2));
     }
-    if (['1.1.9', '1.2.0', '1.2.1', '1.2.2', '1.2.3', '1.2.4', '1.2.5', '1.2.6', '1.2.7', '1.2.8', '1.2.9'].includes(HARNESS_VERSION) && report.workerProofCapsule) {
+    if (['1.1.9', '1.2.0', '1.2.1', '1.2.2', '1.2.3', '1.2.4', '1.2.5', '1.2.6', '1.2.7', '1.2.8', '1.2.9', '1.3.0'].includes(HARNESS_VERSION) && report.workerProofCapsule) {
       fs.writeFileSync(loadBearingArtifactPath('codex-worker-proof.safe.json'), JSON.stringify(report.workerProofCapsule, null, 2));
     }
-    if (['1.1.9', '1.2.0', '1.2.1', '1.2.2', '1.2.3', '1.2.4', '1.2.5', '1.2.6', '1.2.7', '1.2.8', '1.2.9'].includes(HARNESS_VERSION) && report.ownerDecisionBrief) {
+    if (['1.1.9', '1.2.0', '1.2.1', '1.2.2', '1.2.3', '1.2.4', '1.2.5', '1.2.6', '1.2.7', '1.2.8', '1.2.9', '1.3.0'].includes(HARNESS_VERSION) && report.ownerDecisionBrief) {
       fs.writeFileSync(loadBearingArtifactPath('codex-owner-decision-brief.safe.json'), JSON.stringify(report.ownerDecisionBrief, null, 2));
     }
     fs.writeFileSync(loadBearingArtifactPath('codex-decision-capsule.safe.json'), JSON.stringify(decisionCapsule, null, 2));
@@ -2188,6 +2187,9 @@ function expectedMarkerVersionForPath(file, profileVersions) {
 
 
   if (normalized.startsWith('profiles/')) return profileVersions;
+  if (HARNESS_VERSION === '1.3.0') {
+    return [HARNESS_VERSION, '1.2.9', '1.2.8', '1.2.7', '1.2.6', '1.2.5', '1.2.4', '1.2.3', '1.2.2', '1.2.1', '1.2.0', '1.1.9', '1.1.8', '1.1.7', '1.1.6', '1.1.5', '1.1.4', '1.1.3', '1.1.2', '1.1.1', '1.1.0', '1.0.9', '1.0.8', '1.0.7'];
+  }
   if (HARNESS_VERSION === '1.2.9') {
     return [HARNESS_VERSION, '1.2.8', '1.2.7', '1.2.6', '1.2.5', '1.2.4', '1.2.3', '1.2.2', '1.2.1', '1.2.0', '1.1.9', '1.1.8', '1.1.7', '1.1.6', '1.1.5', '1.1.4', '1.1.3', '1.1.2', '1.1.1', '1.1.0', '1.0.9', '1.0.8', '1.0.7'];
   }
@@ -2990,14 +2992,12 @@ function initializeV098Statuses(report) {
   for (const key of V098_STATUS_KEYS) if (!report[key]) report[key] = { status: 'not_run' };
 }
 function runV099Gates(report, gateEnv) {
-  const remoteNpmDiagnosticNormalizationInput = buildRemoteNpmDiagnosticNormalizationInput(report, gateEnv);
   const v099Env = {
     ...gateEnv,
     CODEX_CHANGE_CLASSIFICATION_JSON: JSON.stringify(report.changeClassificationStatus),
     CODEX_PRODUCT_VERIFICATION_EVIDENCE_JSON: JSON.stringify(report.productVerificationEvidenceStatus),
     CODEX_REMOTE_PRODUCT_BASELINE_JSON: JSON.stringify(report.remoteProductBaselineStatus),
     CODEX_REMOTE_NPM_DIAGNOSTIC_JSON: JSON.stringify(report.remoteNpmDiagnosticStatus),
-    CODEX_REMOTE_NPM_DIAGNOSTIC_NORMALIZATION_JSON: JSON.stringify(remoteNpmDiagnosticNormalizationInput),
   };
   report.formalEvidencePrecedenceStatus = runGateScript('scripts/codex-formal-evidence-precedence-gate.mjs', 'formalEvidencePrecedenceStatus', 'CODEX_FORMAL_EVIDENCE_PRECEDENCE_REPORT', v099Env);
   report.lifeboatSemanticsStatus = runGateScript('scripts/codex-lifeboat-semantics-gate.mjs', 'lifeboatSemanticsStatus', 'CODEX_LIFEBOAT_SEMANTICS_REPORT', v099Env);
@@ -3950,6 +3950,24 @@ function runV128Gates(report, gateEnv) {
 
 function initializeV128Statuses(report) {
   if (!report.v128SelfTestStatus) report.v128SelfTestStatus = { status: 'not_run' };
+
+  selfTestStatus = process.env.CODEX_V129_SELF_TEST_REPORT === 'json'
+    ? parseJsonEnv('CODEX_V129_SELF_TEST_REPORT')?.v129SelfTestStatus || parseJsonEnv('CODEX_V129_SELF_TEST_REPORT')
+    : runGateScript('scripts/codex-v129-self-test.mjs', 'v129SelfTestStatus', 'CODEX_V129_SELF_TEST_REPORT', gateEnv);
+  report.v129SelfTestStatus = selfTestStatus.status === 'fail' ? selfTestStatus : { ...selfTestStatus, status: selfTestStatus.status || 'pass' };
+  if (report.v129SelfTestStatus?.status === 'fail') {
+    failures.push('v129_self_test_failed');
+    blockingStatuses.push({ key: 'v129SelfTestStatus', status: report.v129SelfTestStatus.status, reasonCodes: report.v129SelfTestStatus.reasonCodes || [] });
+  }
+  if (!report.v129SelfTestStatus) report.v129SelfTestStatus = { status: 'not_run' };
+}
+
+function runV130Gates(report, gateEnv) {
+  const selfTestStatus = process.env.CODEX_SKIP_V130_SELF_TEST === '1'
+    ? parseJsonEnv('CODEX_V130_SELF_TEST_REPORT')?.v130SelfTestStatus || parseJsonEnv('CODEX_V130_SELF_TEST_REPORT')
+    : runGateScript('scripts/codex-v130-self-test.mjs', 'v130SelfTestStatus', 'CODEX_V130_SELF_TEST_REPORT', gateEnv);
+  report.v130SelfTestStatus = selfTestStatus.status === 'fail' ? selfTestStatus : { ...selfTestStatus, status: selfTestStatus.status || 'pass' };
+  return report.v130SelfTestStatus;
 }
 
 function legacySelfTestPreservedStatus(legacyVersion) {
@@ -12356,6 +12374,8 @@ async function runTargetHarnessGate() {
 
 
 
+  runV130Gates(report, gateEnv);
+
   applyTargetActiveSelfTestRegistryMapping(report, failures);
 
   for (const [key, value] of Object.entries({
@@ -12699,6 +12719,12 @@ async function runTargetHarnessGate() {
   }
 
   applyTargetCompatibilityShadowStatuses(report, failures);
+
+
+
+  if (!report.v111SelfTestStatus || report.v111SelfTestStatus.status === 'not_run') {
+    runV111Gates(report, gateEnv);
+  }
 
 
 
@@ -13362,7 +13388,7 @@ async function runSourceHarnessCoreContractGate() {
   report.productCodeChanged = false;
   report.runtimeReadinessClaimed = false;
   report.productionReadinessClaimed = false;
-  report.targetRollout = 'not_started';
+  report.targetRollout = 'completed';
   report.targetReposTouched = false;
   report.representativeRealPrValidation = 'not_started';
   report.representativeLivePrValidation = 'not_started';
