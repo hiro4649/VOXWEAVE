@@ -3970,6 +3970,15 @@ function runV130Gates(report, gateEnv) {
   return report.v130SelfTestStatus;
 }
 
+function runV132CandidateGates(report, gateEnv, failures) {
+  const manifest = readJsonFileIfPresent(path.join('docs', 'process', 'CODEX_HARNESS_MANIFEST.json'));
+  if (manifest?.candidateVersion !== '1.3.2') return;
+  const selfTestStatus = runGateScript('scripts/codex-v132-self-test.mjs', 'v132SelfTestStatus', 'CODEX_V132_SELF_TEST_REPORT', gateEnv);
+  report.v132SelfTestStatus = selfTestStatus.status === 'fail' ? selfTestStatus : { ...selfTestStatus, status: selfTestStatus.status || 'pass' };
+  report.mergeAllowed = false; report.activationAllowed = false; report.remoteValidationState = 'not_observed';
+  if (report.v132SelfTestStatus.status === 'fail') failures.push({ id: 'v132SelfTestStatus.failed', message: 'v1.3.2 provisional target candidate self-test failed' });
+}
+
 function legacySelfTestPreservedStatus(legacyVersion) {
   return {
     status: 'pass',
@@ -12375,6 +12384,8 @@ async function runTargetHarnessGate() {
 
 
   runV130Gates(report, gateEnv);
+
+  runV132CandidateGates(report, gateEnv, failures);
 
   applyTargetActiveSelfTestRegistryMapping(report, failures);
 
