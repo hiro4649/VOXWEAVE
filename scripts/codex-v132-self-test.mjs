@@ -3,10 +3,12 @@
 
 import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { buildHarnessVersionRegistry } from './codex-harness-version.mjs';
 
 const SOURCE_SHA = '891ff534901ffc3cae40be0a5ca9d09b88f87097';
 const REPOSITORY = 'hiro4649/VOXWEAVE';
 const PROFILE = 'full_quality_gate_target';
+const EXPECTED_MATERIALIZATION = 'v130_core_full_quality_target_bridge';
 const ALLOWED = new Set(['AGENTS.md','docs/process/CODEX_HARNESS_MANIFEST.json','docs/process/CODEX_ACTIVE_POLICY_INDEX.json','docs/process/CODEX_V132_SPEC.md','scripts/codex-harness-version.mjs','scripts/codex-local-quality-gate.mjs','scripts/codex-v132-self-test.mjs']);
 const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
 const git = (args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
@@ -16,7 +18,7 @@ const test = (name, fn) => { try { return { name, status: fn() ? 'pass' : 'fail'
 const manifest = readJson('docs/process/CODEX_HARNESS_MANIFEST.json');
 const policy = readJson('docs/process/CODEX_ACTIVE_POLICY_INDEX.json');
 const agents = fs.readFileSync('AGENTS.md','utf8');
-const version = fs.readFileSync('scripts/codex-harness-version.mjs','utf8');
+const versionRegistry = buildHarnessVersionRegistry();
 const candidate = manifest.v132TargetCandidate || {};
 const rollback = candidate.rollbackChain || {};
 const files = changedFiles();
@@ -31,7 +33,11 @@ const cases = [
   ['deferred_surfaces_remain_non_authoritative', () => manifest.PerformanceTrack === 'deferred' && manifest.superiorityClaimState === 'not_proven'],
   ['policy_projection_matches_manifest', () => policy.v132TargetCandidate?.repositoryFullName === REPOSITORY && policy.v132TargetCandidate?.profileClass === PROFILE && policy.v132TargetCandidate?.sourceCandidateSha === SOURCE_SHA && policy.v132TargetCandidate?.mergeAllowed === false],
   ['agents_declares_correct_candidate', () => agents.includes('Provisional HARNESS v1.3.2 Candidate') && agents.includes('VOXWEAVE') && agents.includes(PROFILE)],
-  ['version_registry_declares_candidate_only', () => version.includes("candidateVersion = '1.3.2'") && version.includes("candidateLifecycleState = 'provisional_local_install'") && version.includes('mergeAllowed: false')],
+  ['version_registry_matches_target_profile', () => versionRegistry.candidateVersion === '1.3.2'
+    && versionRegistry.candidateLifecycleState === 'provisional_local_install'
+    && versionRegistry.versionLineagePolicy?.rolloutClass === PROFILE
+    && versionRegistry.versionLineagePolicy?.materialization === EXPECTED_MATERIALIZATION
+    && versionRegistry.mergeAllowed === false],
   ['source_manifest_is_absent', () => !fs.existsSync('CODEX_SOURCE_HARNESS_MANIFEST.json')],
   ['changed_files_are_allowlisted', () => files.every((file) => ALLOWED.has(file))],
 ].map(([name, fn]) => test(name, fn));
